@@ -1,0 +1,10 @@
+%%% @author Isak Karlsson <isak-kar@dsv.su.se>
+%%% @copyright (C) 2013, Isak Karlsson
+%%% @doc
+%%% Implementaion of an unpruned ruleset
+%%% @end
+%%% Created :  5 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
+
+-module(rr_ruleset).
+
+
