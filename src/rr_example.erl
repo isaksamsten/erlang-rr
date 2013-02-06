@@ -54,21 +54,6 @@ parse_example_process(Parent, File, ClassId, Types, Acc) ->
 	    Parent ! {done, Parent, Acc}
     end.
 
-format_features([], [], _, Acc) ->
-    list_to_tuple(lists:reverse(Acc));
-format_features([Value|Values], [categoric|Types], Column, Acc) ->
-    format_features(Values, Types, Column + 1, [list_to_atom(Value)|Acc]);
-format_features([Value|Values], [numeric|Types], Column, Acc) ->
-    format_features(Values, Types, Column + 1, [case format_number(Value) of
-						    {true, Number} ->
-							Number;
-						    missing ->
-							0;
-						    false ->
-							throw({error, {invalid_number_format, Column, Value}})
-						end|Acc]).
-
-
 %%
 %% Collect the results from process parsing the examples
 %%
@@ -84,6 +69,44 @@ collect_parse_example_processes(Self, Cores, Examples) ->
 							       {CountA + CountB, IdsA ++ IdsB}
 						       end, Examples, Part))
     end.
+
+%%
+%% Format example values according to their correct type
+%%
+format_features([], [], _, Acc) ->
+    list_to_tuple(lists:reverse(Acc));
+format_features([Value|Values], [categoric|Types], Column, Acc) ->
+    format_features(Values, Types, Column + 1, [list_to_atom(Value)|Acc]);
+format_features([Value|Values], [numeric|Types], Column, Acc) ->
+    format_features(Values, Types, Column + 1, [case format_number(Value) of
+						    {true, Number} ->
+							Number;
+						    missing ->
+							0;
+						    false ->
+							throw({error, {invalid_number_format, Column, Value}})
+						end|Acc]).
+
+%% Determine if a string is a number, or missing (?)
+%% returns {true, int()|float()} or missing or false
+format_number("?") ->
+    missing;
+format_number(L) ->
+    Float = (catch erlang:list_to_float(L)),
+    case is_number(Float) of
+	true ->
+	    {true, Float};
+	false ->
+	    Int = (catch erlang:list_to_integer(L)),
+	    case is_number(Int) of
+		true ->
+		    {true, Int};
+		false ->
+		    false
+	    end
+    end.
+
+
 
 %%
 %% Merge two dictionaries with class distributions
@@ -141,7 +164,11 @@ split(Feature, Examples) ->
 split(_, [], Acc) ->
     Acc;
 split({categoric, _} = Feature, [{Class, _, ExampleIds}|Examples], Acc) ->
-    split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc)).
+    split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc));
+split({numeric, FeatureId} = Feature, Examples, Acc) ->
+    Threshold = random_numeric_split(FeatureId, Examples),
+    split_numeric_feature(Feature, Threshold, Examples, Acc).
+	
 
 split_class_distribution(_, [], _, Dict) ->
     Dict;
@@ -152,13 +179,23 @@ split_class_distribution({categoric, FeatureId} = Feature, [ExampleId|Examples],
 							dict:update(Class, fun ({Count, Ids}) ->
 										   {Count + 1, [ExampleId|Ids]}
 									   end, {1, [ExampleId]}, Classes)
-						end, dict:new(), Dict)).
-						 
-    
-    
+						end, dict:new(), Dict));
+split_class_distribution({{numeric, FeatureId}, Threshold} = Feature, [ExampleId|Examples], Class, Dict) ->
+    Value = get_feature(ExampleId, FeatureId),
+    split_class_distribution(Feature, Examples, Class, Dict).
+
+%%
+%% Split a numeric feature at threshold
+%%
+split_numeric_feature(_, Threshold, [], Acc) ->
+    {Threshold, Acc};
+split_numeric_feature(Feature, Threshold, [{Class, _, ExampleIds}|Examples], Acc) ->
+    split_numeric_feature(Feature, Threshold, Examples,
+			  split_class_distribution({Feature, Threshold}, ExampleIds, Class, Acc)).
 
 
-
+random_numeric_split(_, _) ->
+    5.
 %%
 %% Take class at id=N and return the the tuple {Class, RestOfList}
 %%
@@ -168,37 +205,51 @@ take_class(List, N) ->
     {L1, [Item|L2]} = lists:split(N - 1, List),
     {Item, L1 ++ L2}.
 
-%% Determine if a string is a number,
-%% returns {true, int()|float()} or false
-format_number("?") ->
-    missing;
-format_number(L) ->
-    Float = (catch erlang:list_to_float(L)),
-    case is_number(Float) of
-	true ->
-	    {true, Float};
-	false ->
-	    Int = (catch erlang:list_to_integer(L)),
-	    case is_number(Int) of
-		true ->
-		    {true, Int};
-		false ->
-		    false
-	    end
-    end.
-
-
+%%
+%% Count the number of examples in "Examples"
+%%
 count(Examples) ->
     lists:foldl(fun({_, Count, _}, Old) ->
 			Count + Old
 		end, 0, Examples).
 
+%%
+%% Count the occurences of "Class" in "Examples"
+%%
+count(Class, Examples) ->
+    case lists:keysearch(Class, 1, Examples) of
+	{value, {_, N, _}} ->
+	    N;
+	_ -> throw({error, no_such_class})
+    end.
+
+%%
+%% Count the number of examples in "Examples" excluding examples with
+%% class Class
+%%
 count_exclude(Class, Examples) ->
     lists:foldl(fun({Cls, _, _}, Old) when Class =:= Cls->
 			Old;
 		   ({_, Count, _}, Old) ->
 			Old + Count
 		end, 0, Examples).
+
+%%
+%% Transform the examples into a form where we have a set of positive
+%% and a set of negative examples
+%%
+%% Returns: {{NumberOfPositive, [IdsOfPositive...]}, 
+%%           {NumberOfNegative, [IdsOfNegative...]}}
+%%
+get_positive_negative(Positive, Examples) ->
+    case lists:keytake(Positive, 1, Examples) of
+	{value, {_, Pc, Positives}, Negatives0} ->
+	    [{'+', Pc, Positives}, lists:foldl(fun({_, Nc, Ids}, {_, N, Acc}) ->
+						       {'-', Nc+N, Acc ++ Ids}
+					       end, {'-', 0, []}, Negatives0)];
+	false ->
+	    throw({error, cannot_split})
+    end.
 
 %%
 %% Get the feature vector for example with "Id"
