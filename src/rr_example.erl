@@ -162,7 +162,11 @@ split(Feature, Examples) ->
     split(Feature, Examples, dict:new()).
 
 split(_, [], Acc) ->
-    Acc;
+    lists:map(fun({K, V}) ->
+		       {K, lists:map(fun({Class, {Count, Ids}}) ->
+					     {Class, Count, Ids}
+				     end, dict:to_list(V))}
+	       end, dict:to_list(Acc));		     
 split({categoric, _} = Feature, [{Class, _, ExampleIds}|Examples], Acc) ->
     split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc));
 split({numeric, FeatureId} = Feature, Examples, Acc) ->
@@ -200,10 +204,10 @@ random_numeric_split(_, _) ->
 %% Take class at id=N and return the the tuple {Class, RestOfList}
 %%
 take_class([A|R], 1) ->
-    {A, R};
+    {list_to_atom(A), R};
 take_class(List, N) ->
     {L1, [Item|L2]} = lists:split(N - 1, List),
-    {Item, L1 ++ L2}.
+    {list_to_atom(Item), L1 ++ L2}.
 
 %%
 %% Count the number of examples in "Examples"
@@ -241,7 +245,7 @@ count_exclude(Class, Examples) ->
 %% Returns: {{NumberOfPositive, [IdsOfPositive...]}, 
 %%           {NumberOfNegative, [IdsOfNegative...]}}
 %%
-get_positive_negative(Positive, Examples) ->
+to_binary(Positive, Examples) ->
     case lists:keytake(Positive, 1, Examples) of
 	{value, {_, Pc, Positives}, Negatives0} ->
 	    [{'+', Pc, Positives}, lists:foldl(fun({_, Nc, Ids}, {_, N, Acc}) ->

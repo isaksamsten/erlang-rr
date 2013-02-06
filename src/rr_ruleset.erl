@@ -10,8 +10,8 @@
 -author('isak-kar@dsv.su.se').
 -compile(export_all).
 
-
-sequential_covering(Features, Examples) ->
+-record(rule, {positive, negative, antecedent, consequent}).
+separate_and_conquer(Features, Examples) ->
     {Class, Rest} = order_classes(Examples),
     learn_rule_for_class(Features, Rest, Examples, []) ++ [{'$class', Class}].
 
@@ -34,6 +34,7 @@ learn_one_rule(Class, Features, Examples) ->
     {{Rule, Class}, Examples0}.
 
 find_best_subspace(Class, [Feature|Rest], Examples) ->
+    ok.
     
 
 order_classes(Examples) ->
@@ -42,3 +43,9 @@ order_classes(Examples) ->
 
 evaluate_ruleset(_, Examples) ->
     rr_example:count(Examples) > 10.
+
+rule_accuracy(Rule, Examples) ->
+    {value, {_, [{_, Pos,_}|_]}, Rest} = lists:keytake(Rule, 1, Examples),
+    Neg = lists:sum([N || {_, N,_} <- Rest]),
+    Pos / Neg.
+    
