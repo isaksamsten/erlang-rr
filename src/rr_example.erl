@@ -148,6 +148,7 @@ parse_type_declaration([Type0|Rest], ClassId, Id, Acc) ->
 parse_feature_declaration(Features0, ClassId, Types) ->
     {_, Features} = take_class(Features0, ClassId),
     if length(Features) =/= length(Types) ->
+	    io:format("~p ~n", [ClassId]),
 	    throw({error, {invalid_feature_declaration, {length(Features), '/=', length(Types)}}});
        true ->
 	    parse_feature_declaration(Features, Types, 1, [])
@@ -224,8 +225,12 @@ count(Class, Examples) ->
     case lists:keysearch(Class, 1, Examples) of
 	{value, {_, N, _}} ->
 	    N;
-	_ -> throw({error, no_such_class})
+	_ -> 
+	    0
     end.
+
+get_class(Class, Examples) ->
+    lists:keyfind(Class, 1, Examples).
 
 %%
 %% Count the number of examples in "Examples" excluding examples with
@@ -271,11 +276,5 @@ get_example(Id) ->
 get_feature(Id, At) ->
     element(At, get_example(Id)).
 
-test() ->
-    rr_example:init(),
-    File = csv:reader("../data/car.txt"),
-    {Features, Examples} = load(File, 4),
-    {Features, Examples}.
-   
     
 
