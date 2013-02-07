@@ -45,7 +45,6 @@ evaluate_ruleset(_, Examples) ->
     rr_example:count(Examples) > 10.
 
 rule_accuracy(Rule, Examples) ->
-    {value, {_, [{_, Pos,_}|_]}, Rest} = lists:keytake(Rule, 1, Examples),
-    Neg = lists:sum([N || {_, N,_} <- Rest]),
-    Pos / Neg.
+    {value, {_, [{_, Pos,_}, {_, Neg, _}]}, Rest} = lists:keytake(Rule, 1, Examples),
+    Pos-Neg.
     

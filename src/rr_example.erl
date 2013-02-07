@@ -58,9 +58,7 @@ parse_example_process(Parent, File, ClassId, Types, Acc) ->
 %% Collect the results from process parsing the examples
 %%
 collect_parse_example_processes(_, 0, Examples) ->
-    lists:map(fun ({Class, {Count, Ids}}) ->
-		      {Class, Count, Ids}
-	      end, dict:to_list(Examples));
+    format_class_distribution(Examples);
 collect_parse_example_processes(Self, Cores, Examples) ->
     receive
 	{done, Self, Part} ->
@@ -106,6 +104,10 @@ format_number(L) ->
 	    end
     end.
 
+format_class_distribution(Examples) ->
+    lists:keysort(1, lists:map(fun ({Class, {Count, Ids}}) ->
+				       {Class, Count, Ids}
+			       end, dict:to_list(Examples))).
 
 
 %%
@@ -162,11 +164,9 @@ split(Feature, Examples) ->
     split(Feature, Examples, dict:new()).
 
 split(_, [], Acc) ->
-    lists:map(fun({K, V}) ->
-		       {K, lists:map(fun({Class, {Count, Ids}}) ->
-					     {Class, Count, Ids}
-				     end, dict:to_list(V))}
-	       end, dict:to_list(Acc));		     
+    lists:map(fun({Value, Examples}) ->
+		       {Value, format_class_distribution(Examples)}
+	       end, dict:to_list(Acc));
 split({categoric, _} = Feature, [{Class, _, ExampleIds}|Examples], Acc) ->
     split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc));
 split({numeric, FeatureId} = Feature, Examples, Acc) ->
@@ -242,8 +242,8 @@ count_exclude(Class, Examples) ->
 %% Transform the examples into a form where we have a set of positive
 %% and a set of negative examples
 %%
-%% Returns: {{NumberOfPositive, [IdsOfPositive...]}, 
-%%           {NumberOfNegative, [IdsOfNegative...]}}
+%% Returns: [{+, NumberOfPositive, [IdsOfPositive...]}, 
+%%           {-, NumberOfNegative, [IdsOfNegative...]}]
 %%
 to_binary(Positive, Examples) ->
     case lists:keytake(Positive, 1, Examples) of
@@ -254,6 +254,9 @@ to_binary(Positive, Examples) ->
 	false ->
 	    throw({error, cannot_split})
     end.
+
+get_examples_for_value(Value, Examples) ->
+    element(2, lists:keyfind(Value, 1, Examples)).
 
 %%
 %% Get the feature vector for example with "Id"
