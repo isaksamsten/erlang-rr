@@ -148,7 +148,6 @@ parse_type_declaration([Type0|Rest], ClassId, Id, Acc) ->
 parse_feature_declaration(Features0, ClassId, Types) ->
     {_, Features} = take_class(Features0, ClassId),
     if length(Features) =/= length(Types) ->
-	    io:format("~p ~n", [ClassId]),
 	    throw({error, {invalid_feature_declaration, {length(Features), '/=', length(Types)}}});
        true ->
 	    parse_feature_declaration(Features, Types, 1, [])
@@ -165,9 +164,14 @@ split(Feature, Examples) ->
     split(Feature, Examples, dict:new()).
 
 split(_, [], Acc) ->
-    lists:map(fun({Value, Examples}) ->
-		       {Value, format_class_distribution(Examples)}
-	       end, dict:to_list(Acc));
+    lists:reverse(lists:foldl(fun({Value, Examples}, Acc) ->
+				      case dict:size(Examples) of
+					  0 ->
+					      Acc;
+					  _ ->
+					      [{Value, format_class_distribution(Examples)}|Acc]
+				      end
+			      end, [], dict:to_list(Acc)));
 split({categoric, _} = Feature, [{Class, _, ExampleIds}|Examples], Acc) ->
     split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc));
 split({numeric, FeatureId} = Feature, Examples, Acc) ->

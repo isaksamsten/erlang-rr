@@ -1,12 +1,12 @@
--module(rr_accuracy).
+-module(rr_laplace).
 -include("rr.hrl").
 -export([evaluate/1,
 	 sort/1,
 	 best/1,
 	 compare/2]).
 
-evaluate(#rr_heuristic{pos_c=Pos, neg_c=Neg, pos=P, neg=N} = H) ->
-    (Pos + (N - Neg))/(P+N).
+evaluate(#rr_heuristic{pos_c=Pos, neg_c=Neg}) ->
+    (Pos + 1) / (Pos + Neg + 2).
 
 sort(Acc) ->
     lists:sort(fun({_, Ca}, {_, Cb}) ->

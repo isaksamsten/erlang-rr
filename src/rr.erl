@@ -9,5 +9,8 @@
 -author('isak-kar@dsv.su.se').
 
 
-
+main(_) ->
+    Rules = rr_ruleset:test(),
+    io:format("~p ~n", [Rules]).
+    
 
