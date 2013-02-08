@@ -3,5 +3,5 @@
 
 -record(rr_candidate, {score, value, coverage}).
 
--record(rr_rule, {antecedent, consequent}).
+-record(rr_rule, {score=missing, antecedent, consequent}).
 

@@ -21,4 +21,5 @@ compare(#rr_candidate{score=A}, #rr_candidate{score=B}) ->
     A > B.
 
 stop(Score, #rr_heuristic{apriori=Apriori}) ->
+    io:format("Stop: ~p < ~p \n", [Score, Apriori]),
     Score < Apriori.

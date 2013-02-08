@@ -1,9 +1,0 @@
-{application,rr,
-             [{description,[]},
-              {vsn,"1"},
-              {registered,[]},
-              {applications,[kernel,stdlib]},
-              {mod,{rr,[]}},
-              {env,[]},
-              {modules,[rr,rr_accuracy,rr_candidate,rr_example,rr_heuristic,
-                        rr_id,rr_laplace,rr_purity,rr_rule,rr_ruleset]}]}.

@@ -21,4 +21,4 @@ compare(#rr_candidate{score=A}, #rr_candidate{score=B}) ->
     A > B.
 
 stop(Score, _) ->
-    Score < 0.6.
+    Score < 0.5.

@@ -33,14 +33,11 @@ learn_rules_for_class(Features, [Class|Rest], Examples, Heuristics, Ruleset) ->
     Rule = learn_rule_for_class(Features, Class, Binary, Heu, []),
     learn_rules_for_class(Features, Rest, Examples, Heuristics, [Rule|Ruleset]).
 
-learn_rule_for_class(Features, Class, Examples, Heuristics, ClassRules) ->
+learn_rule_for_class(Features, Class, Examples, 
+		     #rr_heuristic{evaluator=Evaluator} = Heuristics, ClassRules) ->
     {Rule, NotCovered} = separate_and_conquer(Features, Class, Examples, Heuristics),
 
-    Pos = rr_example:count('+', NotCovered),
-    Neg = rr_example:count('-', NotCovered),
-    io:format("learn_rule_for_class(~p): ~p/~p pos/neg left\n", [Class, Pos, Neg]),
-
-    case rr_rule:is_empty(Rule) of %% Note: there were no good rules
+    case Evaluator:stop(rr_rule:score(Rule), Heuristics) of %% Note: there were no more good rules
 	false -> 
 	    learn_rule_for_class(Features, Class, NotCovered, Heuristics, [Rule|ClassRules]);
 	true ->  
@@ -54,15 +51,15 @@ separate_and_conquer(Features, Class, Examples, Heuristics) ->
 
 separate_and_conquer([], _, NotCovered, _, Rules) ->
     {rr_rule:sort(Rules), NotCovered};    
-separate_and_conquer(Features, Class, Examples, 
-		     #rr_heuristic{evaluator=Evaluator} = Heuristics, Rules) ->
+separate_and_conquer(Features, Class, Examples, Heuristics, Rules) ->
     {Score, {Feature, _} = Condition, NotCovered} = learn_one_rule(Features, Examples, Heuristics),
-    Rules0 = rr_rule:add(Rules, Condition),
-    io:format("Rule ~p Scored: ~p\n", [Rules0, Score]),
-    case Evaluator:stop(Score, Heuristics) of
-	false ->
-	    separate_and_conquer(Features -- [Feature], Class, NotCovered, Heuristics, Rules0);
+    Rules0 = rr_rule:add(Rules, Condition, Score),
+
+    case  Score >= rr_rule:score(Rules) of
 	true ->
+	    io:format("Rule ~p Scored: ~p > ~p \n", [Rules0, Score, rr_rule:score(Rules)]),
+	    separate_and_conquer(Features -- [Feature], Class, NotCovered, Heuristics, Rules0);
+	false ->
 	    {rr_rule:sort(Rules), NotCovered}
     end.
 
@@ -132,7 +129,7 @@ evaluate_ruleset(_, Examples) ->
 
 test() ->
     rr_example:init(),
-    File = csv:reader("data/car.txt"),
+    File = csv:reader("data/mushroom.txt"),
     {Features, Examples} = rr_example:load(File, 4),
     ruleset(Features, Examples).
    
