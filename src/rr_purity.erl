@@ -1,4 +1,4 @@
--module(rr_accuracy).
+-module(rr_purity).
 -include("rr.hrl").
 -export([evaluate/1,
 	 sort/1,
@@ -6,8 +6,8 @@
 	 compare/2,
 	 stop/2]).
 
-evaluate(#rr_heuristic{pos_c=Pos, neg_c=Neg, pos=P, neg=N} = H) ->
-    (Pos + (N - Neg))/(P+N).
+evaluate(#rr_heuristic{pos_c=Pos, neg_c=Neg}) ->
+    Pos / (Pos + Neg).
 
 sort(Acc) ->
     lists:sort(fun({_, Ca}, {_, Cb}) ->
@@ -21,4 +21,4 @@ compare(#rr_candidate{score=A}, #rr_candidate{score=B}) ->
     A > B.
 
 stop(Score, _) ->
-    Score < 0.6.
+    Score < 0.0001.

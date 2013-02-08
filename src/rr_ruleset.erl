@@ -14,7 +14,7 @@
 
 ruleset(Features, Examples) ->
     {Default, Rest} = default_class(Examples),
-    H = rr_heuristic:new(rr_laplace, length(Examples)),
+    H = rr_heuristic:new(rr_purity, length(Examples)),
     Ruleset = learn_rules_for_class(Features, Rest, Examples, H, []),
     Ruleset ++ [{'$default$', Default}].
 
@@ -29,23 +29,24 @@ learn_rules_for_class(Features, [Class|Rest], Examples, Heuristics, Ruleset) ->
     Neg = rr_example:count('-', Binary),
     Heu = rr_heuristic:const(Pos, Neg, Heuristics),
 
+
     Rule = learn_rule_for_class(Features, Class, Binary, Heu, []),
     learn_rules_for_class(Features, Rest, Examples, Heuristics, [Rule|Ruleset]).
 
 learn_rule_for_class(Features, Class, Examples, Heuristics, ClassRules) ->
     {Rule, NotCovered} = separate_and_conquer(Features, Class, Examples, Heuristics),
+
     Pos = rr_example:count('+', NotCovered),
     Neg = rr_example:count('-', NotCovered),
     io:format("learn_rule_for_class(~p): ~p/~p pos/neg left\n", [Class, Pos, Neg]),
-    ClassRules0 = case rr_rule:is_empty(Rule) of
-		      false -> [Rule|ClassRules];
-		      true -> ClassRules
-		  end,
-    if Pos > 1, Neg > 1 ->
-	    learn_rule_for_class(Features, Class, NotCovered, Heuristics, ClassRules0);
-       true ->
-	    ClassRules0
+
+    case rr_rule:is_empty(Rule) of %% Note: there were no good rules
+	false -> 
+	    learn_rule_for_class(Features, Class, NotCovered, Heuristics, [Rule|ClassRules]);
+	true ->  
+	    ClassRules
     end.
+
 	
 
 separate_and_conquer(Features, Class, Examples, Heuristics) ->
@@ -53,11 +54,13 @@ separate_and_conquer(Features, Class, Examples, Heuristics) ->
 
 separate_and_conquer([], _, NotCovered, _, Rules) ->
     {rr_rule:sort(Rules), NotCovered};    
-separate_and_conquer(Features, Class, Examples, Heuristics, Rules) ->
+separate_and_conquer(Features, Class, Examples, 
+		     #rr_heuristic{evaluator=Evaluator} = Heuristics, Rules) ->
     {Score, {Feature, _} = Condition, NotCovered} = learn_one_rule(Features, Examples, Heuristics),
     Rules0 = rr_rule:add(Rules, Condition),
-    io:format("Rule ~p Scored: ~p \n", [Condition, Score]),
-    if  Score > 0.1 ->
+    io:format("Rule ~p Scored: ~p\n", [Rules0, Score]),
+    case Evaluator:stop(Score, Heuristics) of
+	false ->
 	    separate_and_conquer(Features -- [Feature], Class, NotCovered, Heuristics, Rules0);
 	true ->
 	    {rr_rule:sort(Rules), NotCovered}
@@ -129,8 +132,7 @@ evaluate_ruleset(_, Examples) ->
 
 test() ->
     rr_example:init(),
-    File = csv:reader("data/mushroom.txt"),
+    File = csv:reader("data/car.txt"),
     {Features, Examples} = rr_example:load(File, 4),
-    io:format("~p ~n",[Examples]),
     ruleset(Features, Examples).
    
