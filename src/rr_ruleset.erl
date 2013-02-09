@@ -14,7 +14,7 @@
 
 ruleset(Features, Examples) ->
     {Default, Rest} = default_class(Examples),
-    H = rr_heuristic:new(rr_purity, length(Examples)),
+    H = rr_heuristic:new(rr_accuracy, length(Examples)),
     Ruleset = learn_rules_for_class(Features, Rest, Examples, H, []),
     Ruleset ++ [{'$default$', Default}].
 
@@ -29,17 +29,20 @@ learn_rules_for_class(Features, [Class|Rest], Examples, Heuristics, Ruleset) ->
     Neg = rr_example:count('-', Binary),
     Heu = rr_heuristic:const(Pos, Neg, Heuristics),
 
-
     Rule = learn_rule_for_class(Features, Class, Binary, Heu, []),
     learn_rules_for_class(Features, Rest, Examples, Heuristics, [Rule|Ruleset]).
 
 learn_rule_for_class(Features, Class, Examples, 
 		     #rr_heuristic{evaluator=Evaluator} = Heuristics, ClassRules) ->
     {Rule, NotCovered} = separate_and_conquer(Features, Class, Examples, Heuristics),
+    Pos = rr_example:count('+', NotCovered),
+    Neg = rr_example:count('-', NotCovered),
+    Heu = rr_heuristic:const(Pos, Neg, Heuristics), %% NOTE???
 
-    case Evaluator:stop(rr_rule:score(Rule), Heuristics) of %% Note: there were no more good rules
+    
+    case Evaluator:stop(rr_rule:score(Rule), Heuristics) of
 	false -> 
-	    learn_rule_for_class(Features, Class, NotCovered, Heuristics, [Rule|ClassRules]);
+	    learn_rule_for_class(Features, Class, NotCovered, Heu, [Rule|ClassRules]);
 	true ->  
 	    ClassRules
     end.
@@ -57,7 +60,7 @@ separate_and_conquer(Features, Class, Examples, Heuristics, Rules) ->
 
     case  Score >= rr_rule:score(Rules) of
 	true ->
-	    io:format("Rule ~p Scored: ~p > ~p \n", [Rules0, Score, rr_rule:score(Rules)]),
+%	    io:format("Rule ~p Scored: ~p > ~p \n", [Rules0, Score, rr_rule:score(Rules)]),
 	    separate_and_conquer(Features -- [Feature], Class, NotCovered, Heuristics, Rules0);
 	false ->
 	    {rr_rule:sort(Rules), NotCovered}
@@ -129,7 +132,7 @@ evaluate_ruleset(_, Examples) ->
 
 test() ->
     rr_example:init(),
-    File = csv:reader("data/mushroom.txt"),
+    File = csv:reader("data/car.txt"),
     {Features, Examples} = rr_example:load(File, 4),
     ruleset(Features, Examples).
    

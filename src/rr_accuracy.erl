@@ -20,5 +20,5 @@ best(Sorted) ->
 compare(#rr_candidate{score=A}, #rr_candidate{score=B}) ->
     A > B.
 
-stop(Score, _) ->
+stop(Score, #rr_heuristic{apriori=A}) ->
     Score < 0.5.
