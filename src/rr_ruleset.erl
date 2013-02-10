@@ -14,7 +14,7 @@
 
 ruleset(Features, Examples) ->
     {Default, Rest} = default_class(Examples),
-    H = rr_heuristic:new(rr_accuracy, length(Examples)),
+    H = rr_heuristic:new(rr_laplace, rr_example:classes(Examples)),
     Ruleset = learn_rules_for_class(Features, Rest, Examples, H, []),
     Ruleset ++ [{'$default$', Default}].
 
@@ -27,27 +27,33 @@ learn_rules_for_class(Features, [Class|Rest], Examples, Heuristics, Ruleset) ->
     Binary = rr_example:to_binary(Class, Examples),
     Pos = rr_example:count('+', Binary),
     Neg = rr_example:count('-', Binary),
-    Heu = rr_heuristic:const(Pos, Neg, Heuristics),
+    Heu = Heuristics#rr_heuristic{pos=Pos, neg=Neg, apriori=Pos/(Pos+Neg)},
 
     Rule = learn_rule_for_class(Features, Class, Binary, Heu, []),
     learn_rules_for_class(Features, Rest, Examples, Heuristics, [Rule|Ruleset]).
 
-learn_rule_for_class(Features, Class, Examples, 
-		     #rr_heuristic{evaluator=Evaluator} = Heuristics, ClassRules) ->
-    {Rule, NotCovered} = separate_and_conquer(Features, Class, Examples, Heuristics),
+learn_rule_for_class(Features, Class, Examples, Heuristics, ClassRules) ->
+    {Rule, Covered} = separate_and_conquer(Features, Class, Examples, Heuristics),
+    NotCovered = remove_covered(Examples, Covered),
+  
     Pos = rr_example:count('+', NotCovered),
-    Neg = rr_example:count('-', NotCovered),
-    Heu = rr_heuristic:const(Pos, Neg, Heuristics), %% NOTE???
+%    Neg = rr_example:count('-', NotCovered),
+ %   Heu = rr_heuristic:const(Pos, Neg, Heuristics), %% NOTE???
 
-    
-    case Evaluator:stop(rr_rule:score(Rule), Heuristics) of
-	false -> 
-	    learn_rule_for_class(Features, Class, NotCovered, Heu, [Rule|ClassRules]);
-	true ->  
+    case rr_rule:purity(Rule) > 0.75 of
+	true -> 
+	    case Pos > 0 of
+		true ->
+		    learn_rule_for_class(Features, Class, NotCovered, Heuristics, [Rule|ClassRules]);
+		false ->
+		    [Rule|ClassRules]
+	    end;
+	false ->  
 	    ClassRules
     end.
 
-	
+coverage(NotCovered) ->
+    {rr_example:count('+', NotCovered), rr_example:count('-', NotCovered)}.
 
 separate_and_conquer(Features, Class, Examples, Heuristics) ->
     separate_and_conquer(Features, Class, Examples, Heuristics, rr_rule:new(Class)).
@@ -55,16 +61,31 @@ separate_and_conquer(Features, Class, Examples, Heuristics) ->
 separate_and_conquer([], _, NotCovered, _, Rules) ->
     {rr_rule:sort(Rules), NotCovered};    
 separate_and_conquer(Features, Class, Examples, Heuristics, Rules) ->
-    {Score, {Feature, _} = Condition, NotCovered} = learn_one_rule(Features, Examples, Heuristics),
-    Rules0 = rr_rule:add(Rules, Condition, Score),
+    {{Score, {_Pos, Neg} = Coverage}, {Feature, _} = Condition, Covered} = learn_one_rule(Features, Examples, Heuristics),
+    Rules0 = rr_rule:add(Rules, Condition, Score, Coverage),
 
-    case  Score >= rr_rule:score(Rules) of
+    case Score >= rr_rule:score(Rules) of
 	true ->
-%	    io:format("Rule ~p Scored: ~p > ~p \n", [Rules0, Score, rr_rule:score(Rules)]),
-	    separate_and_conquer(Features -- [Feature], Class, NotCovered, Heuristics, Rules0);
+	    case Neg == 0 of
+		true ->
+		    {rr_rule:sort(Rules0), Covered};
+		false ->
+		    separate_and_conquer(Features -- [Feature], Class, Covered, Heuristics, Rules0)
+	    end;
 	false ->
-	    {rr_rule:sort(Rules), NotCovered}
+	    {rr_rule:sort(Rules), Covered}
     end.
+
+%%
+%% Learn the best possible Rule from Features and Examples
+%% 		      
+learn_one_rule(Features, Examples, Heuristics) ->
+    {Feature, Candidate} = find_best_subspace(Features, Examples, Heuristics),
+    Covered = rr_candidate:coverage(Candidate),
+    Value = rr_candidate:value(Candidate),
+    Score = rr_candidate:score(Candidate),
+
+    {{Score, coverage(Covered)}, {Feature, Value}, Covered}.
 
 remove_covered(Examples, Covered) ->
     lists:map(fun({Class, Count, Ids}) ->
@@ -77,17 +98,6 @@ remove_covered(Examples, Covered) ->
 			      {Class, Count, Ids}
 		      end
 	      end, Examples).
-
-%%
-%% Learn the best possible Rule from Features and Examples
-%% 		      
-learn_one_rule(Features, Examples, Heuristics) ->
-    {Feature, Candidate} = find_best_subspace(Features, Examples, Heuristics),
-    Covered = rr_candidate:coverage(Candidate),
-    Value = rr_candidate:value(Candidate),
-    Score = rr_candidate:score(Candidate),
-    {Score, {Feature, Value}, remove_covered(Examples, Covered)}.
-
 %%
 %% Find the best subspace to cover (i.e. what feature is the best)
 %%
@@ -109,6 +119,7 @@ best_split_value(#rr_heuristic{evaluator=Evaluator} = Heuristics,
     lists:foldl(fun({Value, Covered}, Candidate) ->
 			He = rr_heuristic:update(Covered, Heuristics),
 			Score = Evaluator:evaluate(He),
+			
 			case Score > rr_candidate:score(Candidate) of
 			    true ->
 				rr_candidate:new(Score, Value, Covered);
@@ -127,12 +138,9 @@ default_class(Examples) ->
     [Largest|Rest] = [Class || {Class, _, _} <- lists:reverse(lists:keysort(2, Examples))],
     {Largest, lists:reverse(Rest)}.
 
-evaluate_ruleset(_, Examples) ->
-    rr_example:count(Examples) > 10.
-
-test() ->
+test(File) ->
     rr_example:init(),
-    File = csv:reader("data/car.txt"),
-    {Features, Examples} = rr_example:load(File, 4),
+    Csv = csv:reader(File),
+    {Features, Examples} = rr_example:load(Csv, 4),
     ruleset(Features, Examples).
    

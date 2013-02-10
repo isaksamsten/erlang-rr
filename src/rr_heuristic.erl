@@ -9,10 +9,12 @@
 new(Evaluator, Classes) ->
     #rr_heuristic{evaluator=Evaluator, classes=Classes}.
 
+apriori(Pos, Neg, H) ->
+    H#rr_heuristic{apriori=Pos/(Pos+Neg)}.
+    
 const(Pos, Neg, H) ->
     H#rr_heuristic{pos = Pos,
-		   neg = Neg,
-		   apriori = Pos/(Pos + Neg)}.
+		   neg = Neg}.
 
 update(Covered, H) ->
     Pos = rr_example:count('+', Covered),

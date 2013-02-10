@@ -164,12 +164,12 @@ split(Feature, Examples) ->
     split(Feature, Examples, dict:new()).
 
 split(_, [], Acc) ->
-    lists:reverse(lists:foldl(fun({Value, Examples}, Acc) ->
+    lists:reverse(lists:foldl(fun({Value, Examples}, Result) ->
 				      case dict:size(Examples) of
 					  0 ->
 					      Acc;
 					  _ ->
-					      [{Value, format_class_distribution(Examples)}|Acc]
+					      [{Value, format_class_distribution(Examples)}|Result]
 				      end
 			      end, [], dict:to_list(Acc)));
 split({categoric, _} = Feature, [{Class, _, ExampleIds}|Examples], Acc) ->
@@ -188,7 +188,7 @@ split_class_distribution({categoric, FeatureId} = Feature, [ExampleId|Examples],
 							dict:update(Class, fun ({Count, Ids}) ->
 										   {Count + 1, [ExampleId|Ids]}
 									   end, {1, [ExampleId]}, Classes)
-						end, dict:new(), Dict));
+						end, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict));
 split_class_distribution({{numeric, FeatureId}, Threshold} = Feature, [ExampleId|Examples], Class, Dict) ->
     Value = get_feature(ExampleId, FeatureId),
     split_class_distribution(Feature, Examples, Class, Dict).
@@ -235,6 +235,9 @@ count(Class, Examples) ->
 
 get_class(Class, Examples) ->
     lists:keyfind(Class, 1, Examples).
+
+classes(Examples) ->
+    length(Examples).
 
 %%
 %% Count the number of examples in "Examples" excluding examples with
