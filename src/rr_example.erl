@@ -267,6 +267,29 @@ to_binary(Positive, Examples) ->
 	    throw({error, cannot_split})
     end.
 
+%%
+%% Remove Examples from "Examples" that are covered by "Covered"
+%%
+remove_covered(Examples, Covered) ->
+    lists:map(fun({Class, Count, Ids}) ->
+		      case rr_example:get_class(Class, Covered) of
+			  {Class, Count0, Ids0} ->
+			      NewIds = gb_sets:to_list(gb_sets:subtract(gb_sets:from_list(Ids),
+									gb_sets:from_list(Ids0))),
+			      {Class, Count - Count0, NewIds};
+			  _ ->
+			      {Class, Count, Ids}
+		      end
+	      end, Examples).
+
+%%
+%% Return a tuple {Pos, Neg} with the number of Positive and negative examples
+%% covered by "Example"
+%%
+coverage(Examples) ->
+    {rr_example:count('+', Examples), rr_example:count('-', Examples)}.
+
+
 get_examples_for_value(Value, Examples) ->
     element(2, lists:keyfind(Value, 1, Examples)).
 
