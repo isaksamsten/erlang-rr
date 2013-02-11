@@ -274,7 +274,7 @@ test(File) ->
 				     end, {0, 0}, Dict),
     Accuracy = Correct / (Correct + Incorrect),
     io:format("Accuracy: ~p (~p:~p)) ~n", [Accuracy, Correct, Incorrect]),
-    rr_example:generate_bootstrap(Examples).
+    io:format("~w\n", [rr_example:bootstrap_replicate(Examples)]).
 
 										  
 									  

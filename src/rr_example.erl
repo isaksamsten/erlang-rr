@@ -322,8 +322,9 @@ split_dataset(Examples, Ratio) ->
 		end, {[], []}, Examples).
     
 generate_bootstrap(Examples) ->
+    ExampleCount = lists:sum([C || {_, C, _} <- Examples]),
     lists:foldl(fun({Class, Length, _}, Bootstraps) ->
-			generate_bootstrap_for_class(Length, Length, Bootstraps)
+			generate_bootstrap_for_class(Length, ExampleCount, Bootstraps)
 		end, dict:new(), Examples).
 
 generate_bootstrap_for_class(0, _, Dict) ->
@@ -338,17 +339,30 @@ generate_bootstrap_for_class(Counter, Length, Dict) ->
     
 bootstrap_replicate(Examples) ->
     Bootstrap = generate_bootstrap(Examples),
-    select_bootstrap_examples(Examples, []).
+    io:format("Bootstrap: ~w \n", [dict:to_list(Bootstrap)]),
+    select_bootstrap_examples(Examples, Bootstrap, {[], []}).
 
-select_boostrap_examples([], Acc) ->
-    lists:reverse(Acc);
-select_boostrap_examples([{Class, Count, Ids}|Examples], Acc) ->
-    select_bootstrap_examples(Examples, [select_bootstrap_examples_for_class(Class, Count, Ids, [])|Acc]).
+select_bootstrap_examples([], Bootstrap, Acc) ->
+    Acc;
+select_bootstrap_examples([{Class, Count, Ids}|Examples], Bootstrap, {InBags, OutBags}) ->
+    {InBag, OutBag} = select_bootstrap_examples_for_class(Class, {0, 0}, Ids, Bootstrap, {[], []}),
+    select_bootstrap_examples(Examples, Bootstrap, {[InBag|InBags], [OutBag|OutBags]}).
 
-select_bootstrap_examples_for_class(Class, Count, [], Acc) ->
-    {Class, Count, Acc};
-select_bootstrap_examples_for_class(Class, Count, [ExId|Rest], Acc) ->
-    ok.
-    
+select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, [], _, {InBag, OutBag}) ->
+    {{Class, InBagCount, InBag}, {Class, OutBagCount, OutBag}};
+select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
+    case dict:find(ExId, Bootstrap) of
+	{ok, Times} ->
+	    NewInBag = duplicate_example(ExId, Times, InBag),
+	    select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount},
+						Rest, Bootstrap, {NewInBag, OutBag});
+	error ->
+	    select_bootstrap_examples_for_class(Class, {InBagCount,  OutBagCount + 1},
+						Rest, Bootstrap, {InBag, [ExId|OutBag]})
+    end.
 
-    
+duplicate_example(_, 0, Acc) ->
+    Acc;
+duplicate_example(ExId, N, Acc) ->
+    duplicate_example(ExId, N - 1, [ExId|Acc]).
+
