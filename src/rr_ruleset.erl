@@ -2,7 +2,7 @@
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
 %%%
-%%% Implementaion of an unpruned ruleset
+%%% Implementaion of an pre-pruned ruleset
 %%%
 %%% @end
 %%% Created :  5 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
@@ -12,22 +12,47 @@
 
 -compile(export_all).
 
-laplace(#rr_heuristic{covered={Pos, Neg}, classes=Classes}) ->
+%%
+%% Laplace estimate
+%%
+laplace(#rr_conf{covered={Pos, Neg}, classes=Classes}) ->
     (Pos + 1) / (Pos + Neg + Classes).
 
-accuracy(#rr_heuristic{covered={Pos, Neg}, original={P, N}}) ->
+m_estimate(M) ->
+    fun(#rr_conf{covered={Pos, Neg}, original={P, N}}) ->
+	    (Pos + M * (P / (P + N))) / (Pos + Neg + M)
+    end.
+
+%%
+%% Rule accuacy
+%%
+accuracy(#rr_conf{covered={Pos, Neg}, original={P, N}}) ->
     (Pos + (N - Neg))/(P+N).
 
-purity(#rr_heuristic{covered={Pos, Neg}}) ->
+%%
+%% Rule purity measure
+%%
+purity(#rr_conf{covered={Pos, Neg}}) ->
     Pos / (Pos + Neg).
 
+purity_stop(T) ->
+    fun(#rr_rule{covered={Pos, Neg}}) ->
+	    Pos / (Pos + Neg) > T
+    end.
+
+%%
+%% Best first search. Only search the locally optimal rule
+%%
 best_first_search(Candidates) ->
     hd(sort_candidates(Candidates)).
 
+%%
+%% Stochastically search on of the top 1/3 of possible candidates
+%%
 stochastic_search(Candidates) ->
     case length(Candidates) of
 	X when X >= 3 ->
-	    C = rr_candidate:sort(Candidates),
+	    C = sort_candidates(Candidates),
 	    Index = random:uniform(X div 3),
 	    lists:nth(Index, C);
 	2 ->
@@ -36,37 +61,95 @@ stochastic_search(Candidates) ->
 	    hd(Candidates)
     end.
 	    
-
-ruleset(Features, Examples) ->
+%%
+%% Generate a ruleset from "Features" and "Examples"
+%%
+generate_model(Features, Examples) ->
     random:seed(now()),
     {Default, Rest} = default_class(Examples),
-    H = #rr_heuristic{eval=fun laplace/1, 
-		      search=fun stochastic_search/1,
-		      classes=rr_example:classes(Examples)},
-    Ruleset = learn_rules_for_class(Features, Rest, Examples, H, []),
-    Ruleset ++ [{'$default$', Default}].
+    H = #rr_conf{eval   = fun laplace/1,
+		 search = fun best_first_search/1,
+		 stop   = purity_stop(0.8),
+		 classes=rr_example:classes(Examples)},
+    DefaultRule = default_rule(Default, Examples, H),
+    learn_rules_for_class(Features, Rest, Examples, H, []) ++ DefaultRule.
+
+    
+evaluate_model(Model, Examples) ->
+    lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
+			predict_all(Class, ExampleIds, Model, Acc)
+		end, dict:new(), Examples).
+
+predict_all(_, [], _, Dict) ->
+    Dict;
+predict_all(Actual, [Example|Rest], Model, Dict) ->
+    Prediction = predict(rr_example:example(Example), Model),
+    predict_all(Actual, Rest, Model, dict:update(Actual, fun(Predictions) ->
+								 [Prediction|Predictions]
+							 end, [Prediction], Dict)).
+	
+predict(Attributes, [Rules|Rest]) ->
+    case predict_rules(Attributes, Rules) of
+	{ok, Prediction} ->
+	    Prediction;
+	error ->
+	    predict(Attributes, Rest)
+    end.
+
+predict_rules(_, []) ->
+    error;
+predict_rules(Attributes, [#rr_rule{score=Score,
+				    antecedent=A,
+				    consequent=Class}|Rules]) ->
+    case evaluate_antecedent(Attributes, A) of
+	true ->
+	    {ok, {Class, Score}};
+	false ->
+	    predict_rules(Attributes, Rules)
+    end.
+
+evaluate_antecedent(_, []) ->
+    true;
+evaluate_antecedent(_, ['$default$']) ->
+    true;
+evaluate_antecedent(Attributes, [{{categoric, Feature}, PredictValue}|Rest]) ->
+    ActualValue = rr_example:feature(Attributes, Feature),
+    case PredictValue == ActualValue of
+	true ->
+	    evaluate_antecedent(Attributes, Rest);
+	false ->
+	    false
+    end.
+    
+    
+    
+    
+
 
 %%
-%% Learn rule for one class at a time
+%% Learn rules for one class at a time
 %%
 learn_rules_for_class(_, [], _, _, Ruleset) ->
     lists:reverse(Ruleset);
-learn_rules_for_class(Features, [Class|Rest], Examples, Heuristics, Ruleset) ->
+learn_rules_for_class(Features, [Class|Rest], Examples, Conf, Ruleset) ->
     Binary = rr_example:to_binary(Class, Examples),
-    Heu = Heuristics#rr_heuristic{original=rr_example:coverage(Binary)},
+    Heu = Conf#rr_conf{original=rr_example:coverage(Binary)},
 
     Rule = learn_rule_for_class(Features, Class, Binary, Heu, []),
     learn_rules_for_class(Features, Rest, Examples, Heu, [Rule|Ruleset]).
 
-learn_rule_for_class(Features, Class, Examples, Heuristics, ClassRules) ->
-    {Rule, Covered} = separate_and_conquer(Features, Class, Examples, Heuristics),
-    case rr_rule:purity(Rule) > 0.7 of
+%%
+%% Learn a rule for class "Class"
+%%
+learn_rule_for_class(Features, Class, Examples, #rr_conf{stop=Stop} = Conf, ClassRules) ->
+    {Rule, Covered} = separate_and_conquer(Features, Class, Examples, Conf),
+    case Stop(Rule) of
 	true -> 
 	    NotCovered = rr_example:remove_covered(Examples, Covered),
   	    Pos = rr_example:count('+', NotCovered),
 	    case Pos > 0 of
 		true ->
-		    learn_rule_for_class(Features, Class, NotCovered, Heuristics, [Rule|ClassRules]);
+		    learn_rule_for_class(Features, Class, NotCovered, Conf, [Rule|ClassRules]);
 		false ->
 		    [Rule|ClassRules]
 	    end;
@@ -74,34 +157,34 @@ learn_rule_for_class(Features, Class, Examples, Heuristics, ClassRules) ->
 	    ClassRules
     end.
 
-separate_and_conquer(Features, Class, Examples, Heuristics) ->
-    separate_and_conquer(Features, Class, Examples, Heuristics, rr_rule:new(Class)).
+separate_and_conquer(Features, Class, Examples, Conf) ->
+    separate_and_conquer(Features, Class, Examples, Conf, #rr_rule{consequent=Class}).
 
 separate_and_conquer([], _, NotCovered, _, Rules) ->
-    {rr_rule:reverse(Rules), NotCovered};    
-separate_and_conquer(Features, Class, Examples, Heuristics, Rules) ->
-    {{Score, {Pos, Neg}}, {Feature, _} = Condition, Covered} = learn_one_rule(Features, Examples, Heuristics),
+    {reverse_antecedents(Rules), NotCovered};    
+separate_and_conquer(Features, Class, Examples, Conf, Rules) ->
+    {{Score, {Pos, Neg}}, {Feature, _} = Condition, Covered} = learn_one_rule(Features, Examples, Conf),
 
-    case Score >= rr_rule:score(Rules) of
+    case Score >= Rules#rr_rule.score of
 	true ->
-	    Rules0 = rr_rule:add(Rules, Condition, Score, {Pos, Neg}),
-	    case Neg == 0 of
+	    Rules0 = add_antecedent(Rules, Condition, Score, {Pos, Neg}),
+	    case Neg =< 0 of
 		true ->
-		    {rr_rule:reverse(Rules0), Covered};
+		    {reverse_antecedents(Rules0), Covered};
 		false ->
-		    separate_and_conquer(Features -- [Feature], Class, Covered, Heuristics, Rules0)
+		    separate_and_conquer(Features -- [Feature], Class, Covered, Conf, Rules0)
 	    end;
 	false ->
-	    {rr_rule:reverse(Rules), Covered}
+	    {reverse_antecedents(Rules), Covered}
     end.
 
 %%
-%% Learn the best possible Rule from Features and Examples
-%% 		      
-learn_one_rule(Features, Examples, Heuristics) ->
+%% Learn the possible "Rule" from "Features" and "Examples"
+%%
+learn_one_rule(Features, Examples, Conf) ->
     {Feature, #rr_candidate{covered=Covered,
 			    value=Value,
-			    score=Score}} = find_subspace(Features, Examples, Heuristics),
+			    score=Score}} = find_subspace(Features, Examples, Conf),
     {{Score, rr_example:coverage(Covered)}, {Feature, Value}, Covered}.
 
 
@@ -111,7 +194,7 @@ learn_one_rule(Features, Examples, Heuristics) ->
 find_subspace(Features, Examples, Heuristics) ->
     find_subspaces(Features, Examples, Heuristics, []).
 
-find_subspaces([], _, #rr_heuristic{search=Search}, Acc) ->
+find_subspaces([], _, #rr_conf{search=Search}, Acc) ->
     Search(Acc);   
 find_subspaces([Feature|Features], Examples, Heuristics, Acc) ->
     Split = rr_example:split(Feature, Examples),
@@ -120,10 +203,10 @@ find_subspaces([Feature|Features], Examples, Heuristics, Acc) ->
 
 best_split_value(_, []) ->
     #rr_candidate{score=0};
-best_split_value(#rr_heuristic{eval=Eval} = H, [{Value0, Covered0}|Splits]) ->
-    Score0 = Eval(H#rr_heuristic{covered=rr_example:coverage(Covered0)}),
+best_split_value(#rr_conf{eval=Eval} = H, [{Value0, Covered0}|Splits]) ->
+    Score0 = Eval(H#rr_conf{covered=rr_example:coverage(Covered0)}),
     lists:foldl(fun({Value, Covered}, Candidate) ->
-			Score = Eval(H#rr_heuristic{covered=rr_example:coverage(Covered)}),
+			Score = Eval(H#rr_conf{covered=rr_example:coverage(Covered)}),
 			case Score > Candidate#rr_candidate.score of
 			    true ->
 				#rr_candidate{score=Score, value=Value, covered=Covered};
@@ -141,16 +224,61 @@ default_class(Examples) ->
     [Largest|Rest] = [Class || {Class, _, _} <- lists:reverse(lists:keysort(2, Examples))],
     {Largest, lists:reverse(Rest)}.
 
+%%
+%% Generate a default rule for "Class"
+%%
+default_rule(Class, Examples, #rr_conf{eval=Eval} = Conf) ->
+    Binary = rr_example:to_binary(Class, Examples),
+    Coverage = rr_example:coverage(Binary),
+    Score = Eval(Conf#rr_conf{original=Coverage, covered=Coverage}),
+    [[#rr_rule{score=Score, covered=Coverage, antecedent=['$default$'], consequent=Class}]].
+    
+
+%%
+%% Sort candidate rules according to their score. Larger is better.
+%%
 sort_candidates(Candidates) ->
     lists:sort(fun({_, #rr_candidate{score=Ca}}, 
 		   {_, #rr_candidate{score=Cb}}) ->
 		       Ca > Cb
 	       end, Candidates).
 
+%%
+%% Add antecedent to a rule
+%%
+add_antecedent(#rr_rule{antecedent=A, length=L} = Rule, Condition, Score, Coverage) ->
+    Rule#rr_rule{antecedent=[Condition|A], length=L+1, score=Score, covered=Coverage}.
+
+%%
+%% Reverse the antecedents of a rule (since they are inserted in order)
+%%
+reverse_antecedents(#rr_rule{antecedent=A} = Rule) ->
+    Rule#rr_rule{antecedent=lists:reverse(A)}.
+
 
 test(File) ->
     rr_example:init(),
     Csv = csv:reader(File),
     {Features, Examples} = rr_example:load(Csv, 4),
-    ruleset(Features, Examples).
+    {Train, Test} = rr_example:split_dataset(Examples, 0.66),
+    Model = generate_model(Features, Train),
+    io:format("Ruleset: ~p \n", [Model]),
+    Dict = evaluate_model(Model, Test),
+    {Correct, Incorrect} = dict:fold(fun (Actual, Values, Acc) ->
+					     lists:foldl(fun({Predict, _},  {C, I}) ->
+								 case Actual == Predict of
+								     true -> {C+1, I};
+								     false -> {C, I+1}
+								 end
+							 end, Acc, Values)
+				     end, {0, 0}, Dict),
+    Accuracy = Correct / (Correct + Incorrect),
+    io:format("Accuracy: ~p (~p:~p)) ~n", [Accuracy, Correct, Incorrect]),
+    rr_example:generate_bootstrap(Examples).
+
+										  
+									  
+
+								      
+					  
    

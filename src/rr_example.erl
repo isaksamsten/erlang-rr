@@ -182,7 +182,7 @@ split({numeric, FeatureId} = Feature, Examples, Acc) ->
 split_class_distribution(_, [], _, Dict) ->
     Dict;
 split_class_distribution({categoric, FeatureId} = Feature, [ExampleId|Examples], Class, Dict) ->
-    Value = get_feature(ExampleId, FeatureId),
+    Value = feature(ExampleId, FeatureId),
     split_class_distribution(Feature, Examples, Class,
 			     dict:update(Value, fun(Classes) ->
 							dict:update(Class, fun ({Count, Ids}) ->
@@ -190,7 +190,7 @@ split_class_distribution({categoric, FeatureId} = Feature, [ExampleId|Examples],
 									   end, {1, [ExampleId]}, Classes)
 						end, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict));
 split_class_distribution({{numeric, FeatureId}, Threshold} = Feature, [ExampleId|Examples], Class, Dict) ->
-    Value = get_feature(ExampleId, FeatureId),
+    Value = feature(ExampleId, FeatureId),
     split_class_distribution(Feature, Examples, Class, Dict).
 
 %%
@@ -296,15 +296,36 @@ get_examples_for_value(Value, Examples) ->
 %%
 %% Get the feature vector for example with "Id"
 %%
-get_example(Id) ->
+example(Id) ->
     [{_, Value}|_] = ets:lookup(examples, Id),
     Value.
 
 %%
 %% Get feature at index "At" from "Id"
 %%
-get_feature(Id, At) ->
-    element(At, get_example(Id)).
+feature(Id, At) when is_number(Id)->
+    element(At, example(Id));
+feature(Id, At) when is_tuple(Id) ->
+    element(At, Id).
 
+
+%%
+%% Return the dataset splitted into {Train, Test} with "Ratio"
+%% 
+split_dataset(Examples, Ratio) ->
+    lists:foldl(fun({Class, Count, Ids}, 
+		    {TrainAcc, TestAcc}) ->
+			{Train, Test} = lists:split(round(Count * Ratio), Ids),
+			
+			{[{Class, length(Train), Train}|TrainAcc],
+			 [{Class, length(Test), Test}|TestAcc]}
+		end, {[], []}, Examples).
     
-
+generate_bootstrap(Examples) ->
+    lists:foldl(fun({Class, Length, _}, Bootstraps) ->
+			Random = random:uniform(Length),
+			dict:update(Class, fun(Indexes) ->
+						   dict:update(Random, fun(Counts) -> Counts + 1 end, 1, Indexes)
+					   end,
+				    dict:store(Random, 1, dict:new()), Bootstraps)
+		end, dict:new(), Examples).
