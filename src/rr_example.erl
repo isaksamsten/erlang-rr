@@ -323,9 +323,32 @@ split_dataset(Examples, Ratio) ->
     
 generate_bootstrap(Examples) ->
     lists:foldl(fun({Class, Length, _}, Bootstraps) ->
-			Random = random:uniform(Length),
-			dict:update(Class, fun(Indexes) ->
-						   dict:update(Random, fun(Counts) -> Counts + 1 end, 1, Indexes)
-					   end,
-				    dict:store(Random, 1, dict:new()), Bootstraps)
+			generate_bootstrap_for_class(Length, Length, Bootstraps)
 		end, dict:new(), Examples).
+
+generate_bootstrap_for_class(0, _, Dict) ->
+    Dict;
+generate_bootstrap_for_class(Counter, Length, Dict) ->
+    Random = random:uniform(Length),
+    Dict0 = dict:update(Random, fun (Count) ->
+					Count + 1
+				end, 1, Dict),
+    generate_bootstrap_for_class(Counter - 1, Length, Dict0).
+
+    
+bootstrap_replicate(Examples) ->
+    Bootstrap = generate_bootstrap(Examples),
+    select_bootstrap_examples(Examples, []).
+
+select_boostrap_examples([], Acc) ->
+    lists:reverse(Acc);
+select_boostrap_examples([{Class, Count, Ids}|Examples], Acc) ->
+    select_bootstrap_examples(Examples, [select_bootstrap_examples_for_class(Class, Count, Ids, [])|Acc]).
+
+select_bootstrap_examples_for_class(Class, Count, [], Acc) ->
+    {Class, Count, Acc};
+select_bootstrap_examples_for_class(Class, Count, [ExId|Rest], Acc) ->
+    ok.
+    
+
+    
