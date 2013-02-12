@@ -2,7 +2,8 @@
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
 %%%
-%%% Implementaion of an pre-pruned ruleset
+%%% Implementaion of a ruleset
+%%% TODO: information gain as score measure
 %%%
 %%% @end
 %%% Created :  5 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
@@ -62,7 +63,7 @@ stochastic_best_search(Candidates) ->
 stochastic_search(Candidates) ->
     case length(Candidates) of
 	X when X >= 3 ->
-	    Index = random:uniform(X div 3),
+	    Index = random:uniform(X),
 	    lists:nth(Index, Candidates);
 	2 ->
 	    lists:nth(random:uniform(2), Candidates);
@@ -76,8 +77,8 @@ stochastic_search(Candidates) ->
 %%
 generate_model(Features, Examples) ->
     {Default, Rest} = default_class(Examples),
-    H = #rr_conf{eval   = fun laplace/1,
-		 search = fun stochastic_best_search/1,
+    H = #rr_conf{eval   = fun purity/1,
+		 search = fun best_first_search/1,
 		 stop   = fun purity_stop/2,
 		 classes=rr_example:classes(Examples)},
     DefaultRule = default_rule(Default, Examples, H),
@@ -298,18 +299,14 @@ test(File) ->
     Csv = csv:reader(File),
     {Features, Examples} = rr_example:load(Csv, 4),
     {Train, Test} = rr_example:split_dataset(Examples, 0.66),
-
+%    io:format("~p", [generate_model(Features, Examples)]).
     ets:new(models, [public, named_table]),
     ets:new(predictions, [public, named_table]),
 
-    spawn_ruleset_classifiers(100, 4, Features, Train, lists:sum([C || {_, C, _} <- Examples])),
+    spawn_ruleset_classifiers(1, 4, Features, Train, lists:sum([C || {_, C, _} <- Examples])),
     Dict = evaluate_model([], Test),
     io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
 
-
-
-    
-   
 spawn_ruleset_classifiers(Sets, Cores, Features, Examples, MaxId) ->
     Self = self(),
     [spawn_link(fun() ->
@@ -340,10 +337,11 @@ ruleset_generator_process(Parent, MaxId) ->
     Parent ! {more, Parent, self()},
     receive
 	{batch, Id, Features, Examples} ->
-	    Log = round((math:log(length(Features)) / math:log(2))) + 1,
+	    Log = length(Features), %(length(Features) div 2) + 1, %round((math:log(length(Features)) / math:log(2))) + 1,
 	    Features0 = rr_example:random_features(Features, Log),
 	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples, MaxId),
 	    Model = generate_model(Features0, Bag),
+	    io:format("~p", [Model]),
 	    Dict = evaluate_model2(Model, OutBag),
 	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
 	    ets:insert(models, {Id, Model}),
