@@ -77,7 +77,7 @@ stochastic_search(Candidates) ->
 %%
 generate_model(Features, Examples) ->
     {Default, Rest} = default_class(Examples),
-    H = #rr_conf{eval   = fun purity/1,
+    H = #rr_conf{eval   = fun laplace/1,
 		 search = fun best_first_search/1,
 		 stop   = fun purity_stop/2,
 		 classes=rr_example:classes(Examples)},
@@ -99,7 +99,7 @@ predict_all(_, [], _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Dict) ->
     io:format("Actual: ~p ", [Actual]),
-    Prediction = predict_majority(100, rr_example:example(Example), []),
+    Prediction = predict_majority(Model, rr_example:example(Example), []),
     predict_all(Actual, Rest, Model, dict:update(Actual, fun(Predictions) ->
 								 [Prediction|Predictions]
 							 end, [Prediction], Dict)).
@@ -294,7 +294,7 @@ reverse_antecedents(#rr_rule{antecedent=A} = Rule) ->
     Rule#rr_rule{antecedent=lists:reverse(A)}.
 
 
-test(File) ->
+test(File, Classifier) ->
     rr_example:init(),
     Csv = csv:reader(File),
     {Features, Examples} = rr_example:load(Csv, 4),
@@ -303,8 +303,8 @@ test(File) ->
     ets:new(models, [public, named_table]),
     ets:new(predictions, [public, named_table]),
 
-    spawn_ruleset_classifiers(1, 4, Features, Train, lists:sum([C || {_, C, _} <- Examples])),
-    Dict = evaluate_model([], Test),
+    spawn_ruleset_classifiers(Classifier, 4, Features, Train, lists:sum([C || {_, C, _} <- Examples])),
+    Dict = evaluate_model(Classifier, Test),
     io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
 
 spawn_ruleset_classifiers(Sets, Cores, Features, Examples, MaxId) ->
@@ -337,11 +337,11 @@ ruleset_generator_process(Parent, MaxId) ->
     Parent ! {more, Parent, self()},
     receive
 	{batch, Id, Features, Examples} ->
-	    Log = length(Features), %(length(Features) div 2) + 1, %round((math:log(length(Features)) / math:log(2))) + 1,
+	    Log = (length(Features) div 2) + 1, %round((math:log(length(Features)) / math:log(2))) + 1,
 	    Features0 = rr_example:random_features(Features, Log),
 	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples, MaxId),
 	    Model = generate_model(Features0, Bag),
-	    io:format("~p", [Model]),
+%	    io:format("~p", [Model]),
 	    Dict = evaluate_model2(Model, OutBag),
 	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
 	    ets:insert(models, {Id, Model}),

@@ -18,7 +18,9 @@
 
 cmd_spec() ->
     [{input_file,     $i,          "input",   string, 
-      "Input data set"}].
+      "Input data set"},
+     {rulesets,       $m,          undefined, {integer, 10},
+      "Number of rulesets to generate"}].
 
 main(Args) ->
     Options = case getopt:parse(cmd_spec(), Args) of
@@ -28,8 +30,9 @@ main(Args) ->
 		      illegal()		      
 	      end,
     InputFile = get_opt(input_file, fun illegal/0, Options),
-    Then = now(),    
-    Rules = rr_ruleset:test(InputFile),
+    Classifiers = get_opt(rulesets, fun illegal/0, Options),
+    Then = now(),
+    Rules = rr_ruleset:test(InputFile, Classifiers),
     Now = now(),
     io:format("~p ~n", [Rules]),
     io:format(standard_error, "*** Generated ruleset in ~p second(s)*** ~n", 
