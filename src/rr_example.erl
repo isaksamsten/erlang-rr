@@ -46,8 +46,9 @@ parse_examples(File, Cores, ClassId, Types) ->
 
 parse_example_process(Parent, File, ClassId, Types, Acc) ->
     case csv:next_line(File) of
-	{ok, Example, Id} ->
+	{ok, Example, Id0} ->
 	    {Class, Attributes} = take_class(Example, ClassId),
+	    Id = Id0 - 2, %% NOTE: subtracting headers 
 	    ets:insert(examples, {Id, format_features(Attributes, Types, 1, [])}),
 	    parse_example_process(Parent, File, ClassId, Types, update_class_distribution(Class, Id, Acc));
 	eof ->
@@ -297,6 +298,7 @@ get_examples_for_value(Value, Examples) ->
 %% Get the feature vector for example with "Id"
 %%
 example(Id) ->
+   % io:format("Getting: ~p\n",[Id]),
     [{_, Value}|_] = ets:lookup(examples, Id),
     Value.
 
@@ -308,6 +310,37 @@ feature(Id, At) when is_number(Id)->
 feature(Id, At) when is_tuple(Id) ->
     element(At, Id).
 
+%%
+%% Generate a set of random numbers
+%%
+generate_featurestrap(Features, Subset) ->
+    Length = length(Features),
+    case Length >= Subset of
+	true -> generate_featurestrap(Subset, Length, sets:new());
+	false -> lists:seq(1, Length) 
+    end.
+
+generate_featurestrap(N, Length, Set) ->
+    Random = random:uniform(Length),
+    Set0 = sets:add_element(Random, Set),
+    case sets:size(Set0) == N of
+	true ->
+	    Set0;
+	false ->
+	    generate_featurestrap(N, Length, Set0)
+    end.
+	    
+%%
+%% Return a random subset of size "Subset" from Features
+%%						    
+random_features(Features, Subset) ->
+    Strap = generate_featurestrap(Features, Subset),
+    lists:foldl(fun({Type, Id}, Acc) ->
+			case sets:is_element(Id, Strap) of
+			    true -> [{Type, Id}|Acc];
+			    false -> Acc
+			end
+		end, [], Features).    
 
 %%
 %% Return the dataset splitted into {Train, Test} with "Ratio"
@@ -320,27 +353,30 @@ split_dataset(Examples, Ratio) ->
 			{[{Class, length(Train), Train}|TrainAcc],
 			 [{Class, length(Test), Test}|TestAcc]}
 		end, {[], []}, Examples).
+
+
+%%
+%% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}
+%% examples.
+%%
+bootstrap_replicate(Examples, MaxId) ->
+    Bootstrap = generate_bootstrap(Examples, MaxId),
+    select_bootstrap_examples(Examples, Bootstrap, {[], []}).
     
-generate_bootstrap(Examples) ->
-    ExampleCount = lists:sum([C || {_, C, _} <- Examples]),
+generate_bootstrap(Examples, MaxId) ->
+   % io:format("ExampleCount: ~p\n", [MaxId]),
     lists:foldl(fun({Class, Length, _}, Bootstraps) ->
-			generate_bootstrap_for_class(Length, ExampleCount, Bootstraps)
+			generate_bootstrap_for_class(Length, MaxId, Bootstraps)
 		end, dict:new(), Examples).
 
 generate_bootstrap_for_class(0, _, Dict) ->
     Dict;
-generate_bootstrap_for_class(Counter, Length, Dict) ->
-    Random = random:uniform(Length),
+generate_bootstrap_for_class(Counter, MaxId, Dict) ->
+    Random = random:uniform(MaxId),
     Dict0 = dict:update(Random, fun (Count) ->
 					Count + 1
 				end, 1, Dict),
-    generate_bootstrap_for_class(Counter - 1, Length, Dict0).
-
-    
-bootstrap_replicate(Examples) ->
-    Bootstrap = generate_bootstrap(Examples),
-    io:format("Bootstrap: ~w \n", [dict:to_list(Bootstrap)]),
-    select_bootstrap_examples(Examples, Bootstrap, {[], []}).
+    generate_bootstrap_for_class(Counter - 1, MaxId, Dict0).
 
 select_bootstrap_examples([], Bootstrap, Acc) ->
     Acc;

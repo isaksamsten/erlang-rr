@@ -35,10 +35,8 @@ accuracy(#rr_conf{covered={Pos, Neg}, original={P, N}}) ->
 purity(#rr_conf{covered={Pos, Neg}}) ->
     Pos / (Pos + Neg).
 
-purity_stop(T) ->
-    fun(#rr_rule{covered={Pos, Neg}}) ->
-	    Pos / (Pos + Neg) > T
-    end.
+purity_stop(#rr_rule{covered={Pos, Neg}}, #rr_conf{original={P, N}}) ->
+    Pos / (Pos + Neg) > P / (P + N).
 
 %%
 %% Best first search. Only search the locally optimal rule
@@ -49,7 +47,7 @@ best_first_search(Candidates) ->
 %%
 %% Stochastically search on of the top 1/3 of possible candidates
 %%
-stochastic_search(Candidates) ->
+stochastic_best_search(Candidates) ->
     case length(Candidates) of
 	X when X >= 3 ->
 	    C = sort_candidates(Candidates),
@@ -60,16 +58,27 @@ stochastic_search(Candidates) ->
 	1 -> 
 	    hd(Candidates)
     end.
+
+stochastic_search(Candidates) ->
+    case length(Candidates) of
+	X when X >= 3 ->
+	    Index = random:uniform(X div 3),
+	    lists:nth(Index, Candidates);
+	2 ->
+	    lists:nth(random:uniform(2), Candidates);
+	1 -> 
+	    hd(Candidates)
+    end.
+
 	    
 %%
 %% Generate a ruleset from "Features" and "Examples"
 %%
 generate_model(Features, Examples) ->
-    random:seed(now()),
     {Default, Rest} = default_class(Examples),
     H = #rr_conf{eval   = fun laplace/1,
-		 search = fun best_first_search/1,
-		 stop   = purity_stop(0.8),
+		 search = fun stochastic_best_search/1,
+		 stop   = fun purity_stop/2,
 		 classes=rr_example:classes(Examples)},
     DefaultRule = default_rule(Default, Examples, H),
     learn_rules_for_class(Features, Rest, Examples, H, []) ++ DefaultRule.
@@ -80,14 +89,48 @@ evaluate_model(Model, Examples) ->
 			predict_all(Class, ExampleIds, Model, Acc)
 		end, dict:new(), Examples).
 
+evaluate_model2(Model, Examples) ->
+    lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
+			predict_all2(Class, ExampleIds, Model, Acc)
+		end, dict:new(), Examples).
+
 predict_all(_, [], _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Dict) ->
-    Prediction = predict(rr_example:example(Example), Model),
+    io:format("Actual: ~p ", [Actual]),
+    Prediction = predict_majority(100, rr_example:example(Example), []),
     predict_all(Actual, Rest, Model, dict:update(Actual, fun(Predictions) ->
 								 [Prediction|Predictions]
 							 end, [Prediction], Dict)).
+
+predict_all2(_, [], _, Dict) ->
+    Dict;
+predict_all2(Actual, [Example|Rest], Model, Dict) ->
+    Prediction = predict(rr_example:example(Example), Model),
+    predict_all2(Actual, Rest, Model, dict:update(Actual, fun(Predictions) ->
+								 [Prediction|Predictions]
+							 end, [Prediction], Dict)).
 	
+predict_majority(0, _, Acc) ->
+    {{C, N}, Dict} = majority(Acc),
+    io:format("Majority: ~p ~p ~p \n", [C, N, dict:to_list(Dict)]),
+    {C, N};
+predict_majority(N, Attr, Acc) ->
+    [{_, Model}|_] = ets:lookup(models, N),
+    predict_majority(N - 1, Attr, [predict(Attr, Model)|Acc]).
+
+majority(Acc) ->
+    Dict = lists:foldl(fun ({Item, Prob}, Dict) ->
+			       dict:update(Item, fun(Count) -> Count + 1 end, 1, Dict)
+		       end, dict:new(), Acc),
+    {dict:fold(fun (Class, Count, {MClass, MCount}) ->
+		      case Count > MCount of
+			  true -> {Class, Count};
+			  false -> {MClass, MCount}
+		      end
+	      end, {undefined, 0}, Dict), Dict}.
+    
+
 predict(Attributes, [Rules|Rest]) ->
     case predict_rules(Attributes, Rules) of
 	{ok, Prediction} ->
@@ -120,11 +163,6 @@ evaluate_antecedent(Attributes, [{{categoric, Feature}, PredictValue}|Rest]) ->
 	false ->
 	    false
     end.
-    
-    
-    
-    
-
 
 %%
 %% Learn rules for one class at a time
@@ -143,7 +181,7 @@ learn_rules_for_class(Features, [Class|Rest], Examples, Conf, Ruleset) ->
 %%
 learn_rule_for_class(Features, Class, Examples, #rr_conf{stop=Stop} = Conf, ClassRules) ->
     {Rule, Covered} = separate_and_conquer(Features, Class, Examples, Conf),
-    case Stop(Rule) of
+    case Stop(Rule, Conf) of
 	true -> 
 	    NotCovered = rr_example:remove_covered(Examples, Covered),
   	    Pos = rr_example:count('+', NotCovered),
@@ -164,7 +202,6 @@ separate_and_conquer([], _, NotCovered, _, Rules) ->
     {reverse_antecedents(Rules), NotCovered};    
 separate_and_conquer(Features, Class, Examples, Conf, Rules) ->
     {{Score, {Pos, Neg}}, {Feature, _} = Condition, Covered} = learn_one_rule(Features, Examples, Conf),
-
     case Score >= Rules#rr_rule.score of
 	true ->
 	    Rules0 = add_antecedent(Rules, Condition, Score, {Pos, Neg}),
@@ -261,24 +298,56 @@ test(File) ->
     Csv = csv:reader(File),
     {Features, Examples} = rr_example:load(Csv, 4),
     {Train, Test} = rr_example:split_dataset(Examples, 0.66),
-    Model = generate_model(Features, Train),
-    io:format("Ruleset: ~p \n", [Model]),
-    Dict = evaluate_model(Model, Test),
-    {Correct, Incorrect} = dict:fold(fun (Actual, Values, Acc) ->
-					     lists:foldl(fun({Predict, _},  {C, I}) ->
-								 case Actual == Predict of
-								     true -> {C+1, I};
-								     false -> {C, I+1}
-								 end
-							 end, Acc, Values)
-				     end, {0, 0}, Dict),
-    Accuracy = Correct / (Correct + Incorrect),
-    io:format("Accuracy: ~p (~p:~p)) ~n", [Accuracy, Correct, Incorrect]),
-    io:format("~w\n", [rr_example:bootstrap_replicate(Examples)]).
 
-										  
-									  
+    ets:new(models, [public, named_table]),
+    ets:new(predictions, [public, named_table]),
 
-								      
-					  
+    spawn_ruleset_classifiers(100, 4, Features, Train, lists:sum([C || {_, C, _} <- Examples])),
+    Dict = evaluate_model([], Test),
+    io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
+
+
+
+    
    
+spawn_ruleset_classifiers(Sets, Cores, Features, Examples, MaxId) ->
+    Self = self(),
+    [spawn_link(fun() ->
+			<<A:32, B:32, C:32>> = crypto:rand_bytes(12),
+			random:seed({A,B,C}),
+			ruleset_generator_process(Self, MaxId)
+		end) || _ <- lists:seq(1, Cores)],
+    ruleset_classification_coordinator(Self, Sets, Cores, Features, Examples).
+
+ruleset_classification_coordinator(_, 0, 0, _, _) ->
+    done;
+ruleset_classification_coordinator(Self, 0, Cores, Features, Examples) ->
+    receive
+	{more, Self, Pid} ->
+	    Pid ! {exit, Self},
+	    ruleset_classification_coordinator(Self, 0, Cores, Features, Examples);
+	done ->
+	    ruleset_classification_coordinator(Self, 0, Cores - 1, Features, Examples)
+    end;	    
+ruleset_classification_coordinator(Self, Sets, Cores, Features, Examples) ->
+    receive 
+	{more, Self, Pid} ->
+	    Pid ! {batch, Sets, Features, Examples},
+	    ruleset_classification_coordinator(Self, Sets - 1, Cores, Features, Examples)
+    end.
+
+ruleset_generator_process(Parent, MaxId) ->
+    Parent ! {more, Parent, self()},
+    receive
+	{batch, Id, Features, Examples} ->
+	    Log = round((math:log(length(Features)) / math:log(2))) + 1,
+	    Features0 = rr_example:random_features(Features, Log),
+	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples, MaxId),
+	    Model = generate_model(Features0, Bag),
+	    Dict = evaluate_model2(Model, OutBag),
+	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
+	    ets:insert(models, {Id, Model}),
+	    ruleset_generator_process(Parent, MaxId);
+	{exit, Parent} ->
+	    Parent ! done
+    end.
