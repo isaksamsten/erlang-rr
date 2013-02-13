@@ -1,0 +1,2 @@
+-record(node, {score, criteria, branches}).
+-record(leaf, {covered, classification}).
