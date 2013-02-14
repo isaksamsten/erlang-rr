@@ -23,6 +23,7 @@ cmd_spec() ->
       "Number of rulesets to generate"}].
 
 main(Args) ->
+    rr_example:init(),
     Options = case getopt:parse(cmd_spec(), Args) of
 		  {ok, Parsed} -> 
 		      Parsed;
@@ -32,7 +33,7 @@ main(Args) ->
     InputFile = get_opt(input_file, fun illegal/0, Options),
     Classifiers = get_opt(rulesets, fun illegal/0, Options),
     Then = now(),
-    Rules = rr_ruleset:test(InputFile, Classifiers),
+    Rules = rr_tree:test(InputFile), %rr_ruleset:test(InputFile, Classifiers),
     Now = now(),
     io:format("~p ~n", [Rules]),
     io:format(standard_error, "*** Generated ruleset in ~p second(s)*** ~n", 

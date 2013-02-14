@@ -295,7 +295,6 @@ reverse_antecedents(#rr_rule{antecedent=A} = Rule) ->
 
 
 test(File, Classifier) ->
-    rr_example:init(),
     Csv = csv:reader(File),
     {Features, Examples} = rr_example:load(Csv, 4),
     {Train, Test} = rr_example:split_dataset(Examples, 0.66),
