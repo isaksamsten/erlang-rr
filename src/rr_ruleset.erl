@@ -10,7 +10,7 @@
 -module(rr_ruleset).
 -author('isak-kar@dsv.su.se').
 -include("rr.hrl").
-
+-include("rr_rule.hrl").
 -compile(export_all).
 
 %%

@@ -234,6 +234,16 @@ count(Class, Examples) ->
 	    0
     end.
 
+majority(Examples) ->
+    {Class, Count, _} = lists:foldl(fun({Class, Count, _}, {OldClass, OldCount, _} = Old) ->
+					    case Count >= OldCount of 
+						true -> {Class, Count, []};
+						false -> Old
+					    end
+				    end, hd(Examples), tl(Examples)),
+    {Class, Count}.
+    
+
 get_class(Class, Examples) ->
     lists:keyfind(Class, 1, Examples).
 

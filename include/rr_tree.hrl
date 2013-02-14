@@ -1,2 +1,3 @@
--record(node, {score, criteria, branches}).
--record(leaf, {covered, classification}).
+-record(rr_node, {score, feature, nodes}).
+-record(rr_leaf, {purity, correct, incorrect, class}).
+-record(rr_candidate, {feature, score, split}).

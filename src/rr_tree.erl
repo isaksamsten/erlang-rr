@@ -8,22 +8,70 @@
 -module(rr_tree).
 -compile(export_all).
 
+-include("rr.hrl").
+-include("rr_tree.hrl").
+
 test(File) ->
     Csv = csv:reader(File),
     {Features, Examples} = rr_example:load(Csv, 4),
     generate_model(Features, Examples).
 
 
+log_stop(Initial) ->
+    Initial0 = trunc(math:log(Initial)/math:log(2)) + 1,
+    io:format("Initial: ~p ~n", [Initial0]),
+    fun (Examples) ->
+	    Examples < Initial0
+    end.
+
 generate_model(Features, Examples) ->
-    Total = rr_example:count(Examples),
-    evaluate_split(Features, Examples, Total, []).
+    build_decision_tree(Features, Examples, 
+			#rr_conf{stop=log_stop(rr_example:count(Examples))}).
+
+build_decision_tree([], [], _) ->
+    make_leaf([], error);
+build_decision_tree([], Examples, _) ->
+    make_leaf(Examples, rr_example:majority(Examples));
+build_decision_tree(_, [{Class, Count, _ExampleIds}] = Examples, _) ->
+    make_leaf(Examples, {Class, Count});
+build_decision_tree(Features, Examples, #rr_conf{stop=Stop} = Conf) ->
+    NoExamples = rr_example:count(Examples),
+    case Stop(NoExamples) of
+	true ->
+	    make_leaf(Examples, rr_example:majority(Examples));
+	false ->
+	    Cand = hd(evaluate_split(Features, Examples, NoExamples, [])),
+	    Features0 = Features -- [Cand#rr_candidate.feature],
+	    Nodes = [{Value, build_decision_tree(Features0, Split, Conf)} || {Value, Split} <- Cand#rr_candidate.split],
+	    make_node(Cand, Nodes)
+    end.
+
+make_node(#rr_candidate{feature=Feature, score=Score}, Nodes) ->
+    #rr_node{score=Score, feature=Feature, nodes=Nodes}.
+
+make_leaf([], Class) ->
+    #rr_leaf{purity=0, correct=0, incorrect=0, class=Class};
+make_leaf(Covered, {Class, C}) ->
+    N = rr_example:count(Covered),
+    #rr_leaf{purity=C/N, correct=C, incorrect=N-C, class=Class}.
 
 evaluate_split([], _, _, Acc) ->
-    lists:reverse(Acc);
+    lists:sort(fun(A, B) ->
+		       A#rr_candidate.score < B#rr_candidate.score
+	       end, Acc);
 evaluate_split([F|Features], Examples, Total, Acc) ->
     Split = rr_example:split(F, Examples),
+    Info = info(Split, Total),
+    GainRatio = case split_info(Split, Total) of
+		    0.0 ->
+			Info;
+		    SplitInfo ->
+			Info / SplitInfo
+		end,
     evaluate_split(Features, Examples, Total,
-		   [info(Split, Total) / (split_info(Split, Total) + 0.000000000000000001)|Acc]).
+		   [#rr_candidate{feature = F, 
+				  score = GainRatio, 
+				  split = Split}|Acc]).
 
 
 
