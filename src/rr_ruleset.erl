@@ -75,7 +75,7 @@ stochastic_search(Candidates) ->
 %%
 %% Generate a ruleset from "Features" and "Examples"
 %%
-generate_model(Features, Examples) ->
+generate_model(Features, Examples, _Conf) ->
     {Default, Rest} = default_class(Examples),
     H = #rr_conf{eval   = fun laplace/1,
 		 search = fun best_first_search/1,
@@ -84,60 +84,25 @@ generate_model(Features, Examples) ->
     DefaultRule = default_rule(Default, Examples, H),
     learn_rules_for_class(Features, Rest, Examples, H, []) ++ DefaultRule.
 
-    
-evaluate_model(Model, Examples) ->
+evaluate_model2(Model, Examples, Conf) ->
     lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
-			predict_all(Class, ExampleIds, Model, Acc)
+			predict_all(Class, ExampleIds, Model, Conf, Acc)
 		end, dict:new(), Examples).
 
-evaluate_model2(Model, Examples) ->
-    lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
-			predict_all2(Class, ExampleIds, Model, Acc)
-		end, dict:new(), Examples).
-
-predict_all(_, [], _, Dict) ->
+predict_all(_, [], _, _,Dict) ->
     Dict;
-predict_all(Actual, [Example|Rest], Model, Dict) ->
-    io:format("Actual: ~p ", [Actual]),
-    Prediction = predict_majority(Model, rr_example:example(Example), []),
-    predict_all(Actual, Rest, Model, dict:update(Actual, fun(Predictions) ->
+predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
+    Prediction = predict(Model, rr_example:example(Example), Conf),
+    predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
 								 [Prediction|Predictions]
 							 end, [Prediction], Dict)).
 
-predict_all2(_, [], _, Dict) ->
-    Dict;
-predict_all2(Actual, [Example|Rest], Model, Dict) ->
-    Prediction = predict(rr_example:example(Example), Model),
-    predict_all2(Actual, Rest, Model, dict:update(Actual, fun(Predictions) ->
-								 [Prediction|Predictions]
-							 end, [Prediction], Dict)).
-	
-predict_majority(0, _, Acc) ->
-    {{C, N}, Dict} = majority(Acc),
-    io:format("Majority: ~p ~p ~p \n", [C, N, dict:to_list(Dict)]),
-    {C, N};
-predict_majority(N, Attr, Acc) ->
-    [{_, Model}|_] = ets:lookup(models, N),
-    predict_majority(N - 1, Attr, [predict(Attr, Model)|Acc]).
-
-majority(Acc) ->
-    Dict = lists:foldl(fun ({Item, Prob}, Dict) ->
-			       dict:update(Item, fun(Count) -> Count + 1 end, 1, Dict)
-		       end, dict:new(), Acc),
-    {dict:fold(fun (Class, Count, {MClass, MCount}) ->
-		      case Count > MCount of
-			  true -> {Class, Count};
-			  false -> {MClass, MCount}
-		      end
-	      end, {undefined, 0}, Dict), Dict}.
-    
-
-predict(Attributes, [Rules|Rest]) ->
+predict([Rules|Rest], Attributes, Conf) ->
     case predict_rules(Attributes, Rules) of
 	{ok, Prediction} ->
 	    Prediction;
 	error ->
-	    predict(Attributes, Rest)
+	    predict(Rest, Attributes, Conf)
     end.
 
 predict_rules(_, []) ->
@@ -202,7 +167,9 @@ separate_and_conquer(Features, Class, Examples, Conf) ->
 separate_and_conquer([], _, NotCovered, _, Rules) ->
     {reverse_antecedents(Rules), NotCovered};    
 separate_and_conquer(Features, Class, Examples, Conf, Rules) ->
-    {{Score, {Pos, Neg}}, {Feature, _} = Condition, Covered} = learn_one_rule(Features, Examples, Conf),
+    Log = round((math:log(length(Features)) / math:log(2))) + 1,
+    Features0 = rr_example:random_features(Features, Log),
+    {{Score, {Pos, Neg}}, {Feature, _} = Condition, Covered} = learn_one_rule(Features0, Examples, Conf),
     case Score >= Rules#rr_rule.score of
 	true ->
 	    Rules0 = add_antecedent(Rules, Condition, Score, {Pos, Neg}),
@@ -292,18 +259,4 @@ add_antecedent(#rr_rule{antecedent=A, length=L} = Rule, Condition, Score, Covera
 %%
 reverse_antecedents(#rr_rule{antecedent=A} = Rule) ->
     Rule#rr_rule{antecedent=lists:reverse(A)}.
-
-
-test(File, Classifier) ->
-    Csv = csv:reader(File),
-    {Features, Examples} = rr_example:load(Csv, 4),
-    {Train, Test} = rr_example:split_dataset(Examples, 0.66),
-    io:format("~p", [generate_model(Features, Examples)]).
-    %% ets:new(models, [public, named_table]),
-    %% ets:new(predictions, [public, named_table]),
-
-    %% spawn_ruleset_classifiers(Classifier, 4, Features, Train, lists:sum([C || {_, C, _} <- Examples])),
-    %% Dict = evaluate_model(Classifier, Test),
-    %% io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
-
 

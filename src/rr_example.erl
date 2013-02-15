@@ -170,13 +170,29 @@ format_split_distribution(Acc) ->
 				      end
 			      end, [], dict:to_list(Acc))).
 
+random_binary_split({categoric, FeatureId} = Feature, Examples) ->
+    Value = random_categoric_split(FeatureId, Examples),
+    split_binary_categoric(Feature, Value, Examples, dict:new());
+random_binary_split({numeric, _} = Feature, Examples) ->
+    split(Feature, Examples).
+
+
+
+    
+
+
 split(Feature, Examples) ->
     split(Feature, Examples, dict:new()).
 
 split(_, [], Acc) ->
     format_split_distribution(Acc);
-split({categoric, _} = Feature, [{Class, _, ExampleIds}|Examples], Acc) ->
-    split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc));
+split({categoric, FeatureId} = Feature, Examples, Acc) ->
+%    io:format("Before ~p: ~w ~n", [Feature, Examples]),
+    Value = random_categoric_split(FeatureId, Examples),
+    Dict = split_binary_categoric(Feature, Value, Examples, Acc),
+ %   io:format("Splitted ~p: ~w ~n", [Feature, Dict]),
+    Dict;
+    %split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc));
 split({numeric, FeatureId} = Feature, Examples, Acc) ->
     Threshold = random_numeric_split(FeatureId, Examples),
     split_numeric_feature(Feature, Threshold, Examples, Acc).
@@ -205,23 +221,51 @@ split_class_distribution({{numeric, FeatureId}, Threshold} = Feature, [ExampleId
 		false ->
 		    dict:update('<', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict)
 	    end,
+    split_class_distribution(Feature, Examples, Class, Dict0);
+split_class_distribution({{categoric, FeatureId}, SplitValue} = Feature, [ExampleId|Examples], Class, Dict) ->
+    Value = feature(ExampleId, FeatureId),
+    UpdateFun = fun(Classes) ->
+			dict:update(Class, fun ({Count, Ids}) ->
+						   {Count + 1, [ExampleId|Ids]}
+					   end, {1, [ExampleId]}, Classes)
+		end,
+    Dict0 = case Value == SplitValue of
+		true ->
+		    dict:update('==', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict);
+		false ->
+		    dict:update('/=', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict)
+	    end,
     split_class_distribution(Feature, Examples, Class, Dict0).
+
 
 %%
 %% Split a numeric feature at threshold
 %%
 split_numeric_feature(_, Threshold, [], Acc) ->
-    {Threshold, format_split_distribution(Acc)};
+    {numeric, Threshold, format_split_distribution(Acc)};
 split_numeric_feature(Feature, Threshold, [{Class, _, ExampleIds}|Examples], Acc) ->
     split_numeric_feature(Feature, Threshold, Examples,
 			  split_class_distribution({Feature, Threshold}, ExampleIds, Class, Acc)).
+
+split_binary_categoric(_, Value, [], Acc) ->
+    {categoric, Value, format_split_distribution(Acc)};
+split_binary_categoric(Feature, Value, [{Class, _, ExampleIds}|Examples], Acc) ->
+    split_binary_categoric(Feature, Value, Examples,
+			   split_class_distribution({Feature, Value}, ExampleIds, Class, Acc)).
+
 
 
 random_numeric_split(FeatureId, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
     Value1 = feature(Ex1, FeatureId),
     Value2 = feature(Ex2, FeatureId),
-    (Value1 - Value2) / 2.
+    (Value1 + Value2) / 2.
+
+random_categoric_split(FeatureId, Examples) ->
+    ExId = sample_example(Examples),
+    feature(ExId, FeatureId).
+
+
 %%
 %% Take class at id=N and return the the tuple {Class, RestOfList}
 %%
@@ -405,8 +449,12 @@ generate_bootstrap_for_class(Counter, MaxId, Dict) ->
 select_bootstrap_examples([], Bootstrap, Acc) ->
     Acc;
 select_bootstrap_examples([{Class, Count, Ids}|Examples], Bootstrap, {InBags, OutBags}) ->
-    {InBag, OutBag} = select_bootstrap_examples_for_class(Class, {0, 0}, Ids, Bootstrap, {[], []}),
-    select_bootstrap_examples(Examples, Bootstrap, {[InBag|InBags], [OutBag|OutBags]}).
+    case select_bootstrap_examples_for_class(Class, {0, 0}, Ids, Bootstrap, {[], []}) of
+	{{_, 0, []}, _} ->
+	    select_bootstrap_examples(Examples, Bootstrap, {InBags, OutBags});
+	{InBag, OutBag} ->
+	    select_bootstrap_examples(Examples, Bootstrap, {[InBag|InBags], [OutBag|OutBags]})
+    end.
 
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, [], _, {InBag, OutBag}) ->
     {{Class, InBagCount, InBag}, {Class, OutBagCount, OutBag}};
@@ -426,10 +474,17 @@ duplicate_example(_, 0, Acc) ->
 duplicate_example(ExId, N, Acc) ->
     duplicate_example(ExId, N - 1, [ExId|Acc]).
 
+
+sample_example([{Class, _, ExIds}]) ->
+%    io:format("Class ~p ~w~n", [Class, ExIds]),
+    lists:nth(random:uniform(length(ExIds)), ExIds);
+sample_example(Examples) ->
+    sample_example([lists:nth(random:uniform(length(Examples)), Examples)]).
+
 %%
 %% Sample a random pair of examples
 %%
-sample_example_pair([{C1, _, ExId1}, {C2, _, ExId2}]) ->
+sample_example_pair([{_, _, ExId1}, {_, _, ExId2}]) ->
     sample_example_pair(ExId1, ExId2);
 sample_example_pair(Examples) ->
     sample_example_pair(sample_class_pair(Examples)).
