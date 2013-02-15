@@ -10,20 +10,20 @@
 
 -include("rr_tree.hrl").
 
-test(File) ->
-    Csv = csv:reader(File),
-    {Features, Examples} = rr_example:load(Csv, 4),
-    {Train, Test} = rr_example:split_dataset(Examples, 0.66),
-    Conf = #rr_conf{
-	      score = fun random_score/2,
-	      prune = example_depth_stop(2, 1000),
-	      evaluate = random_evaluator(0.1), %fun best_subset_evaluate_split/4, 
-	      base_learner = {100, rr_tree},
-	      max_id = rr_example:count(Examples)},
-    Model = rr_ensamble:generate_model(Features, Train, Conf),
-    Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
+%% test(File) ->
+%%     Csv = csv:reader(File),
+%%     {Features, Examples} = rr_example:load(Csv, 4),
+%%     {Train, Test} = rr_example:split_dataset(Examples, 0.66),
+%%     Conf = #rr_conf{
+%% 	      score = fun random_score/2,
+%% 	      prune = example_depth_stop(2, 1000),
+%% 	      evaluate = random_evaluator(0.1), %fun best_subset_evaluate_split/4, 
+%% 	      base_learner = {100, rr_tree},
+%% 	      max_id = rr_example:count(Examples)},
+%%     Model = rr_ensamble:generate_model(Features, Train, Conf),
+%%     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
 
-    io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
+%%     io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
 
 %%
 %% Stop inducing tree if |Example| < MaxExamples or Depth > MaxDepth
