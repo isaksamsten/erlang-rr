@@ -12,10 +12,11 @@
 
 generate_model(Features, Examples, #rr_conf{
 				      base_learner = {Classifiers, Base},
-				      max_id = MaxId } = Conf) ->
+				      max_id = MaxId,
+				      cores = Cores} = Conf) ->
     ets:new(models, [public, named_table]),
     ets:new(predictions, [public, named_table]),
-    spawn_base_classifiers(Classifiers, 4, Features, Examples, Base, Conf, MaxId),
+    spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf, MaxId),
     {lists:seq(1, Classifiers), Base}.
     
 evaluate_model(Models, Examples, Conf) ->
