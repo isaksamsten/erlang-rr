@@ -54,6 +54,8 @@ majority(Acc) ->
 spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf, MaxId) ->
     Self = self(),
     [spawn_link(fun() ->
+			<<A:32, B:32, C:32>> = crypto:rand_bytes(12),
+			random:seed({A,B,C}),
 			base_generator_process(Self, Base, Conf, MaxId)
 		end) || _ <- lists:seq(1, Cores)],
     model_coordinator(Self, Sets, Cores, Features, Examples).
@@ -77,9 +79,6 @@ model_coordinator(Self, Sets, Cores, Features, Examples) ->
 
 base_generator_process(Parent, Base, Conf, MaxId) ->
     Parent ! {more, Parent, self()},
-    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-    random:seed({A,B,C}),
-			
     receive
 	{batch, Id, Features, Examples} ->
 	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples, MaxId),
