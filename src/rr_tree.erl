@@ -10,21 +10,6 @@
 
 -include("rr_tree.hrl").
 
-%% test(File) ->
-%%     Csv = csv:reader(File),
-%%     {Features, Examples} = rr_example:load(Csv, 4),
-%%     {Train, Test} = rr_example:split_dataset(Examples, 0.66),
-%%     Conf = #rr_conf{
-%% 	      score = fun random_score/2,
-%% 	      prune = example_depth_stop(2, 1000),
-%% 	      evaluate = random_evaluator(0.1), %fun best_subset_evaluate_split/4, 
-%% 	      base_learner = {100, rr_tree},
-%% 	      max_id = rr_example:count(Examples)},
-%%     Model = rr_ensamble:generate_model(Features, Train, Conf),
-%%     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
-
-%%     io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
-
 %%
 %% Stop inducing tree if |Example| < MaxExamples or Depth > MaxDepth
 %%
@@ -32,7 +17,6 @@ example_depth_stop(MaxExamples, MaxDepth) ->
     fun(Examples, Depth) ->
 	    (Examples =< MaxExamples) or (Depth > MaxDepth)
     end.
-
 
 %%
 %% Generate model from Features and Examples
@@ -187,15 +171,13 @@ best_evaluate_split(Features, Examples, Total, Conf) ->
 
 %%
 %% Randomly select an evalation method If alpha == 0 only select
-%% splits at random, if == 1 only select the best split 
+%% splits at random, if == 1 only select the log2 best split 
 %%
 random_evaluator(Alpha) ->
     fun (Features, Examples, Total, Conf) ->
 	    Random = random:uniform(),
-	    if Random >= 1 - Alpha ->
+	    if Random =< Alpha ->
 		    random_evaluate_split(Features, Examples, Total, Conf);
-	       Random =< Alpha ->
-		    best_evaluate_split(Features, Examples, Total, Conf);
 	       true ->
 		    best_subset_evaluate_split(Features, Examples, Total, Conf)
 	    end
