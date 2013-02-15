@@ -15,7 +15,7 @@ test(File) ->
     {Features, Examples} = rr_example:load(Csv, 4),
     {Train, Test} = rr_example:split_dataset(Examples, 0.66),
     Conf = #rr_conf{
-	      score = fun info/2,
+	      score = fun random_score/2,
 	      prune = example_depth_stop(2, 1000),
 	      evaluate = random_evaluator(0.1), %fun best_subset_evaluate_split/4, 
 	      base_learner = {100, rr_tree},
@@ -35,12 +35,14 @@ example_depth_stop(MaxExamples, MaxDepth) ->
 
 
 %%
-%% Generate model from 
+%% Generate model from Features and Examples
 %%
 generate_model(Features, Examples, Conf) ->
     build_decision_node(Features, Examples, Conf).
     
-
+%%
+%% Evaluate "Examples" using "Model"
+%%
 evaluate_model(Model, Examples, Conf) ->
     lists:foldl(fun({Class, _, ExampleIds}, Acc) ->
 			predict_all(Class, ExampleIds, Model, Conf, Acc)
@@ -95,7 +97,16 @@ predict(Attributes, #rr_node{feature={{numeric, Id}, T}, nodes=Nodes}, Conf) ->
     end.
 	    
 	    
-
+%%
+%% Build a decision tree node from "Features" and "Examples"
+%%  if |Feature| == 0 and |Examples| == 0: make_error_node  
+%%  if |Feature| == 0: make_leaf majority(Examples)
+%%  if |Classes| == 1: make_leaf Class
+%%  else:
+%%     if Prune(Examples, Depth): make_leaf majority(Examples)
+%%     Split = select_split(Features, Examples)
+%%     for S in Split: build_node(Features, S)
+%%
 build_decision_node([], [], _) ->
     make_leaf([], error);
 build_decision_node([], Examples, _) ->
@@ -117,10 +128,11 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 	    end	   
     end.
 
+%%
+%% Build the branches for a candidate split
+%%
 build_decision_branches(Features, #rr_candidate{split=Split}, Conf) ->
     build_decision_branches(Features, Split, Conf, []).
-
-
 
 build_decision_branches(_, [], _, Acc) ->
     Acc;
@@ -128,10 +140,15 @@ build_decision_branches(Features, [{Value, Split}|Rest], Conf, Acc) ->
     Node = build_decision_node(Features, Split, Conf),
     build_decision_branches(Features, Rest, Conf, [{Value, Node}|Acc]).
 
-
+%%
+%% Create a decision node
+%%
 make_node(#rr_candidate{feature=Feature, score=Score}, Nodes) ->
     #rr_node{score=Score, feature=Feature, nodes=Nodes}.
 
+%%
+%% Create a leaf node which predicts Class
+%%
 make_leaf([], Class) ->
     #rr_leaf{score=0, distribution={0, 0}, class=Class};
 make_leaf(Covered, {Class, C}) ->
@@ -139,7 +156,7 @@ make_leaf(Covered, {Class, C}) ->
     #rr_leaf{score=laplace(C, N), distribution={C, N-C}, class=Class}.
 
 %%
-%%
+%% Calculates the laplace estimate for C and N
 %%
 laplace(C, N) ->
     (C+1)/(C+N+2).
@@ -175,9 +192,9 @@ best_evaluate_split(Features, Examples, Total, Conf) ->
 random_evaluator(Alpha) ->
     fun (Features, Examples, Total, Conf) ->
 	    Random = random:uniform(),
-	    if Random > 1 - Alpha ->
+	    if Random >= 1 - Alpha ->
 		    random_evaluate_split(Features, Examples, Total, Conf);
-	       Random < Alpha ->
+	       Random =< Alpha ->
 		    best_evaluate_split(Features, Examples, Total, Conf);
 	       true ->
 		    best_subset_evaluate_split(Features, Examples, Total, Conf)
@@ -221,6 +238,31 @@ entropy(Counts, Total) ->
 			     Fraction = Class / Total,
 			     Count + Fraction * math:log(Fraction)%/math:log(2)
 		     end, 0, Counts).
+
+random_score(ValueSplits, Total) ->
+    Random = random:uniform(),
+    if Random >= 0.5 ->
+	    info(ValueSplits, Total);
+       true ->
+	    gini(ValueSplits, Total)
+    end.
+	    
+       
+    
+
+%%
+%% Calculate the gini impurity (except 1- to minimize instead of
+%% maximize)
+%%
+gini(ValueSplits, Total) ->
+    info(ValueSplits, Total, 0).
+
+gini([], _, Acc) -> Acc;
+gini([{_Value, Splits}|Rest], Total, Acc) -> 
+    Fi = rr_example:count(Splits) / Total,
+    gini(Rest, Total, math:pow(Fi)).
+	
+
 
 %%
 %% Caculate the information for splitting into "ValueSplits"
