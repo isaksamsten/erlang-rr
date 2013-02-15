@@ -298,53 +298,12 @@ test(File, Classifier) ->
     Csv = csv:reader(File),
     {Features, Examples} = rr_example:load(Csv, 4),
     {Train, Test} = rr_example:split_dataset(Examples, 0.66),
-%    io:format("~p", [generate_model(Features, Examples)]).
-    ets:new(models, [public, named_table]),
-    ets:new(predictions, [public, named_table]),
+    io:format("~p", [generate_model(Features, Examples)]).
+    %% ets:new(models, [public, named_table]),
+    %% ets:new(predictions, [public, named_table]),
 
-    spawn_ruleset_classifiers(Classifier, 4, Features, Train, lists:sum([C || {_, C, _} <- Examples])),
-    Dict = evaluate_model(Classifier, Test),
-    io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
+    %% spawn_ruleset_classifiers(Classifier, 4, Features, Train, lists:sum([C || {_, C, _} <- Examples])),
+    %% Dict = evaluate_model(Classifier, Test),
+    %% io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
 
-spawn_ruleset_classifiers(Sets, Cores, Features, Examples, MaxId) ->
-    Self = self(),
-    [spawn_link(fun() ->
-			<<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-			random:seed({A,B,C}),
-			ruleset_generator_process(Self, MaxId)
-		end) || _ <- lists:seq(1, Cores)],
-    ruleset_classification_coordinator(Self, Sets, Cores, Features, Examples).
 
-ruleset_classification_coordinator(_, 0, 0, _, _) ->
-    done;
-ruleset_classification_coordinator(Self, 0, Cores, Features, Examples) ->
-    receive
-	{more, Self, Pid} ->
-	    Pid ! {exit, Self},
-	    ruleset_classification_coordinator(Self, 0, Cores, Features, Examples);
-	done ->
-	    ruleset_classification_coordinator(Self, 0, Cores - 1, Features, Examples)
-    end;	    
-ruleset_classification_coordinator(Self, Sets, Cores, Features, Examples) ->
-    receive 
-	{more, Self, Pid} ->
-	    Pid ! {batch, Sets, Features, Examples},
-	    ruleset_classification_coordinator(Self, Sets - 1, Cores, Features, Examples)
-    end.
-
-ruleset_generator_process(Parent, MaxId) ->
-    Parent ! {more, Parent, self()},
-    receive
-	{batch, Id, Features, Examples} ->
-	    Log = (length(Features) div 2) + 1, %round((math:log(length(Features)) / math:log(2))) + 1,
-	    Features0 = rr_example:random_features(Features, Log),
-	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples, MaxId),
-	    Model = generate_model(Features0, Bag),
-%	    io:format("~p", [Model]),
-	    Dict = evaluate_model2(Model, OutBag),
-	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
-	    ets:insert(models, {Id, Model}),
-	    ruleset_generator_process(Parent, MaxId);
-	{exit, Parent} ->
-	    Parent ! done
-    end.

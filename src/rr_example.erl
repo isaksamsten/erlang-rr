@@ -160,11 +160,7 @@ parse_feature_declaration([Feature|Features], [Type|Types], Id, Acc) ->
     ets:insert(features, {Id, Feature}),
     parse_feature_declaration(Features, Types, Id + 1, [{Type, Id}|Acc]).
 
-
-split(Feature, Examples) ->
-    split(Feature, Examples, dict:new()).
-
-split(_, [], Acc) ->
+format_split_distribution(Acc) ->
     lists:reverse(lists:foldl(fun({Value, Examples}, Result) ->
 				      case dict:size(Examples) of
 					  0 ->
@@ -172,7 +168,13 @@ split(_, [], Acc) ->
 					  _ ->
 					      [{Value, format_class_distribution(Examples)}|Result]
 				      end
-			      end, [], dict:to_list(Acc)));
+			      end, [], dict:to_list(Acc))).
+
+split(Feature, Examples) ->
+    split(Feature, Examples, dict:new()).
+
+split(_, [], Acc) ->
+    format_split_distribution(Acc);
 split({categoric, _} = Feature, [{Class, _, ExampleIds}|Examples], Acc) ->
     split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc));
 split({numeric, FeatureId} = Feature, Examples, Acc) ->
@@ -192,20 +194,34 @@ split_class_distribution({categoric, FeatureId} = Feature, [ExampleId|Examples],
 						end, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict));
 split_class_distribution({{numeric, FeatureId}, Threshold} = Feature, [ExampleId|Examples], Class, Dict) ->
     Value = feature(ExampleId, FeatureId),
-    split_class_distribution(Feature, Examples, Class, Dict).
+    UpdateFun = fun(Classes) ->
+			dict:update(Class, fun ({Count, Ids}) ->
+						   {Count + 1, [ExampleId|Ids]}
+					   end, {1, [ExampleId]}, Classes)
+		end,
+    Dict0 = case Value >= Threshold of
+		true ->
+		    dict:update('>=', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict);
+		false ->
+		    dict:update('<', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict)
+	    end,
+    split_class_distribution(Feature, Examples, Class, Dict0).
 
 %%
 %% Split a numeric feature at threshold
 %%
 split_numeric_feature(_, Threshold, [], Acc) ->
-    {Threshold, Acc};
+    {Threshold, format_split_distribution(Acc)};
 split_numeric_feature(Feature, Threshold, [{Class, _, ExampleIds}|Examples], Acc) ->
     split_numeric_feature(Feature, Threshold, Examples,
 			  split_class_distribution({Feature, Threshold}, ExampleIds, Class, Acc)).
 
 
-random_numeric_split(_, _) ->
-    5.
+random_numeric_split(FeatureId, Examples) ->
+    {Ex1, Ex2} = sample_example_pair(Examples),
+    Value1 = feature(Ex1, FeatureId),
+    Value2 = feature(Ex2, FeatureId),
+    (Value1 - Value2) / 2.
 %%
 %% Take class at id=N and return the the tuple {Class, RestOfList}
 %%
@@ -329,7 +345,6 @@ generate_featurestrap(Features, Subset) ->
 	true -> generate_featurestrap(Subset, Length, sets:new());
 	false -> lists:seq(1, Length) 
     end.
-
 generate_featurestrap(N, Length, Set) ->
     Random = random:uniform(Length),
     Set0 = sets:add_element(Random, Set),
@@ -374,7 +389,6 @@ bootstrap_replicate(Examples, MaxId) ->
     select_bootstrap_examples(Examples, Bootstrap, {[], []}).
     
 generate_bootstrap(Examples, MaxId) ->
-   % io:format("ExampleCount: ~p\n", [MaxId]),
     lists:foldl(fun({Class, Length, _}, Bootstraps) ->
 			generate_bootstrap_for_class(Length, MaxId, Bootstraps)
 		end, dict:new(), Examples).
@@ -412,3 +426,32 @@ duplicate_example(_, 0, Acc) ->
 duplicate_example(ExId, N, Acc) ->
     duplicate_example(ExId, N - 1, [ExId|Acc]).
 
+%%
+%% Sample a random pair of examples
+%%
+sample_example_pair([{C1, _, ExId1}, {C2, _, ExId2}]) ->
+    sample_example_pair(ExId1, ExId2);
+sample_example_pair(Examples) ->
+    sample_example_pair(sample_class_pair(Examples)).
+
+sample_example_pair(ExId1, ExId2) ->
+    {lists:nth(random:uniform(length(ExId1)), ExId1),
+     lists:nth(random:uniform(length(ExId2)), ExId2)}.
+
+%%
+%% Sample a random class pair
+%%
+sample_class_pair(Examples) ->
+    NoEx = length(Examples),
+    Random = random:uniform(NoEx),
+    sample_class_pair(Examples, Random, NoEx, [lists:nth(Random, Examples)]).
+
+sample_class_pair(Examples, Random, NoEx, Acc) ->
+    case random:uniform(NoEx) of
+	Random ->
+	    sample_class_pair(Examples, Random, NoEx, Acc);
+	Other ->
+	    [lists:nth(Other, Examples)|Acc]
+    end.
+		     
+	    

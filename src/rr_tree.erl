@@ -8,25 +8,98 @@
 -module(rr_tree).
 -compile(export_all).
 
--include("rr.hrl").
 -include("rr_tree.hrl").
 
 test(File) ->
     Csv = csv:reader(File),
     {Features, Examples} = rr_example:load(Csv, 4),
-    generate_model(Features, Examples).
+    {Train, Test} = rr_example:split_dataset(Examples, 0.66),
+    Conf = #rr_conf{
+	      prune = log_stop(20),
+	      selection = fun best_feature_selection/1,
+	      depth=0
+	     },
 
+    Model = rr_ensamble:generate_model(Features, Train, Conf, rr_example:count(Examples)),
+    io:format("~p ~n", [Model]),
+
+    Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
+    io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]).
+
+
+
+best_feature_selection([Candidate]) ->
+    Candidate;
+best_feature_selection(Candidates) ->
+    hd(sort_candidates(Candidates)).
+   
+random_feature_selection([Candidate]) ->
+    Candidate;
+random_feature_selection(Candidates) ->
+    Index = random:uniform(length(Candidates)),
+    lists:nth(Index, Candidates).
 
 log_stop(Initial) ->
-    Initial0 = trunc(math:log(Initial)/math:log(2)) + 1,
-    io:format("Initial: ~p ~n", [Initial0]),
     fun (Examples) ->
-	    Examples < Initial0
+	    Examples > Initial
     end.
 
-generate_model(Features, Examples) ->
-    build_decision_tree(Features, Examples, 
-			#rr_conf{stop=log_stop(rr_example:count(Examples))}).
+generate_model(Features, Examples, Conf) ->
+    random:seed(now()),
+    build_decision_tree(Features, Examples, Conf).
+    
+
+evaluate_model(Model, Examples, Conf) ->
+    lists:foldl(fun({Class, _, ExampleIds}, Acc) ->
+			predict_all(Class, ExampleIds, Model, Conf, Acc)
+		end, dict:new(), Examples).
+
+predict_all(_, [], _, _, Dict) ->
+    Dict;
+predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
+    Prediction = make_prediction(Model, Example, Conf),
+    predict_all(Actual, Rest, Model, Conf,
+		dict:update(Actual, fun (Predictions) ->
+					    [Prediction|Predictions]
+				    end, [Prediction], Dict)).
+
+make_prediction(Model, Example, Conf) ->
+    Attributes = rr_example:example(Example),
+    predict(Attributes, Model, Conf).
+
+predict(_, #rr_leaf{class=Class, purity=P}, _) ->
+    {Class, P};
+predict(Attributes, #rr_node{feature={categoric, Id}, popularity=Other, nodes=Nodes}, Conf) ->
+    Value = rr_example:feature(Attributes, Id),
+    case lists:keyfind(Value, 1, Nodes) of
+	{Value, Node} ->
+	    predict(Attributes, Node, Conf);
+	false ->
+	    {Popular, _} = hd(Other),
+	    predict(Attributes, case lists:keyfind(Popular, 1, Nodes) of
+				    {Popular, Node} -> 
+					Node;
+				    _ -> throw({error})
+				end, Conf)
+    end;
+predict(Attributes, #rr_node{feature={{numeric, Id}, T}, nodes=Nodes}, Conf) ->
+    Value = rr_example:feature(Attributes, Id),
+    Gt = lists:keyfind('>=', 1, Nodes),
+    Lt = lists:keyfind('<', 1, Nodes),
+    case Value >= T of
+	true ->
+	    predict(Attributes, case Gt of
+				    false -> element(2, Lt);
+				    {_, Node} -> Node
+				end, Conf);
+	false ->
+	    predict(Attributes, case Lt of
+				    false -> element(2, Gt);
+				    {_, Node} -> Node
+				end, Conf)
+    end.
+	    
+		    
 
 build_decision_tree([], [], _) ->
     make_leaf([], error);
@@ -34,20 +107,51 @@ build_decision_tree([], Examples, _) ->
     make_leaf(Examples, rr_example:majority(Examples));
 build_decision_tree(_, [{Class, Count, _ExampleIds}] = Examples, _) ->
     make_leaf(Examples, {Class, Count});
-build_decision_tree(Features, Examples, #rr_conf{stop=Stop} = Conf) ->
+build_decision_tree(Features, Examples, #rr_conf{prune=Prune, depth=Depth} = Conf) ->
     NoExamples = rr_example:count(Examples),
-    case Stop(NoExamples) of
+    case Prune(Depth) of
 	true ->
+	    io:format("~p ~n", [Examples]),
 	    make_leaf(Examples, rr_example:majority(Examples));
 	false ->
-	    Cand = hd(evaluate_split(Features, Examples, NoExamples, [])),
-	    Features0 = Features -- [Cand#rr_candidate.feature],
-	    Nodes = [{Value, build_decision_tree(Features0, Split, Conf)} || {Value, Split} <- Cand#rr_candidate.split],
-	    make_node(Cand, Nodes)
+	    Log = round((math:log(length(Features)) / math:log(2))) + 1,
+	    case rr_example:random_features(Features, Log) of
+		[] ->
+		    make_leaf(Examples, rr_example:majority(Examples));
+		[_] ->
+		    make_leaf(Examples, rr_example:majority(Examples));
+		Features0  -> 
+		    Candidate = evaluate_split(Features0, Examples, NoExamples, Conf),
+		    Nodes = build_decision_branches(Features, Candidate, Conf#rr_conf{depth=Depth + 1}),
+		    make_node(Candidate, Nodes)
+	    end	   
     end.
 
-make_node(#rr_candidate{feature=Feature, score=Score}, Nodes) ->
-    #rr_node{score=Score, feature=Feature, nodes=Nodes}.
+build_decision_branches(Features, #rr_candidate{feature={categoric, _} = Feature, split=Split}, Conf) ->
+    %Features0 = Features -- [Feature],
+    build_decision_branches(Features, Split, Conf, []);
+build_decision_branches(Features, #rr_candidate{feature={{numeric, _} = Feature, _}, split=Split}, Conf) ->
+    %Features0 = if length(Split) == 1 ->
+%			Features -- [Feature];
+%		   true ->
+%			Features
+%		end,
+    build_decision_branches(Features, Split, Conf, []).
+
+
+
+build_decision_branches(_, [], _, Acc) ->
+    Acc;
+build_decision_branches(Features, [{Value, Split}|Rest], Conf, Acc) ->
+    Node = build_decision_tree(Features, Split, Conf),
+    build_decision_branches(Features, Rest, Conf, [{Value, Node}|Acc]).
+
+
+make_node(#rr_candidate{feature=Feature, score=Score, split=Splits}, Nodes) ->
+    Popularity = lists:sort(fun(A, B) ->
+				    A > B
+			    end, [{Value, rr_example:count(Split)} || {Value, Split} <- Splits]),
+    #rr_node{score=Score, feature=Feature, popularity=Popularity, nodes=Nodes}.
 
 make_leaf([], Class) ->
     #rr_leaf{purity=0, correct=0, incorrect=0, class=Class};
@@ -55,25 +159,28 @@ make_leaf(Covered, {Class, C}) ->
     N = rr_example:count(Covered),
     #rr_leaf{purity=C/N, correct=C, incorrect=N-C, class=Class}.
 
-evaluate_split([], _, _, Acc) ->
+
+evaluate_split(Features, Examples, Total, Conf) ->
+    evaluate_split(Features, Examples, Total, Conf, []).
+evaluate_split([], _, _, #rr_conf{selection=Selection}, Acc) ->
+    Selection(Acc);
+evaluate_split([F|Features], Examples, Total, Conf, Acc) ->
+    Cand = case rr_example:split(F, Examples) of
+	       {Threshold, Split} ->
+		   #rr_candidate{feature = {F, Threshold}, 
+				 score = gain_ratio(Split, Total), 
+				 split = Split};
+	       Split ->
+		   #rr_candidate{feature = F, 
+				 score = gain_ratio(Split, Total), 
+				 split = Split}
+	   end,
+    evaluate_split(Features, Examples, Total, Conf, [Cand|Acc]).
+
+sort_candidates(Acc) ->
     lists:sort(fun(A, B) ->
 		       A#rr_candidate.score < B#rr_candidate.score
-	       end, Acc);
-evaluate_split([F|Features], Examples, Total, Acc) ->
-    Split = rr_example:split(F, Examples),
-    Info = info(Split, Total),
-    GainRatio = case split_info(Split, Total) of
-		    0.0 ->
-			Info;
-		    SplitInfo ->
-			Info / SplitInfo
-		end,
-    evaluate_split(Features, Examples, Total,
-		   [#rr_candidate{feature = F, 
-				  score = GainRatio, 
-				  split = Split}|Acc]).
-
-
+	       end, Acc).
 
 entropy(Examples) ->
     Counts = [C || {_, C, _} <- Examples],
@@ -86,6 +193,15 @@ entropy(Counts, Total) ->
 			     Fraction = Class / Total,
 			     Count + Fraction * math:log(Fraction)/math:log(2)
 		     end, 0, Counts).
+
+gain_ratio(Split, Total) ->
+    Info = info(Split, Total),
+    case split_info(Split, Total) of
+	0.0 ->
+	    Info;
+	SplitInfo ->
+	    Info / SplitInfo
+    end.
 
 info(ValueSplits, Total) ->
     info(ValueSplits, Total, 0).
