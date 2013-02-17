@@ -53,7 +53,7 @@ majority(Acc) ->
 
 spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf, MaxId) ->
     Self = self(),
-    Coordinator = spawn_link(fun() -> build_cordinator(Self, Sets, Cores, Features, Examples) end),
+    Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores, Features, Examples) end),
     [spawn_link(fun() -> base_build_process(Coordinator, Base, Conf, MaxId) end) 
 		 || _ <- lists:seq(1, Cores)],
     Coordinator.
@@ -91,20 +91,20 @@ transition_coordinator(Parent, Coordinator, Cores, Acc) ->
 	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid|Acc])
     end.
 
-build_cordinator(Parent, Sets, Cores, Features, Examples) ->
-    build_cordinator(Parent, self(), 1, Sets, Cores, Features, Examples).
+build_coordinator(Parent, Sets, Cores, Features, Examples) ->
+    build_coordinator(Parent, self(), 1, Sets, Cores, Features, Examples).
 
-build_cordinator(Parent, Coordinator, Counter, Sets, Cores, _Features, _Examples) when Sets < Counter->
+build_coordinator(Parent, Coordinator, Counter, Sets, Cores, _Features, _Examples) when Sets < Counter->
     receive
 	{build, Coordinator, Pid} ->
 	    Pid ! {completed, Coordinator},
 	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid])
     end;
-build_cordinator(Parent, Coordinator, Counter, Sets, Cores, Features, Examples) ->
+build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Features, Examples) ->
     receive 
 	{build, Coordinator, Pid} ->
 	    Pid ! {build, Counter, Features, Examples},
-	    build_cordinator(Parent, Coordinator, Counter + 1, Sets, Cores, Features, Examples)
+	    build_coordinator(Parent, Coordinator, Counter + 1, Sets, Cores, Features, Examples)
     end.
 
 base_build_process(Coordinator, Base, Conf, MaxId) ->

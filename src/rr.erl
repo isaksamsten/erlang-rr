@@ -51,7 +51,7 @@ main(Args) ->
 	      cores = Cores,
 	      score = fun rr_tree:random_score/2,
 	      prune = rr_tree:example_depth_stop(2, 1000),
-	      evaluate = rr_tree:random_evaluator(0.5), %fun best_subset_evaluate_split/4, 
+	      evaluate = rr_tree:random_evaluator(0.1), %fun best_subset_evaluate_split/4, 
 	      base_learner = {Classifiers, rr_tree},
 	      max_id = rr_example:count(Examples)},
     Model = rr_ensamble:generate_model(Features, Train, Conf),
