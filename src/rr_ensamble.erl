@@ -14,10 +14,9 @@ generate_model(Features, Examples, #rr_conf{
 				      base_learner = {Classifiers, Base},
 				      max_id = MaxId,
 				      cores = Cores} = Conf) ->
-    ets:new(models, [public, named_table]),
     ets:new(predictions, [public, named_table]),
-    spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf, MaxId),
-    {lists:seq(1, Classifiers), Base}.
+    spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf, MaxId).
+    
     
 evaluate_model(Models, Examples, Conf) ->
     lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
@@ -27,17 +26,19 @@ evaluate_model(Models, Examples, Conf) ->
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
-    Prediction = predict_majority(Model, rr_example:example(Example), Conf, []),
+    Prediction = predict_majority(Model, Example),
     predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
 								 [Prediction|Predictions]
 							 end, [Prediction], Dict)).
 
-predict_majority({[], _}, _, _, Acc) ->
-    {{C, N}, _Dict} = majority(Acc),
-    {C, N};
-predict_majority({[N|Rest], Base}, Attr, Conf, Acc) ->
-    [{_, Model}|_] = ets:lookup(models, N),
-    predict_majority({Rest, Base}, Attr, Conf, [Base:predict(Attr, Model, Conf)|Acc]).
+predict_majority(Model, Example) ->
+%    io:format("In predict_majority\n"),
+    Model ! {evaluate, self(), Example},
+    receive
+	{prediction, Model, Predictions} ->
+	    {P, _D} = majority(Predictions),
+	    P
+    end.
 
 majority(Acc) ->
     Dict = lists:foldl(fun ({Item, _Prob}, Dict) ->
@@ -50,45 +51,101 @@ majority(Acc) ->
 		      end
 	      end, {undefined, 0}, Dict), Dict}.
 
-
-
 spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf, MaxId) ->
     Self = self(),
-    [spawn_link(fun() ->
-			<<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-			random:seed({A,B,C}),
-			base_generator_process(Self, Base, Conf, MaxId)
-		end) || _ <- lists:seq(1, Cores)],
-    model_coordinator(Self, Sets, Cores, Features, Examples).
+    Coordinator = spawn_link(fun() -> build_cordinator(Self, Sets, Cores, Features, Examples) end),
+    [spawn_link(fun() -> base_build_process(Coordinator, Base, Conf, MaxId) end) 
+		 || _ <- lists:seq(1, Cores)],
+    Coordinator.
+    
 
-model_coordinator(_, 0, 0, _, _) ->
-    done;
-model_coordinator(Self, 0, Cores, Features, Examples) ->
+collect_predictions([], _, Acc) ->
+    Acc;    
+collect_predictions(Processes, Coordinator, Acc) ->
     receive
-	{more, Self, Pid} ->
-	    Pid ! {exit, Self},
-	    model_coordinator(Self, 0, Cores, Features, Examples);
-	done ->
-	    model_coordinator(Self, 0, Cores - 1, Features, Examples)
-    end;	    
-model_coordinator(Self, Sets, Cores, Features, Examples) ->
-    receive 
-	{more, Self, Pid} ->
-	    Pid ! {batch, Sets, Features, Examples},
-	    model_coordinator(Self, Sets - 1, Cores, Features, Examples)
+	{prediction, Coordinator, Pid, Predictions} ->
+	    collect_predictions(Processes -- [Pid], Coordinator, Acc ++ Predictions)
     end.
 
-base_generator_process(Parent, Base, Conf, MaxId) ->
-    Parent ! {more, Parent, self()},
+submit_prediction(Processes, Coordinator, ExId) ->
+    lists:foreach(fun(Process) -> Process ! {evaluate, Coordinator, ExId} end, Processes),
+    collect_predictions(Processes, Coordinator, []).
+			  
+
+evaluation_coordinator(Parent, Coordinator, Processes) ->
+    receive 
+	{evaluate, Parent, ExId} ->
+	    Prediction = submit_prediction(Processes, Coordinator, ExId),
+	    Parent ! {prediction, Coordinator, Prediction},
+	    evaluation_coordinator(Parent, Coordinator, Processes);
+	{exit, Parent} ->
+	    done
+    end.
+
+transition_coordinator(Parent, Coordinator, 0, Acc) ->
+    evaluation_coordinator(Parent, Coordinator, Acc);
+transition_coordinator(Parent, Coordinator, Cores, Acc) ->
     receive
-	{batch, Id, Features, Examples} ->
+	{build, Coordinator, Pid} ->
+	    Pid ! {completed, Coordinator},
+	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid|Acc])
+    end.
+
+build_cordinator(Parent, Sets, Cores, Features, Examples) ->
+    build_cordinator(Parent, self(), 1, Sets, Cores, Features, Examples).
+
+build_cordinator(Parent, Coordinator, Counter, Sets, Cores, _Features, _Examples) when Sets < Counter->
+    receive
+	{build, Coordinator, Pid} ->
+	    Pid ! {completed, Coordinator},
+	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid])
+    end;
+build_cordinator(Parent, Coordinator, Counter, Sets, Cores, Features, Examples) ->
+    receive 
+	{build, Coordinator, Pid} ->
+	    Pid ! {build, Counter, Features, Examples},
+	    build_cordinator(Parent, Coordinator, Counter + 1, Sets, Cores, Features, Examples)
+    end.
+
+base_build_process(Coordinator, Base, Conf, MaxId) ->
+    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
+    random:seed({A,B,C}),
+    base_build_process(Coordinator, Base, Conf, MaxId, []).
+
+base_build_process(Coordinator, Base, Conf, MaxId, Acc) ->
+    Coordinator ! {build, Coordinator, self()},
+    receive
+	{build, Id, Features, Examples} ->
 	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples, MaxId),
 	    Model = Base:generate_model(Features, Bag, Conf),
 	    Dict = Base:evaluate_model(Model, OutBag, Conf),
 
 	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
-	    ets:insert(models, {Id, Model}),
-	    base_generator_process(Parent, Base, Conf, MaxId);
-	{exit, Parent} ->
-	    Parent ! done
+	    base_build_process(Coordinator, Base, Conf, MaxId, [Model|Acc]);
+	{completed, Coordinator} ->
+	    base_evaluator_process(Coordinatior, Base, Conf, Acc)
     end.
+
+base_evaluator_process(Coordinator, Base, Conf, Models)->
+    receive
+	{evaluate, Coordinator, ExId} ->
+	    Coordinator ! {prediction, Coordinator, self(), make_prediction(Models, Base, ExId, Conf)},
+	    base_evaluator_process(Coordinator, Base, Conf, Models);
+	{exit, Parent} ->
+	    done
+    end.
+
+%%
+%% Use models built using "Base" to predict the class of "ExId"
+%%
+make_prediction(Models, Base, ExId, Conf) ->
+    make_prediction(Models, Base, ExId, Conf, []).
+
+make_prediction([], _Base, _ExId, _Conf, Acc) ->
+    Acc;
+make_prediction([Model|Models], Base, ExId, Conf, Acc) ->
+    make_prediction(Models, Base, ExId, Conf,
+		    [Base:predict(rr_example:example(ExId), Model, Conf)|Acc]).
+
+
+

@@ -32,19 +32,21 @@ evaluate_model(Model, Examples, Conf) ->
 			predict_all(Class, ExampleIds, Model, Conf, Acc)
 		end, dict:new(), Examples).
 
+%%
+%% Predict all "Examples" with the actual class "Actual"
+%%
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
-    Prediction = make_prediction(Model, Example, Conf),
+    Prediction = predict(rr_example:example(Example), Model, Conf),
     predict_all(Actual, Rest, Model, Conf,
 		dict:update(Actual, fun (Predictions) ->
 					    [Prediction|Predictions]
 				    end, [Prediction], Dict)).
 
-make_prediction(Model, Example, Conf) ->
-    Attributes = rr_example:example(Example),
-    predict(Attributes, Model, Conf).
-
+%%
+%% Predict what the class for "Attributes"
+%%
 predict(_, #rr_leaf{class=Class, score=Score}, _) ->
     {Class, Score};
 predict(Attributes, #rr_node{feature={{categoric, Id}, SplitValue}, nodes=Nodes}, Conf) ->
