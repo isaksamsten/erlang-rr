@@ -123,7 +123,7 @@ base_build_process(Coordinator, Base, Conf, MaxId, Acc) ->
 	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
 	    base_build_process(Coordinator, Base, Conf, MaxId, [Model|Acc]);
 	{completed, Coordinator} ->
-	    base_evaluator_process(Coordinatior, Base, Conf, Acc)
+	    base_evaluator_process(Coordinator, Base, Conf, Acc)
     end.
 
 base_evaluator_process(Coordinator, Base, Conf, Models)->
@@ -131,7 +131,7 @@ base_evaluator_process(Coordinator, Base, Conf, Models)->
 	{evaluate, Coordinator, ExId} ->
 	    Coordinator ! {prediction, Coordinator, self(), make_prediction(Models, Base, ExId, Conf)},
 	    base_evaluator_process(Coordinator, Base, Conf, Models);
-	{exit, Parent} ->
+	{exit, Coordinator} ->
 	    done
     end.
 
