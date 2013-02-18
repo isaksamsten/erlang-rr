@@ -27,7 +27,7 @@ generate_model(Features, Examples, #rr_conf{
 evaluate_model(Models, Examples, Conf) ->
     lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
 			predict_all(Class, ExampleIds, Models, Conf, Acc)
-		end, dict:new(), Examples).
+		end, dict:new(), Examples). %% TODO: Model ! {exit, self()}
 
 predict_all(_, [], _, _, Dict) ->
     Dict;
@@ -85,7 +85,7 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
 	    Parent ! {prediction, Coordinator, Prediction},
 	    evaluation_coordinator(Parent, Coordinator, Processes);
 	{exit, Parent} ->
-	    done
+	    done %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
     end.
 
 transition_coordinator(Parent, Coordinator, 0, Acc) ->
