@@ -46,17 +46,12 @@ main(Args) ->
 
     Csv = csv:reader(InputFile),
     {Features, Examples} = rr_example:load(Csv, Cores),
-    %% {_, Id} = hd(Features),
-    %% Threshold = rr_example:deterministic_numeric_split(Id, Examples, fun rr_tree:info/2),
-    %% io:format("Found threshold to be: ~p~n", [Threshold]),
-
-    %% halt(),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
     Conf = #rr_conf{
 	      cores = Cores,
-	      score = fun rr_tree:info/2,
-	      prune = rr_tree:example_depth_stop(2, 1000),
-	      evaluate = {random, 0},
+	      score = fun rr_tree:gini/2,
+	      prune = rr_tree:example_depth_stop(0, inf),
+	      evaluate = {random, 0.3},
 	      split = rr_tree:random_splitter(0.1),
 	      base_learner = {Classifiers, rr_tree},
 	      max_id = rr_example:count(Examples)},

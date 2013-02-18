@@ -154,7 +154,7 @@ laplace(C, N) ->
 best_subset_evaluate_split(Features, Examples, Total, Conf) ->
     Log = round((math:log(length(Features)) / math:log(2))) + 1,
     Features0 = rr_example:random_features(Features, Log),
-    evaluate_split(Features0, Examples, Total, Conf, []).
+    evaluate_split(Features0, Examples, Total, Conf).
 
 
 %%
@@ -162,13 +162,13 @@ best_subset_evaluate_split(Features, Examples, Total, Conf) ->
 %%
 random_evaluate_split(Features, Examples, Total, Conf) ->
     Feature = lists:nth(random:uniform(length(Features)), Features),
-    evaluate_split([Feature], Examples, Total, Conf, []).
+    evaluate_split([Feature], Examples, Total, Conf).
 
 %%
 %% Evaluate all features to find the best split point
 %%
 best_evaluate_split(Features, Examples, Total, Conf) ->
-    evaluate_split(Features, Examples, Total, Conf, []).
+    evaluate_split(Features, Examples, Total, Conf).
 
 
 %%
@@ -185,14 +185,25 @@ random_evaluator(Alpha) ->
 	    end
     end.
 
+%%
+%% Randomly split Example set on Feature by randomly selecting a
+%% threshold (sampled from two examples of different class)
+%%
 random_split(Feature, Examples, _) ->
     rr_example:split(Feature, Examples).
 
+%%
+%% Find the best numeric split point deterministically
+%%
 deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score}) ->
     rr_example:split({Feature, Score}, Examples);
 deterministic_split(Feature, Examples, _) ->
     rr_example:split(Feature, Examples).
 
+%%
+%% If random:uniform() =< "Alpha" select the best split
+%% deterministically, otherwise select randomly
+%%
 random_splitter(Alpha) ->
     fun (Feature, Examples, Conf) ->
 	    Random = random:uniform(),
@@ -202,21 +213,29 @@ random_splitter(Alpha) ->
 		    random_split(Feature, Examples, Conf)
 	    end
     end.
-					 
+
+evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->	
+    {_, T, ExSplit} = Split(F, Examples, Conf),
+    evaluate_split(Features, Examples, Total, Conf, #rr_candidate{feature={F, T},
+								  score=Score(ExSplit, Total),
+								  split=ExSplit}).
 
 %%
-%% Evaluate a list of 
+%% Evaluate a list of candidates
 %%
 evaluate_split([], _, _, _, Acc) ->
-    hd(sort_candidates(Acc)); % NOTE: improve!
-evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, Acc) ->
+    Acc;
+evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, #rr_candidate{score=OldScore} = OldCand) ->
     Cand = case Split(F, Examples, Conf) of
 	       {_, Threshold, ExSplit} ->
 		   #rr_candidate{feature = {F, Threshold}, 
 				 score = Score(ExSplit, Total), 
 				 split = ExSplit}		       
 	   end,
-    evaluate_split(Features, Examples, Total, Conf, [Cand|Acc]).
+    evaluate_split(Features, Examples, Total, Conf, case Cand#rr_candidate.score < OldScore of
+							true -> Cand;
+							false -> OldCand
+						    end).
 
 %%
 %% Sort a list of candidates
