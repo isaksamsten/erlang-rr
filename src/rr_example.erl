@@ -180,24 +180,34 @@ random_binary_split({numeric, _} = Feature, Examples) ->
 
     
 
-
+%%
+%% Split "Examples" into two disjoint subsets according to "Feature".
+%% If Feature == categoric ->
+%%   select_split_value, -> == {Examples == split_value}, /= {Examples /= split_value}
+%% If Feature == numeric _>
+%%   select_avg_threshold -> >= {Examples >= T}, < {Examples < T}
+%% Else
+%%   fail
 split(Feature, Examples) ->
     split(Feature, Examples, dict:new()).
 
 split(_, [], Acc) ->
     format_split_distribution(Acc);
 split({categoric, FeatureId} = Feature, Examples, Acc) ->
-%    io:format("Before ~p: ~w ~n", [Feature, Examples]),
     Value = random_categoric_split(FeatureId, Examples),
-    Dict = split_binary_categoric(Feature, Value, Examples, Acc),
- %   io:format("Splitted ~p: ~w ~n", [Feature, Dict]),
-    Dict;
-    %split(Feature, Examples, split_class_distribution(Feature, ExampleIds, Class, Acc));
+    split_binary_categoric(Feature, Value, Examples, Acc);
 split({numeric, FeatureId} = Feature, Examples, Acc) ->
     Threshold = random_numeric_split(FeatureId, Examples),
+    split_numeric_feature(Feature, Threshold, Examples, Acc);
+split({{numeric, FeatureId} = Feature, Gain}, Examples, Acc) ->
+    Threshold = deterministic_numeric_split(FeatureId, Examples, Gain),
     split_numeric_feature(Feature, Threshold, Examples, Acc).
+
 	
 
+%%
+%% Split the class distribution
+%%
 split_class_distribution(_, [], _, Dict) ->
     Dict;
 split_class_distribution({categoric, FeatureId} = Feature, [ExampleId|Examples], Class, Dict) ->
@@ -253,21 +263,75 @@ split_binary_categoric(Feature, Value, [{Class, _, ExampleIds}|Examples], Acc) -
     split_binary_categoric(Feature, Value, Examples,
 			   split_class_distribution({Feature, Value}, ExampleIds, Class, Acc)).
 
+deterministic_numeric_split(FeatureId, Examples, Gain) ->
+    [{Value, Class}|ClassIds] = lists:keysort(1, lists:foldl(
+					  fun ({Class, _, ExIds}, NewIds) ->
+						  lists:foldl(fun(ExId, Acc) ->
+								      [{feature(ExId, FeatureId), Class}|Acc]
+							      end, NewIds, ExIds)
+					  end, [], Examples)),
+    
+    Gt = lists:map(fun({C, Num, _}) -> {C, Num, []} end, Examples),
+    Lt = lists:map(fun({C, _, _}) -> {C, 0, []} end, Examples),
+    Dist = [{'<', Lt}, {'>=', Gt}],
+    First = {Value, Class},
+    Total = rr_example:count(Examples),
+    deterministic_numeric_split(ClassIds, First, FeatureId, Gain, Total, {Value/2, inf}, Dist).
+
+deterministic_numeric_split([], _, _, _, _, {Threshold, _}, _) ->
+    Threshold;
+deterministic_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId, 
+			    Gain, Total, {OldThreshold, OldGain}, Dist) ->
+
+    [{Lt, Left}, Right] = Dist, 
+    Dist0 = case lists:keytake(Class, 1, Left) of
+		{value, {Class, Num, _}, ClassRest} ->
+		    [{Lt, [{Class, Num + 1, []}|ClassRest]}, Right]
+	    end,
+    [Left0, {Gt0, Right0}] = Dist0,
+    NewDist = case lists:keytake(Class, 1, Right0) of
+	{value, {Class, Num0, _}, ClassRest0} ->
+	    [Left0, {Gt0, [{Class, Num0 - 1, []}|ClassRest0]}]
+    end,
+    case Class == OldClass of
+	true -> deterministic_numeric_split(Rest, {Value, Class}, FeatureId,
+					    Gain, Total, {OldThreshold, OldGain}, NewDist);
+	false ->
+	    Threshold = (Value + OldValue) / 2,
+	    NewGain0 = Gain(NewDist, Total),
+	    NewThreshold = case NewGain0 < OldGain of
+			       true -> {Threshold, NewGain0};
+			       false -> {OldThreshold, OldGain}
+			   end,
+	    deterministic_numeric_split(Rest, {Value, Class}, FeatureId,
+					Gain, Total, NewThreshold, NewDist)
+    end.
+					     
+		    
+	     
+    
 
 
+
+%%
+%% Sample a random threshold (based on two examples)
+%% 
 random_numeric_split(FeatureId, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
     Value1 = feature(Ex1, FeatureId),
     Value2 = feature(Ex2, FeatureId),
     (Value1 + Value2) / 2.
 
+%%
+%% Sample a split value, based on one example
+%%
 random_categoric_split(FeatureId, Examples) ->
     ExId = sample_example(Examples),
     feature(ExId, FeatureId).
 
 
 %%
-%% Take class at id=N and return the the tuple {Class, RestOfList}
+%% Take class at id=N and return the the tuple {Class, Classes}
 %%
 take_class([A|R], 1) ->
     {list_to_atom(A), R};
@@ -368,7 +432,6 @@ get_examples_for_value(Value, Examples) ->
 %% Get the feature vector for example with "Id"
 %%
 example(Id) ->
-   % io:format("Getting: ~p\n",[Id]),
     [{_, Value}|_] = ets:lookup(examples, Id),
     Value.
 
@@ -476,7 +539,6 @@ duplicate_example(ExId, N, Acc) ->
 
 
 sample_example([{Class, _, ExIds}]) ->
-%    io:format("Class ~p ~w~n", [Class, ExIds]),
     lists:nth(random:uniform(length(ExIds)), ExIds);
 sample_example(Examples) ->
     sample_example([lists:nth(random:uniform(length(Examples)), Examples)]).

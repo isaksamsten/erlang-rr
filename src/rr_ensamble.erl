@@ -9,7 +9,9 @@
 -compile(export_all).
 -include("rr_tree.hrl").
 
-
+%%
+%% Generate an ensamble of models from of #rr_conf.base_learners
+%%
 generate_model(Features, Examples, #rr_conf{
 				      base_learner = {Classifiers, Base},
 				      max_id = MaxId,
@@ -17,7 +19,11 @@ generate_model(Features, Examples, #rr_conf{
     ets:new(predictions, [public, named_table]),
     spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf, MaxId).
     
-    
+
+%%
+%% Evaluate "Model" on "Examples"
+%%  Models: Pid to 'evaluator_coordinator'
+%%    
 evaluate_model(Models, Examples, Conf) ->
     lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
 			predict_all(Class, ExampleIds, Models, Conf, Acc)
@@ -26,30 +32,30 @@ evaluate_model(Models, Examples, Conf) ->
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
-    Prediction = predict_majority(Model, Example),
+    Prediction = predict_majority(Model, Example, Conf),
     predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
 								 [Prediction|Predictions]
 							 end, [Prediction], Dict)).
-
-predict_majority(Model, Example) ->
-%    io:format("In predict_majority\n"),
+%%
+%% Predict 
+%%
+predict_majority(Model, Example, #rr_conf{base_learner={N, _}}) ->
     Model ! {evaluate, self(), Example},
     receive
 	{prediction, Model, Predictions} ->
-	    {P, _D} = majority(Predictions),
-	    P
+	    majority(Predictions, N)
     end.
 
-majority(Acc) ->
-    Dict = lists:foldl(fun ({Item, _Prob}, Dict) ->
-			       dict:update(Item, fun(Count) -> Count + 1 end, 1, Dict)
+majority(Acc, N) ->
+    Dict = lists:foldl(fun ({Item, _Laplace}, Dict) ->
+			       dict:update(Item, fun(Count) -> Count + 1  end, 1, Dict)
 		       end, dict:new(), Acc),
-    {dict:fold(fun (Class, Count, {MClass, MCount}) ->
+    dict:fold(fun (Class, Count, {MClass, MCount}) ->
 		      case Count > MCount of
 			  true -> {Class, Count};
 			  false -> {MClass, MCount}
 		      end
-	      end, {undefined, 0}, Dict), Dict}.
+	      end, {undefined, 0}, Dict).
 
 spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf, MaxId) ->
     Self = self(),
@@ -117,8 +123,12 @@ base_build_process(Coordinator, Base, Conf, MaxId, Acc) ->
     receive
 	{build, Id, Features, Examples} ->
 	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples, MaxId),
-	    Model = Base:generate_model(Features, Bag, Conf),
-	    Dict = Base:evaluate_model(Model, OutBag, Conf),
+	    Conf0 = Conf#rr_conf{evaluate = case Conf#rr_conf.evaluate of
+						{random, Prob} -> random_evaluator(Prob);
+						Fun -> Fun
+					    end},
+	    Model = Base:generate_model(Features, Bag, Conf0),
+	    Dict = Base:evaluate_model(Model, OutBag, Conf0),
 
 	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
 	    base_build_process(Coordinator, Base, Conf, MaxId, [Model|Acc]);
@@ -147,5 +157,6 @@ make_prediction([Model|Models], Base, ExId, Conf, Acc) ->
     make_prediction(Models, Base, ExId, Conf,
 		    [Base:predict(rr_example:example(ExId), Model, Conf)|Acc]).
 
-
+random_evaluator(Prob) ->
+    rr_tree:random_evaluator(random:uniform() * Prob).
 

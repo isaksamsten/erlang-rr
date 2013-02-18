@@ -9,7 +9,6 @@
 %%% Created :  5 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_ruleset).
 -author('isak-kar@dsv.su.se').
--include("rr.hrl").
 -include("rr_rule.hrl").
 -compile(export_all).
 
@@ -177,7 +176,7 @@ separate_and_conquer(Features, Class, Examples, Conf, Rules) ->
 		true ->
 		    {reverse_antecedents(Rules0), Covered};
 		false ->
-		    separate_and_conquer(Features -- [Feature], Class, Covered, Conf, Rules0)
+		    separate_and_conquer(Features, Class, Covered, Conf, Rules0)
 	    end;
 	false ->
 	    {reverse_antecedents(Rules), Covered}

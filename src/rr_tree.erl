@@ -145,7 +145,7 @@ make_leaf(Covered, {Class, C}) ->
 %% Calculates the laplace estimate for C and N
 %%
 laplace(C, N) ->
-    (C+1)/(C+N+2).
+    (C+1)/(N+2).
 
 %%
 %% Evaluate log2(|Features|) + 1 to find the attribute that splits the
@@ -185,18 +185,36 @@ random_evaluator(Alpha) ->
 	    end
     end.
 
+random_split(Feature, Examples, _) ->
+    rr_example:split(Feature, Examples).
+
+deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score}) ->
+    rr_example:split({Feature, Score}, Examples);
+deterministic_split(Feature, Examples, _) ->
+    rr_example:split(Feature, Examples).
+
+random_splitter(Alpha) ->
+    fun (Feature, Examples, Conf) ->
+	    Random = random:uniform(),
+	    if Random =< Alpha ->
+		    deterministic_split(Feature, Examples, Conf);
+	       true ->
+		    random_split(Feature, Examples, Conf)
+	    end
+    end.
+					 
 
 %%
 %% Evaluate a list of 
 %%
 evaluate_split([], _, _, _, Acc) ->
     hd(sort_candidates(Acc)); % NOTE: improve!
-evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score} = Conf, Acc) ->
-    Cand = case rr_example:split(F, Examples) of
-	       {_, Threshold, Split} ->
+evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, Acc) ->
+    Cand = case Split(F, Examples, Conf) of
+	       {_, Threshold, ExSplit} ->
 		   #rr_candidate{feature = {F, Threshold}, 
-				 score = Score(Split, Total), 
-				 split = Split}
+				 score = Score(ExSplit, Total), 
+				 split = ExSplit}		       
 	   end,
     evaluate_split(Features, Examples, Total, Conf, [Cand|Acc]).
 

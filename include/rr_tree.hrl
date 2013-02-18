@@ -13,6 +13,7 @@
 		  depth=0,
 		  evaluate,
 		  score,
+		  split,
 		  base_learner,
 		  classifiers={100, rr_tree},
 		  cores = 1,
