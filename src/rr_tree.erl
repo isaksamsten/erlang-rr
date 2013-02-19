@@ -153,12 +153,20 @@ make_leaf(Covered, {Class, C}) ->
 laplace(C, N) ->
     (C+1)/(N+2).
 
+
+resampled_evaluate(NoResamples) ->
+    fun (Features, Examples, Total, #rr_conf{no_features=Features}) ->
+	    ok
+    end.
+	    
+    
+
 %%
 %% Evaluate log2(|Features|) + 1 to find the attribute that splits the
 %% dataset best
 %%
-best_subset_evaluate_split(Features, Examples, Total, Conf) ->
-    Log = round((math:log(length(Features)) / math:log(2))) + 1,
+best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures}) ->
+    Log = round((math:log(NoFeatures) / math:log(2))) + 1,
     Features0 = rr_example:random_features(Features, Log),
     evaluate_split(Features0, Examples, Total, Conf).
 

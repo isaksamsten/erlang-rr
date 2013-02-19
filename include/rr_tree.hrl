@@ -9,15 +9,18 @@
 %%
 %%
 %%
--record(rr_conf, {prune, 
-		  depth=0,
-		  evaluate,
-		  score,
-		  split,
-		  base_learner,
-		  classifiers={100, rr_tree},
-		  cores = 1,
-		  max_id}).
+-record(rr_conf, {
+	  prune, 
+	  depth=0,
+	  evaluate,
+	  score,
+	  split,
+	  base_learner,
+	  classifiers={100, rr_tree},
+	  cores = 1,
+	  max_id,
+	  no_features
+	 }).
 
 %%
 %%
