@@ -21,6 +21,9 @@ init() ->
     ets:new(examples, [named_table, public, {read_concurrency, true}]),
     ets:new(features, [named_table, public]).
 
+%%
+%% Load "File" using "Cores"
+%%
 load(File, Cores) ->
     {ClassId, Types} = case csv:next_line(File) of
 			   {ok, Types0, _} ->
@@ -37,6 +40,9 @@ load(File, Cores) ->
     {Features, parse_examples(File, Cores, ClassId, Types)}.
 
     
+%%
+%% Spawns "Cores" 'parse_example_process' and collects their results
+%%
 parse_examples(File, Cores, ClassId, Types) ->
     Self = self(),
     lists:foreach(fun (_) ->
@@ -44,6 +50,9 @@ parse_examples(File, Cores, ClassId, Types) ->
 		  end, lists:seq(1, Cores)),
     collect_parse_example_processes(Self, Cores, dict:new()).
 
+%%
+%% Process that gets a line from the "File" and process each example
+%%
 parse_example_process(Parent, File, ClassId, Types, Acc) ->
     case csv:next_line(File) of
 	{ok, Example, Id0} ->
@@ -486,6 +495,12 @@ split_dataset(Examples, Ratio) ->
 			 [{Class, length(Test), Test}|TestAcc]}
 		end, {[], []}, Examples).
 
+suffle_dataset(Examples) ->
+    lists:foldl(fun({Class, Count, Ids0}, Acc) ->
+			Ids = [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> {random:uniform(), Id} end, Ids0))],
+			[{Class, Count, Ids}|Acc]
+		end, [], Examples).
+								 
 
 %%
 %% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}

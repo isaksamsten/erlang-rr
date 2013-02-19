@@ -43,6 +43,7 @@ predict_majority(Model, Example, #rr_conf{base_learner={N, _}}) ->
     Model ! {evaluate, self(), Example},
     receive
 	{prediction, Model, Predictions} ->
+%	    io:format("Predictions: ~p ~n", [Predictions]),
 	    majority(Predictions, N)
     end.
 
@@ -82,6 +83,7 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
     receive 
 	{evaluate, Parent, ExId} ->
 	    Prediction = submit_prediction(Processes, Coordinator, ExId),
+%	    io:format("Predictions of: ~p: ~w ~n", [ExId, length(Prediction)]),
 	    Parent ! {prediction, Coordinator, Prediction},
 	    evaluation_coordinator(Parent, Coordinator, Processes);
 	{exit, Parent} ->
@@ -114,8 +116,6 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Features, Examples)
     end.
 
 base_build_process(Coordinator, Base, Conf, MaxId) ->
-    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-    random:seed({A,B,C}),
     base_build_process(Coordinator, Base, Conf, MaxId, []).
 
 base_build_process(Coordinator, Base, Conf, MaxId, Acc) ->
@@ -139,6 +139,7 @@ base_build_process(Coordinator, Base, Conf, MaxId, Acc) ->
 base_evaluator_process(Coordinator, Base, Conf, Models)->
     receive
 	{evaluate, Coordinator, ExId} ->
+%	    io:format("~p making prediction of '~p' using ~p models ~n", [self(), ExId, length(Models)]),
 	    Coordinator ! {prediction, Coordinator, self(), make_prediction(Models, Base, ExId, Conf)},
 	    base_evaluator_process(Coordinator, Base, Conf, Models);
 	{exit, Coordinator} ->

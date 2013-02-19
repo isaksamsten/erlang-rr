@@ -45,7 +45,8 @@ main(Args) ->
     Then = now(),
 
     Csv = csv:reader(InputFile),
-    {Features, Examples} = rr_example:load(Csv, Cores),
+    {Features, Examples0} = rr_example:load(Csv, Cores),
+    Examples = if Cores < 2 -> rr_example:suffle_dataset(Examples0); true -> Examples0 end,
     {Train, Test} = rr_example:split_dataset(Examples, Split),
     Conf = #rr_conf{
 	      cores = Cores,
