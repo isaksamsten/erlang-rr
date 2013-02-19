@@ -82,7 +82,13 @@ predict(Attributes, #rr_node{feature={{numeric, Id}, T}, nodes=Nodes}, Conf) ->
 				end, Conf)
     end.
 	    
-	    
+%% 
+%% TODO: 
+%%    * implement support for resampling (if no attribute contains any information),
+%%      this could (possibly) be done by implementing a new Evaluate-function (resampled_evaluate(Evaluation, Resample))
+%%    * make the function tail recursive (for improved performance)
+%%    * check rr_example:split(), if that function (ever) returns only one possible split (otherwise, change the function)
+%%       
 %%
 %% Build a decision tree node from "Features" and "Examples"
 %%  if |Feature| == 0 and |Examples| == 0: make_error_node  
