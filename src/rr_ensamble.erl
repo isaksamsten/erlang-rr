@@ -116,6 +116,8 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Features, Examples)
     end.
 
 base_build_process(Coordinator, Base, Conf, MaxId) ->
+    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
+    random:seed({A,B,C}),
     base_build_process(Coordinator, Base, Conf, MaxId, []).
 
 base_build_process(Coordinator, Base, Conf, MaxId, Acc) ->
@@ -127,6 +129,7 @@ base_build_process(Coordinator, Base, Conf, MaxId, Acc) ->
 						{random, Prob} -> random_evaluator(Prob);
 						Fun -> Fun
 					    end},
+	    io:format("~p ~n", [Bag]),
 	    Model = Base:generate_model(Features, Bag, Conf0),
 	    Dict = Base:evaluate_model(Model, OutBag, Conf0),
 
