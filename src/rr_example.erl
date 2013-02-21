@@ -215,7 +215,8 @@ split({{numeric, FeatureId} = Feature, Gain}, Examples, Acc) ->
 	
 
 %%
-%% Split the class distribution
+%% Split the class distribution (TODO: to slow, don't use dict - only
+%% two sides).
 %%
 split_class_distribution(_, [], _, Dict) ->
     Dict;
@@ -506,51 +507,41 @@ suffle_dataset(Examples) ->
 %% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}
 %% examples.
 %%
-bootstrap_replicate(Examples, MaxId) ->
-    Bootstrap = generate_bootstrap(Examples, MaxId),
-    io:format("Size of bootstrap: ~p ~p ~n", [dict:to_list(Bootstrap), dict:size(Bootstrap)]),
-    select_bootstrap_examples(Examples, Bootstrap, {[], []}).
+bootstrap_replicate(Examples) ->
+    MaxId = count(Examples),
+    Bootstrap = generate_bootstrap(MaxId),
+    select_bootstrap_examples(Examples, 1, Bootstrap, {[], []}).
     
-generate_bootstrap(Examples, MaxId) ->
-    lists:foldl(fun({Class, Length, _}, Bootstraps) ->
-			generate_bootstrap_for_class(Length, MaxId, Bootstraps)
-		end, dict:new(), Examples).
+generate_bootstrap(MaxId) ->
+    lists:foldl(fun(_, Bootstrap) ->
+			dict:update(random:uniform(MaxId), fun (Count) -> Count + 1 end, 1, Bootstrap)
+		end, dict:new(), lists:seq(1, MaxId)).
 
-generate_bootstrap_for_class(0, _, Dict) ->
-    Dict;
-generate_bootstrap_for_class(Counter, MaxId, Dict) ->
-    Random = random:uniform(MaxId),
-    Dict0 = dict:update(Random, fun (Count) ->
-					Count + 1
-				end, 1, Dict),
-    generate_bootstrap_for_class(Counter - 1, MaxId, Dict0).
-
-select_bootstrap_examples([], Bootstrap, Acc) ->
+select_bootstrap_examples([], _N, Bootstrap, Acc) ->
     Acc;
-select_bootstrap_examples([{Class, Count, Ids}|Examples], Bootstrap, {InBags, OutBags}) ->
-    case select_bootstrap_examples_for_class(Class, {0, 0}, Ids, Bootstrap, {[], []}) of
+select_bootstrap_examples([{Class, Count, Ids}|Examples], N, Bootstrap, {InBags, OutBags}) ->
+    case select_bootstrap_examples_for_class(Class, {0, 0}, N, Ids, Bootstrap, {[], []}) of
 	{{_, 0, []}, _} ->
-	    select_bootstrap_examples(Examples, Bootstrap, {InBags, OutBags});
+	    select_bootstrap_examples(Examples, N+Count, Bootstrap, {InBags, OutBags});
 	{InBag, OutBag} ->
-	    select_bootstrap_examples(Examples, Bootstrap, {[InBag|InBags], [OutBag|OutBags]})
+	    select_bootstrap_examples(Examples, N+Count, Bootstrap, {[InBag|InBags], [OutBag|OutBags]})
     end.
 %%
 %% Rewrite.. Instead of storing the ExId in Bootstrap, we only need to
 %% store if a number between 0..n is set and how many times, if true
 %% add ex at that position
 %%
-select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, [], _, {InBag, OutBag}) ->
+select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, [], _, {InBag, OutBag}) ->
     {{Class, InBagCount, InBag}, {Class, OutBagCount, OutBag}};
-select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
-    case dict:find(ExId, Bootstrap) of
+select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
+    case dict:find(N, Bootstrap) of
 	{ok, Times} ->
 	    NewInBag = duplicate_example(ExId, Times, InBag),
-	    io:format("NewInBag ~p ~n", [length(NewInBag)]),
 	    select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount},
-						Rest, Bootstrap, {NewInBag, OutBag});
+						N+1, Rest, Bootstrap, {NewInBag, OutBag});
 	error ->
 	    select_bootstrap_examples_for_class(Class, {InBagCount,  OutBagCount + 1},
-						Rest, Bootstrap, {InBag, [ExId|OutBag]})
+						N+1, Rest, Bootstrap, {InBag, [ExId|OutBag]})
     end.
 
 duplicate_example(_, 0, Acc) ->

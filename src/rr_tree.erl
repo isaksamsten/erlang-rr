@@ -109,23 +109,17 @@ build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, _) ->
     make_leaf(Examples, {Class, Count});
 build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate, depth=Depth} = Conf) ->
     NoExamples = rr_example:count(Examples),
-    io:format("NoExamples: ~p Depth: ~p~n", [NoExamples, Depth]),
+    io:format("Depth: ~p\n", [Depth]),
     case Prune(NoExamples, Depth) of
 	true ->
 	    make_leaf(Examples, rr_example:majority(Examples));
 	false ->
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
-		0 ->
+		#rr_candidate{split=[{_, _}]} ->
 		    make_leaf(Examples, rr_example:majority(Examples));
 		Candidate  -> 
-		    case Candidate#rr_candidate.split of
-			[{_, ExSplit}] ->
-			    io:format("Making leaf out of candidate\n"),
-			    make_leaf(Examples, rr_example:majority(Examples));
-			_ ->
-			    Nodes = build_decision_branches(Features, Candidate, Conf#rr_conf{depth=Depth + 1}),
-			    make_node(Candidate, Nodes)
-		    end
+		    Nodes = build_decision_branches(Features, Candidate, Conf#rr_conf{depth=Depth + 1}),
+		    make_node(Candidate, Nodes)
 	    end	   
     end.
 
@@ -178,6 +172,8 @@ best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFea
     Log = round((math:log(NoFeatures) / math:log(2))) + 1,
     Features0 = rr_example:random_features(Features, Log),
     evaluate_split(Features0, Examples, Total, Conf).
+
+
 
 
 %%
@@ -260,29 +256,6 @@ evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split}
 							false -> OldCand
 						    end).
 
-%%
-%% Sort a list of candidates
-%%
-sort_candidates(Acc) ->
-    lists:sort(fun(A, B) ->
-		       A#rr_candidate.score < B#rr_candidate.score
-	       end, Acc).
-
-%%
-%% Calculate the entropy of Examples
-%%
-entropy(Examples) ->
-    Counts = [C || {_, C, _} <- Examples],
-    entropy(Counts, lists:sum(Counts)).
-
-entropy(Counts, Total) ->
-    -1 * lists:foldl(fun (0, Count) ->
-			     Count;
-			 (Class, Count) ->
-			     Fraction = Class / Total,
-			     Count + Fraction * math:log(Fraction)%/math:log(2)
-		     end, 0, Counts).
-
 random_score(ValueSplits, Total) ->
     Random = random:uniform(),
     if Random >= 0.5 ->
@@ -319,3 +292,18 @@ info([{_Value, Splits}|Rest], Total, Acc) ->
     ClassSum = rr_example:count(Splits),
     info(Rest, Total,
 	 Acc + (ClassSum / Total) * entropy(Splits)).
+
+%%
+%% Calculate the entropy of Examples
+%%
+entropy(Examples) ->
+    Counts = [C || {_, C, _} <- Examples],
+    entropy(Counts, lists:sum(Counts)).
+
+entropy(Counts, Total) ->
+    -1 * lists:foldl(fun (0, Count) ->
+			     Count;
+			 (Class, Count) ->
+			     Fraction = Class / Total,
+			     Count + Fraction * math:log(Fraction)%/math:log(2)
+		     end, 0, Counts).

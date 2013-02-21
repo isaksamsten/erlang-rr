@@ -14,10 +14,9 @@
 %%
 generate_model(Features, Examples, #rr_conf{
 				      base_learner = {Classifiers, Base},
-				      max_id = MaxId,
 				      cores = Cores} = Conf) ->
     ets:new(predictions, [public, named_table]),
-    spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf, MaxId).
+    spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf).
     
 
 %%
@@ -32,7 +31,8 @@ evaluate_model(Models, Examples, Conf) ->
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
-    Prediction = predict_majority(Model, Example, Conf),
+    {Prediction, Probs} = predict_majority(Model, Example, Conf),
+    io:format("~p \t ~p \t ~p \t ~p ~n", [Example, Actual, Prediction, Probs]),
     predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
 								 [Prediction|Predictions]
 							 end, [Prediction], Dict)).
@@ -43,24 +43,23 @@ predict_majority(Model, Example, #rr_conf{base_learner={N, _}}) ->
     Model ! {evaluate, self(), Example},
     receive
 	{prediction, Model, Predictions} ->
-	    majority(Predictions, N)
+	    Probs = get_prediction_probabilities(Predictions, N),
+	    {hd(Probs), Probs}
     end.
 
-majority(Acc, N) ->
+get_prediction_probabilities(Acc, N) ->
     Dict = lists:foldl(fun ({Item, _Laplace}, Dict) ->
 			       dict:update(Item, fun(Count) -> Count + 1  end, 1, Dict)
 		       end, dict:new(), Acc),
-    dict:fold(fun (Class, Count, {MClass, MCount}) ->
-		      case Count > MCount of
-			  true -> {Class, Count};
-			  false -> {MClass, MCount}
-		      end
-	      end, {undefined, 0}, Dict).
+    lists:sort(fun({_, Ca}, {_, Cb}) -> Ca > Cb end, 
+	       lists:foldl(fun ({Class, Count}, Probs) ->
+				   [{Class, Count/N}|Probs]
+			   end, [], dict:to_list(Dict))).
 
-spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf, MaxId) ->
+spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf) ->
     Self = self(),
     Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores, Features, Examples) end),
-    [spawn_link(fun() -> base_build_process(Coordinator, Base, Conf, MaxId) end) 
+    [spawn_link(fun() -> base_build_process(Coordinator, Base, Conf) end) 
 		 || _ <- lists:seq(1, Cores)],
     Coordinator.
     
@@ -117,26 +116,25 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Features, Examples)
 %% Process for building bootap replicas and train "Base". Transitions
 %% into 'base_evaluator_process', at {completed, Coordinator}
 %%
-base_build_process(Coordinator, Base, Conf, MaxId) ->
+base_build_process(Coordinator, Base, Conf) ->
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A,B,C}),
-    base_build_process(Coordinator, Base, Conf, MaxId, []).
+    base_build_process(Coordinator, Base, Conf, []).
 
-base_build_process(Coordinator, Base, Conf, MaxId, Acc) ->
+base_build_process(Coordinator, Base, Conf, Acc) ->
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id, Features, Examples} ->
-	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples, MaxId),
+	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples),
 	    Conf0 = Conf#rr_conf{evaluate = case Conf#rr_conf.evaluate of
 						{random, Prob} -> random_evaluator(Prob);
 						Fun -> Fun
 					    end},
-	    io:format("~p ~n", [Bag]),
 	    Model = Base:generate_model(Features, Bag, Conf0),
 	    Dict = Base:evaluate_model(Model, OutBag, Conf0),
 
 	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
-	    base_build_process(Coordinator, Base, Conf, MaxId, [Model|Acc]);
+	    base_build_process(Coordinator, Base, Conf, [Model|Acc]);
 	{completed, Coordinator} ->
 	    base_evaluator_process(Coordinator, Base, Conf, Acc)
     end.

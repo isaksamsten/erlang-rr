@@ -18,7 +18,6 @@
 	  base_learner,
 	  classifiers={100, rr_tree},
 	  cores = 1,
-	  max_id,
 	  no_features
 	 }).
 

@@ -43,7 +43,7 @@ main(Args) ->
     io:format("Evaluating '~s' using ~p trees on ~p cores \n", [InputFile, Classifiers, Cores]),
 
     Then = now(),
-
+    
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
     Examples = rr_example:suffle_dataset(Examples0),
@@ -56,7 +56,6 @@ main(Args) ->
 	      evaluate = fun rr_tree:best_subset_evaluate_split/4,
 	      split = fun rr_tree:random_split/3,
 	      base_learner = {Classifiers, rr_tree},
-	      max_id = rr_example:count(Examples),
 	      no_features = length(Features)},
     Model = rr_ensamble:generate_model(Features, Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
@@ -64,8 +63,7 @@ main(Args) ->
     io:format("Model accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
     Now = now(),
     io:format(standard_error, "*** Model evaluated in ~p second(s)*** ~n", 
-	      [timer:now_diff(Now, Then) / 1000000]).
-    
+	      [timer:now_diff(Now, Then) / 1000000]).    
     
 
 %%
