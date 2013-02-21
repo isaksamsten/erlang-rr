@@ -52,7 +52,7 @@ main(Args) ->
     Conf = #rr_conf{
 	      cores = Cores,
 	      score = fun rr_tree:info/2,
-	      prune = rr_tree:example_depth_stop(10, 1000),
+	      prune = rr_tree:example_depth_stop(2, 1000),
 	      evaluate = fun rr_tree:best_subset_evaluate_split/4,
 	      split = fun rr_tree:random_split/3,
 	      base_learner = {Classifiers, rr_tree},

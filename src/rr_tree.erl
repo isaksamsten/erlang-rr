@@ -88,10 +88,7 @@ predict(Attributes, #rr_node{feature={{numeric, Id}, T}, nodes=Nodes}, Conf) ->
 %%      this could (possibly) be done by implementing a new Evaluate-function 
 %%      (resampled_evaluate(Evaluation, Resample))
 %%    * make the function tail recursive (for improved performance)
-%%    * check rr_example:split(), if that function (ever) returns only
-%%       one possible split (otherwise, change the function)
-%%       
-%%
+%%    
 %% Build a decision tree node from "Features" and "Examples"
 %%  if |Feature| == 0 and |Examples| == 0: make_error_node  
 %%  if |Feature| == 0: make_leaf majority(Examples)
@@ -109,7 +106,6 @@ build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, _) ->
     make_leaf(Examples, {Class, Count});
 build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate, depth=Depth} = Conf) ->
     NoExamples = rr_example:count(Examples),
-    io:format("Depth: ~p\n", [Depth]),
     case Prune(NoExamples, Depth) of
 	true ->
 	    make_leaf(Examples, rr_example:majority(Examples));
@@ -176,6 +172,7 @@ best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFea
 
 
 
+
 %%
 %% Evalate one randomly selected feature
 %%
@@ -233,6 +230,9 @@ random_splitter(Alpha) ->
 	    end
     end.
 
+%%
+%% Evaluate all Features to find the "best" according to "Score"
+%%
 evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->	
     {_, T, ExSplit} = Split(F, Examples, Conf),
     evaluate_split(Features, Examples, Total, Conf, #rr_candidate{feature={F, T},
@@ -244,7 +244,8 @@ evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split}
 %%
 evaluate_split([], _, _, _, Acc) ->
     Acc;
-evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, #rr_candidate{score=OldScore} = OldCand) ->
+evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, 
+	       #rr_candidate{score=OldScore} = OldCand) ->
     Cand = case Split(F, Examples, Conf) of
 	       {_, Threshold, ExSplit} ->
 		   #rr_candidate{feature = {F, Threshold}, 
@@ -256,28 +257,17 @@ evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split}
 							false -> OldCand
 						    end).
 
-random_score(ValueSplits, Total) ->
-    Random = random:uniform(),
-    if Random >= 0.5 ->
-	    info(ValueSplits, Total);
-       true ->
-	    gini(ValueSplits, Total)
-    end.
-	    
-       
-    
-
 %%
 %% Calculate the gini impurity (except 1- to minimize instead of
 %% maximize)
 %%
 gini(ValueSplits, Total) ->
-    info(ValueSplits, Total, 0).
+    gini(ValueSplits, Total, 0).
 
 gini([], _, Acc) -> Acc;
 gini([{_Value, Splits}|Rest], Total, Acc) -> 
     Fi = rr_example:count(Splits) / Total,
-    gini(Rest, Total, math:pow(Fi)).
+    gini(Rest, Total, math:pow(Fi, 2)).
 	
 
 

@@ -179,16 +179,6 @@ format_split_distribution(Acc) ->
 				      end
 			      end, [], dict:to_list(Acc))).
 
-random_binary_split({categoric, FeatureId} = Feature, Examples) ->
-    Value = random_categoric_split(FeatureId, Examples),
-    split_binary_categoric(Feature, Value, Examples, dict:new());
-random_binary_split({numeric, _} = Feature, Examples) ->
-    split(Feature, Examples).
-
-
-
-    
-
 %%
 %% Split "Examples" into two disjoint subsets according to "Feature".
 %% If Feature == categoric ->
@@ -197,81 +187,88 @@ random_binary_split({numeric, _} = Feature, Examples) ->
 %%   select_avg_threshold -> >= {Examples >= T}, < {Examples < T}
 %% Else
 %%   fail
-split(Feature, Examples) ->
-    split(Feature, Examples, dict:new()).
-
-split(_, [], Acc) ->
-    format_split_distribution(Acc);
-split({categoric, FeatureId} = Feature, Examples, Acc) ->
+split({categoric, FeatureId} = Feature, Examples) ->
     Value = random_categoric_split(FeatureId, Examples),
-    split_binary_categoric(Feature, Value, Examples, Acc);
-split({numeric, FeatureId} = Feature, Examples, Acc) ->
+    split_categoric_feature(Feature, Value, Examples, [], []);
+split({numeric, FeatureId} = Feature, Examples) ->
     Threshold = random_numeric_split(FeatureId, Examples),
-    split_numeric_feature(Feature, Threshold, Examples, Acc);
-split({{numeric, FeatureId} = Feature, Gain}, Examples, Acc) ->
+    split_numeric_feature(Feature, Threshold, Examples, [], []);
+%%
+%% Split deterministically by evaluating every possible splitpoint
+%% using the "Gain" function
+%%
+split({{numeric, FeatureId} = Feature, Gain}, Examples) ->
     Threshold = deterministic_numeric_split(FeatureId, Examples, Gain),
-    split_numeric_feature(Feature, Threshold, Examples, Acc).
+    split_numeric_feature(Feature, Threshold, Examples, [], []).
 
 	
 
 %%
-%% Split the class distribution (TODO: to slow, don't use dict - only
-%% two sides).
+%% Split the class distribution:
+%%  NOTE: LEFT is >= or == and RIGHT is < or /=
 %%
-split_class_distribution(_, [], _, Dict) ->
-    Dict;
-split_class_distribution({categoric, FeatureId} = Feature, [ExampleId|Examples], Class, Dict) ->
+split_class_distribution(_, [], _, Left, Right) ->
+    {Left, Right};
+split_class_distribution({{numeric, FeatureId}, Threshold} = Feature, [ExampleId|Examples], Class, 
+			 {Class, NoLeft, Left} = LeftExamples, {Class, NoRight, Right} = RightExamples) ->
     Value = feature(ExampleId, FeatureId),
-    split_class_distribution(Feature, Examples, Class,
-			     dict:update(Value, fun(Classes) ->
-							dict:update(Class, fun ({Count, Ids}) ->
-										   {Count + 1, [ExampleId|Ids]}
-									   end, {1, [ExampleId]}, Classes)
-						end, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict));
-split_class_distribution({{numeric, FeatureId}, Threshold} = Feature, [ExampleId|Examples], Class, Dict) ->
+    case Value >= Threshold of
+	true ->
+	    split_class_distribution(Feature, Examples, Class, {Class, NoLeft + 1, [ExampleId|Left]}, RightExamples);
+	false ->
+	    split_class_distribution(Feature, Examples, Class, LeftExamples, {Class, NoRight + 1, [ExampleId|Right]})
+	end;
+split_class_distribution({{categoric, FeatureId}, SplitValue} = Feature, [ExampleId|Examples], Class, 
+			 {Class, NoLeft, Left} = LeftExamples, {Class, NoRight, Right} = RightExamples) ->
     Value = feature(ExampleId, FeatureId),
-    UpdateFun = fun(Classes) ->
-			dict:update(Class, fun ({Count, Ids}) ->
-						   {Count + 1, [ExampleId|Ids]}
-					   end, {1, [ExampleId]}, Classes)
-		end,
-    Dict0 = case Value >= Threshold of
-		true ->
-		    dict:update('>=', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict);
-		false ->
-		    dict:update('<', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict)
-	    end,
-    split_class_distribution(Feature, Examples, Class, Dict0);
-split_class_distribution({{categoric, FeatureId}, SplitValue} = Feature, [ExampleId|Examples], Class, Dict) ->
-    Value = feature(ExampleId, FeatureId),
-    UpdateFun = fun(Classes) ->
-			dict:update(Class, fun ({Count, Ids}) ->
-						   {Count + 1, [ExampleId|Ids]}
-					   end, {1, [ExampleId]}, Classes)
-		end,
-    Dict0 = case Value == SplitValue of
-		true ->
-		    dict:update('==', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict);
-		false ->
-		    dict:update('/=', UpdateFun, dict:store(Class, {1, [ExampleId]}, dict:new()), Dict)
-	    end,
-    split_class_distribution(Feature, Examples, Class, Dict0).
+    case Value == SplitValue of
+	true ->
+	    split_class_distribution(Feature, Examples, Class, {Class, NoLeft + 1, [ExampleId|Left]}, RightExamples);
+	false ->
+	    split_class_distribution(Feature, Examples, Class, LeftExamples, {Class, NoRight + 1, [ExampleId|Right]})
+    end.
+    
 
 
 %%
 %% Split a numeric feature at threshold
 %%
-split_numeric_feature(_, Threshold, [], Acc) ->
-    {numeric, Threshold, format_split_distribution(Acc)};
-split_numeric_feature(Feature, Threshold, [{Class, _, ExampleIds}|Examples], Acc) ->
-    split_numeric_feature(Feature, Threshold, Examples,
-			  split_class_distribution({Feature, Threshold}, ExampleIds, Class, Acc)).
+split_numeric_feature(_, Threshold, [], [], Right) ->
+    {numeric, Threshold, [{'<', Right}]};
+split_numeric_feature(_, Threshold, [], Left, []) ->
+    {numeric, Threshold, [{'>=', Left}]};
+split_numeric_feature(_, Threshold, [], Left, Right) ->
+    {numeric, Threshold, [{'>=', Left}, {'<', Right}]};
+split_numeric_feature(Feature, Threshold, [{Class, _, ExampleIds}|Examples], Left, Right) ->
+    case split_class_distribution({Feature, Threshold}, ExampleIds, Class, {Class, 0, []}, {Class, 0, []}) of
+	{{_, 0, []}, RightSplit} ->
+	    split_numeric_feature(Feature, Threshold, Examples, Left, [RightSplit|Right]);
+	{LeftSplit, {_, 0, []}} ->
+	    split_numeric_feature(Feature, Threshold, Examples, [LeftSplit|Left], Right);
+	{LeftSplit, RightSplit} ->
+	    split_numeric_feature(Feature, Threshold, Examples, [LeftSplit|Left], [RightSplit|Right])
+    end.
 
-split_binary_categoric(_, Value, [], Acc) ->
-    {categoric, Value, format_split_distribution(Acc)};
-split_binary_categoric(Feature, Value, [{Class, _, ExampleIds}|Examples], Acc) ->
-    split_binary_categoric(Feature, Value, Examples,
-			   split_class_distribution({Feature, Value}, ExampleIds, Class, Acc)).
+
+%%
+%% Split a numeric feature at a value
+%%
+split_categoric_feature(_, Value, [], [], Right) ->
+    {categoric, Value, [{'/=', Right}]};
+split_categoric_feature(_, Value, [], Left, []) ->
+    {categoric, Value, [{'==', Left}]};
+split_categoric_feature(_, Value, [], Left, Right) ->
+    {categoric, Value, [{'==', Left}, {'/=', Right}]};
+split_categoric_feature(Feature, Value, [{Class, _, ExampleIds}|Examples], Left, Right) ->
+    case split_class_distribution({Feature, Value}, ExampleIds, Class, {Class, 0, []}, {Class, 0, []}) of
+	{{_, 0, []}, RightSplit} ->
+	    split_categoric_feature(Feature, Value, Examples, Left, [RightSplit|Right]);
+	{LeftSplit, {_, 0, []}} ->
+	    split_categoric_feature(Feature, Value, Examples, [LeftSplit|Left], Right);
+	{LeftSplit, RightSplit} ->
+	    split_categoric_feature(Feature, Value, Examples, [LeftSplit|Left], [RightSplit|Right])
+    end.
+
 
 deterministic_numeric_split(FeatureId, Examples, Gain) ->
     [{Value, Class}|ClassIds] = lists:keysort(1, lists:foldl(

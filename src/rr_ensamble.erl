@@ -73,7 +73,7 @@ collect_predictions(Processes, Coordinator, Acc) ->
     end.
 
 submit_prediction(Processes, Coordinator, ExId) ->
-    lists:foreach(fun(Process) -> Process ! {evaluate, Coordinator, ExId} end, Processes),
+    lists:foreach(fun(Process) -> Process ! {evaluate, Coordinator, Process, ExId} end, Processes),
     collect_predictions(Processes, Coordinator, []).
 			  
 
@@ -130,26 +130,45 @@ base_build_process(Coordinator, Base, Conf, Acc) ->
 						{random, Prob} -> random_evaluator(Prob);
 						Fun -> Fun
 					    end},
-	    Model = Base:generate_model(Features, Bag, Conf0),
-	    Dict = Base:evaluate_model(Model, OutBag, Conf0),
+	    Conf1 = Conf0#rr_conf{score = case Conf0#rr_conf.score of
+					     random ->
+						 random_score();
+					     Fun0 -> Fun0
+					 end},
+	    Model = Base:generate_model(Features, Bag, Conf1),
+	    Dict = Base:evaluate_model(Model, OutBag, Conf1),
 
 	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
 	    base_build_process(Coordinator, Base, Conf, [Model|Acc]);
 	{completed, Coordinator} ->
-	    base_evaluator_process(Coordinator, Base, Conf, Acc)
+	    base_evaluator_process(Coordinator, self(), Base, Conf, Acc)
     end.
+
+%%
+%% Use a random score function (i.e. either 
+%%
+random_score() ->
+    Random = random:uniform(),
+    if Random >= 0.5 ->
+	    fun rr_tree:info/2;
+       true ->
+	    fun rr_tree:gini/2
+    end.
+	    
+       
+    
 
 
 %%
 %% Recives, {evaluate, Coordinator, ExId}, where "ExId" is an
 %% example. The correct class for "ExId" is predicted using "Models"
 %%
-base_evaluator_process(Coordinator, Base, Conf, Models)->
+base_evaluator_process(Coordinator, Self, Base, Conf, Models)->
     receive
-	{evaluate, Coordinator, ExId} ->
-	    Coordinator ! {prediction, Coordinator, self(), make_prediction(Models, Base, ExId, Conf)},
-	    base_evaluator_process(Coordinator, Base, Conf, Models);
-	{exit, Coordinator} ->
+	{evaluate, Coordinator, Self, ExId} ->
+	    Coordinator ! {prediction, Coordinator, Self, make_prediction(Models, Base, ExId, Conf)},
+	    base_evaluator_process(Coordinator, Self, Base, Conf, Models);
+	{exit, Coordinator, Self} ->
 	    done
     end.
 
