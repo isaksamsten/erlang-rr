@@ -508,6 +508,7 @@ suffle_dataset(Examples) ->
 %%
 bootstrap_replicate(Examples, MaxId) ->
     Bootstrap = generate_bootstrap(Examples, MaxId),
+    io:format("Size of bootstrap: ~p ~p ~n", [dict:to_list(Bootstrap), dict:size(Bootstrap)]),
     select_bootstrap_examples(Examples, Bootstrap, {[], []}).
     
 generate_bootstrap(Examples, MaxId) ->
@@ -533,13 +534,18 @@ select_bootstrap_examples([{Class, Count, Ids}|Examples], Bootstrap, {InBags, Ou
 	{InBag, OutBag} ->
 	    select_bootstrap_examples(Examples, Bootstrap, {[InBag|InBags], [OutBag|OutBags]})
     end.
-
+%%
+%% Rewrite.. Instead of storing the ExId in Bootstrap, we only need to
+%% store if a number between 0..n is set and how many times, if true
+%% add ex at that position
+%%
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, [], _, {InBag, OutBag}) ->
     {{Class, InBagCount, InBag}, {Class, OutBagCount, OutBag}};
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
     case dict:find(ExId, Bootstrap) of
 	{ok, Times} ->
 	    NewInBag = duplicate_example(ExId, Times, InBag),
+	    io:format("NewInBag ~p ~n", [length(NewInBag)]),
 	    select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount},
 						Rest, Bootstrap, {NewInBag, OutBag});
 	error ->

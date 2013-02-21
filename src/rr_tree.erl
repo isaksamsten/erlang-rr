@@ -109,6 +109,7 @@ build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, _) ->
     make_leaf(Examples, {Class, Count});
 build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate, depth=Depth} = Conf) ->
     NoExamples = rr_example:count(Examples),
+    io:format("NoExamples: ~p Depth: ~p~n", [NoExamples, Depth]),
     case Prune(NoExamples, Depth) of
 	true ->
 	    make_leaf(Examples, rr_example:majority(Examples));
@@ -117,8 +118,14 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 		0 ->
 		    make_leaf(Examples, rr_example:majority(Examples));
 		Candidate  -> 
-		    Nodes = build_decision_branches(Features, Candidate, Conf#rr_conf{depth=Depth + 1}),
-		    make_node(Candidate, Nodes)
+		    case Candidate#rr_candidate.split of
+			[{_, ExSplit}] ->
+			    io:format("Making leaf out of candidate\n"),
+			    make_leaf(Examples, rr_example:majority(Examples));
+			_ ->
+			    Nodes = build_decision_branches(Features, Candidate, Conf#rr_conf{depth=Depth + 1}),
+			    make_node(Candidate, Nodes)
+		    end
 	    end	   
     end.
 
@@ -167,7 +174,7 @@ resampled_evaluate(NoResamples) ->
 %% Evaluate log2(|Features|) + 1 to find the attribute that splits the
 %% dataset best
 %%
-best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures}) ->
+best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf) ->
     Log = round((math:log(NoFeatures) / math:log(2))) + 1,
     Features0 = rr_example:random_features(Features, Log),
     evaluate_split(Features0, Examples, Total, Conf).
