@@ -24,7 +24,7 @@
 %%
 %%
 %%
--record(rr_node, {score, feature, nodes}).
+-record(rr_node, {score, feature, left, right}).
 
 %%
 %%

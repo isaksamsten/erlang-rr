@@ -49,37 +49,21 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
 %%
 predict(_, #rr_leaf{class=Class, score=Score}, _) ->
     {Class, Score};
-predict(Attributes, #rr_node{feature={{categoric, Id}, SplitValue}, nodes=Nodes}, Conf) ->
+predict(Attributes, #rr_node{feature={{categoric, Id}, SplitValue}, left=Left, right=Right}, Conf) ->
     Value = rr_example:feature(Attributes, Id),
-    Eq = lists:keyfind('==', 1, Nodes),
-    NotEq = lists:keyfind('/=', 1, Nodes),
     case Value == SplitValue of
 	true ->
-	    predict(Attributes, case Eq of
-				    false -> element(2, NotEq);
-				    {_, Node} -> Node
-				end, Conf);
+	    predict(Attributes, Right, Conf);
 	false ->
-	    predict(Attributes, case NotEq of
-				    false -> element(2, Eq);
-				    {_, Node} -> Node
-				end, Conf)
+	    predict(Attributes, Left, Conf)
     end;
-predict(Attributes, #rr_node{feature={{numeric, Id}, T}, nodes=Nodes}, Conf) ->
+predict(Attributes, #rr_node{feature={{numeric, Id}, T}, left=Left, right=Right}, Conf) ->
     Value = rr_example:feature(Attributes, Id),
-    Gt = lists:keyfind('>=', 1, Nodes),
-    Lt = lists:keyfind('<', 1, Nodes),
     case Value >= T of
 	true ->
-	    predict(Attributes, case Gt of
-				    false -> element(2, Lt);
-				    {_, Node} -> Node
-				end, Conf);
+	    predict(Attributes, Left, Conf);
 	false ->
-	    predict(Attributes, case Lt of
-				    false -> element(2, Gt);
-				    {_, Node} -> Node
-				end, Conf)
+	    predict(Attributes, Right, Conf)
     end.
 	    
 %% 
@@ -113,29 +97,18 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
 		#rr_candidate{split=[{_, _}]} ->
 		    make_leaf(Examples, rr_example:majority(Examples));
-		Candidate  -> 
-		    Nodes = build_decision_branches(Features, Candidate, Conf#rr_conf{depth=Depth + 1}),
-		    make_node(Candidate, Nodes)
+		#rr_candidate{feature=Feature, score=Score, split=[{_, LeftExamples}, {_, RightExamples}]}  -> 
+		    Left = build_decision_node(Features, LeftExamples, Conf#rr_conf{depth=Depth + 1}),
+		    Right = build_decision_node(Features, RightExamples, Conf#rr_conf{depth=Depth + 1}),
+		    make_node(Feature, Score, Left, Right)
 	    end	   
     end.
 
 %%
-%% Build the branches for a candidate split
-%%
-build_decision_branches(Features, #rr_candidate{split=Split}, Conf) ->
-    build_decision_branches(Features, Split, Conf, []).
-
-build_decision_branches(_, [], _, Acc) ->
-    Acc;
-build_decision_branches(Features, [{Value, Split}|Rest], Conf, Acc) ->
-    Node = build_decision_node(Features, Split, Conf),
-    build_decision_branches(Features, Rest, Conf, [{Value, Node}|Acc]).
-
-%%
 %% Create a decision node
 %%
-make_node(#rr_candidate{feature=Feature, score=Score}, Nodes) ->
-    #rr_node{score=Score, feature=Feature, nodes=Nodes}.
+make_node(Feature, Score, Left, Right) ->
+    #rr_node{score=Score, feature=Feature, left=Left, right=Right}.
 
 %%
 %% Create a leaf node which predicts Class
@@ -166,12 +139,7 @@ resampled_evaluate(NoResamples) ->
 best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf) ->
     Log = round((math:log(NoFeatures) / math:log(2))) + 1,
     Features0 = rr_example:random_features(Features, Log),
-    S = evaluate_split(Features0, Examples, Total, Conf),
-    S.
-
-
-
-
+    evaluate_split(Features0, Examples, Total, Conf).
 
 %%
 %% Evalate one randomly selected feature

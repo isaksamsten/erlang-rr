@@ -189,8 +189,7 @@ format_split_distribution(Acc) ->
 %%   fail
 split({categoric, FeatureId} = Feature, Examples) ->
     Value = random_categoric_split(FeatureId, Examples),
-    S = split_categoric_feature(Feature, Value, Examples, [], []),
-    S;
+    split_categoric_feature(Feature, Value, Examples, [], []);
 split({numeric, FeatureId} = Feature, Examples) ->
     Threshold = random_numeric_split(FeatureId, Examples),
     split_numeric_feature(Feature, Threshold, Examples, [], []);
@@ -447,7 +446,8 @@ example(Id) ->
 %% Get feature at index "At" from "Id"
 %%
 feature(Id, At) when is_number(Id)->
-    ets:lookup_element(examples, Id, At);
+    V = ets:lookup_element(examples, Id, At+1),
+    V;
 feature(Id, At) when is_tuple(Id) ->
     element(At, Id).
 
