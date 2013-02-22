@@ -446,10 +446,7 @@ example(Id) ->
 %% Get feature at index "At" from "Id"
 %%
 feature(Id, At) when is_number(Id)->
-    V = ets:lookup_element(examples, Id, At+1),
-    V;
-feature(Id, At) when is_tuple(Id) ->
-    element(At, Id).
+    V = ets:lookup_element(examples, Id, At+1).
 
 %%
 %% Generate a set of random numbers

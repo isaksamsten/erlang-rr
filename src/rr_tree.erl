@@ -53,9 +53,9 @@ predict(Attributes, #rr_node{feature={{categoric, Id}, SplitValue}, left=Left, r
     Value = rr_example:feature(Attributes, Id),
     case Value == SplitValue of
 	true ->
-	    predict(Attributes, Right, Conf);
+	    predict(Attributes, Left, Conf);
 	false ->
-	    predict(Attributes, Left, Conf)
+	    predict(Attributes, Right, Conf)
     end;
 predict(Attributes, #rr_node{feature={{numeric, Id}, T}, left=Left, right=Right}, Conf) ->
     Value = rr_example:feature(Attributes, Id),
