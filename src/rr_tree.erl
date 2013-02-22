@@ -95,6 +95,8 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 	    make_leaf(Examples, rr_example:majority(Examples));
 	false ->
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
+		no_information ->
+		    make_leaf(Examples, rr_example:majority(Examples));
 		#rr_candidate{split=[{_, _}]} ->
 		    make_leaf(Examples, rr_example:majority(Examples));
 		#rr_candidate{feature=Feature, score=Score, split=[{_, LeftExamples}, {_, RightExamples}]}  -> 
@@ -126,26 +128,38 @@ laplace(C, N) ->
     (C+1)/(N+2).
 
 
-resampled_evaluate(NoResamples) ->
-    fun (Features, Examples, Total, #rr_conf{no_features=Features}) ->
-	    ok
+resampled_evaluate(NoResamples, Delta) ->
+    fun (Features, Examples, Total, Conf) ->
+	    resampled_subset_evaluate_split(Features, Examples, Total, Conf, NoResamples, Delta)
     end.
     
+resampled_subset_evaluate_split(Features, Examples, Total, Conf, 0, _) ->
+    no_information;
+resampled_subset_evaluate_split(Features, Examples, Total, Conf, NoResamples, Delta) ->
+    Cand = best_subset_evaluate_split(Features, Examples, Total, Conf),
+    Gain = abs(entropy(Examples) - Cand#rr_candidate.score),
+    if  Gain =< Delta ->
+	    resampled_subset_evaluate_split(Features, Examples, Total, Conf, NoResamples - 1, Delta);
+	true ->
+	    Cand
+    end.
 
 %%
 %% Evaluate log2(|Features|) + 1 to find the attribute that splits the
 %% dataset best
 %%
+%% TODO: investigate "round()" or "trunc()"
+%% 
 best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf) ->
-    Log = round((math:log(NoFeatures) / math:log(2))) + 1,
+    Log = round(math:log(NoFeatures) / math:log(2)) + 1,
     Features0 = rr_example:random_features(Features, Log),
     evaluate_split(Features0, Examples, Total, Conf).
 
 %%
 %% Evalate one randomly selected feature
 %%
-random_evaluate_split(Features, Examples, Total, Conf) ->
-    Feature = lists:nth(random:uniform(length(Features)), Features),
+random_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf) ->
+    Feature = lists:nth(random:uniform(NoFeatures), Features),
     evaluate_split([Feature], Examples, Total, Conf).
 
 %%

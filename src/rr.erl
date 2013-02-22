@@ -18,14 +18,29 @@
 -include("rr_tree.hrl").
 
 cmd_spec() ->
-    [{input_file,     $i,          "input",   string, 
+    [{help,           $h,          "help",      undefined,
+      "Show this help"},
+     {input_file,     $i,          "input",     string, 
       "Input data set"},
-     {classifiers,       $m,          undefined, {integer, 10},
+     {classifiers,    $m,          undefined,   {integer, 10},
       "Number of rulesets to generate"},
-     {cores,          $c,           undefined, {integer, erlang:system_info(schedulers)},
+     {cores,          $c,           undefined,  {integer, erlang:system_info(schedulers)},
       "Number of cores to use when evaluating and building the model"},
-     {split,          $s,           undefined, {float, 0.66},
-      "Spliting ratio Train/Test"}].
+     {split,          $s,           undefined,  {float, 0.66},
+      "Spliting ratio Train/Test"},
+     {score,          undefined,    "score",    {atom, info},
+      "Scoring function"},
+     {eval,           undefined,    "eval",     {atom, log},
+      "Feature evaluation strategies"},
+     {max_depth,      undefined,    "depth",    {integer, 1000},
+      "Max depth of single decision tree"},
+     {min_example,    undefined,    "examples", {integer, 2},
+      "Min number of examples allowed in split"},
+     {no_resamples,   undefined,    "resample", {integer, 6},
+      "Resample N random features K times if gain =< min-gain"},
+     {min_gain,       undefined,    "min-gain", {float, 0},
+      "If eval=resample, min-gain controls the minimum allowed gain for not resampling"}
+    ].
 
 main(Args) ->
     rr_example:init(),
@@ -35,10 +50,34 @@ main(Args) ->
 		  {error, _} ->
 		      illegal()		      
 	      end,
-    InputFile = get_opt(input_file, fun illegal/0, Options),
-    Classifiers = get_opt(classifiers, fun illegal/0, Options),
-    Cores = get_opt(cores, fun illegal/0, Options),
-    Split = get_opt(split, fun illegal/0, Options),
+    case has_opt(help, Options) of
+	true ->
+	    illegal();
+	_ ->
+	    ok
+    end,
+    InputFile = get_opt(input_file, Options),
+    Classifiers = get_opt(classifiers, Options),
+    Cores = get_opt(cores, Options),
+    Split = get_opt(split, Options),
+    Eval = case get_opt(eval, Options) of
+	       log ->
+		   fun rr_tree:best_subset_evaluate_split/4;
+	       ntry ->
+		   illegal();
+	       resample ->
+		   NoResamples = get_opt(no_resamples, Options),
+		   MinGain = get_opt(min_gain, Options),
+		   rr_tree:resampled_evaluate(NoResamples, MinGain)		   
+	    end,
+    Score = case get_opt(score, Options) of
+		info ->
+		    fun rr_tree:info/2;
+		gini ->
+		    fun rr_tree:gini/2
+	    end,
+    MaxDepth = get_opt(max_depth, Options),
+    MinEx = get_opt(min_example, Options),
     
     io:format("Evaluating '~s' using ~p trees on ~p cores \n", [InputFile, Classifiers, Cores]),
 
@@ -51,9 +90,9 @@ main(Args) ->
     io:format("TotalNoExamples: ~p ~n", [rr_example:count(Train)]),
     Conf = #rr_conf{
 	      cores = Cores,
-	      score = fun rr_tree:info/2,
-	      prune = rr_tree:example_depth_stop(2, 1000),
-	      evaluate = fun rr_tree:best_subset_evaluate_split/4,
+	      score = Score,
+	      prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
+	      evaluate = Eval,
 	      split = fun rr_tree:random_split/3,
 	      base_learner = {Classifiers, rr_tree},
 	      no_features = length(Features)},
@@ -83,6 +122,18 @@ get_opt(Arg, Fun1, {Options, _}) ->
 	false -> 
 	    Fun1()
     end.
+
+get_opt(Arg, Options) ->
+    get_opt(Arg, fun illegal/0, Options).
+
+%%
+%% Return true if Arg exist
+%%
+has_opt(Arg, {Options, _ }) ->
+    lists:any(fun (K) ->
+		      K == Arg
+	      end, Options).
+    
 
 show_information() -> 
     io_lib:format("Rule learner, Version (of ~s) ~p.~p.~s ~nAll rights reserved ~s", 
