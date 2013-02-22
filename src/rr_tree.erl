@@ -56,12 +56,10 @@ predict(Attributes, #rr_node{feature={{categoric, Id}, SplitValue}, nodes=Nodes}
     case Value == SplitValue of
 	true ->
 	    predict(Attributes, case Eq of
-				    false -> element(2, NotEq);
 				    {_, Node} -> Node
 				end, Conf);
 	false ->
 	    predict(Attributes, case NotEq of
-				    false -> element(2, Eq);
 				    {_, Node} -> Node
 				end, Conf)
     end;
@@ -72,12 +70,10 @@ predict(Attributes, #rr_node{feature={{numeric, Id}, T}, nodes=Nodes}, Conf) ->
     case Value >= T of
 	true ->
 	    predict(Attributes, case Gt of
-				    false -> element(2, Lt);
 				    {_, Node} -> Node
 				end, Conf);
 	false ->
 	    predict(Attributes, case Lt of
-				    false -> element(2, Gt);
 				    {_, Node} -> Node
 				end, Conf)
     end.
@@ -112,6 +108,7 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 	false ->
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
 		#rr_candidate{split=[{_, _}]} ->
+		    io:format("Hitting here\n"),
 		    make_leaf(Examples, rr_example:majority(Examples));
 		Candidate  -> 
 		    Nodes = build_decision_branches(Features, Candidate, Conf#rr_conf{depth=Depth + 1}),
