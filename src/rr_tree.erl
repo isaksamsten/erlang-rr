@@ -38,7 +38,7 @@ evaluate_model(Model, Examples, Conf) ->
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
-    Prediction = predict(rr_example:example(Example), Model, Conf),
+    Prediction = predict(Example, Model, Conf),
     predict_all(Actual, Rest, Model, Conf,
 		dict:update(Actual, fun (Predictions) ->
 					    [Prediction|Predictions]
@@ -157,7 +157,6 @@ resampled_evaluate(NoResamples) ->
     fun (Features, Examples, Total, #rr_conf{no_features=Features}) ->
 	    ok
     end.
-	    
     
 
 %%
@@ -167,7 +166,8 @@ resampled_evaluate(NoResamples) ->
 best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf) ->
     Log = round((math:log(NoFeatures) / math:log(2))) + 1,
     Features0 = rr_example:random_features(Features, Log),
-    evaluate_split(Features0, Examples, Total, Conf).
+    S = evaluate_split(Features0, Examples, Total, Conf),
+    S.
 
 
 
@@ -233,7 +233,7 @@ random_splitter(Alpha) ->
 %%
 %% Evaluate all Features to find the "best" according to "Score"
 %%
-evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->	
+evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->
     {_, T, ExSplit} = Split(F, Examples, Conf),
     evaluate_split(Features, Examples, Total, Conf, #rr_candidate{feature={F, T},
 								  score=Score(ExSplit, Total),

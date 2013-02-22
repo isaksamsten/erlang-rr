@@ -182,7 +182,7 @@ make_prediction([], _Base, _ExId, _Conf, Acc) ->
     Acc;
 make_prediction([Model|Models], Base, ExId, Conf, Acc) ->
     make_prediction(Models, Base, ExId, Conf,
-		    [Base:predict(rr_example:example(ExId), Model, Conf)|Acc]).
+		    [Base:predict(ExId, Model, Conf)|Acc]).
 
 %%
 %% Returns a random evaluator from 'rr_tree' with Probability 0 < p <=
