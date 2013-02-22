@@ -108,7 +108,6 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 	false ->
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
 		#rr_candidate{split=[{_, _}]} ->
-		    io:format("Hitting here\n"),
 		    make_leaf(Examples, rr_example:majority(Examples));
 		Candidate  -> 
 		    Nodes = build_decision_branches(Features, Candidate, Conf#rr_conf{depth=Depth + 1}),
