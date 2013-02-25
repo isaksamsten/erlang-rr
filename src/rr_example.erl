@@ -495,7 +495,9 @@ split_dataset(Examples, Ratio) ->
 
 suffle_dataset(Examples) ->
     lists:foldl(fun({Class, Count, Ids0}, Acc) ->
-			Ids = [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> {random:uniform(), Id} end, Ids0))],
+			Ids = [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> 
+										   {random:uniform(), Id} 
+									   end, Ids0))],
 			[{Class, Count, Ids}|Acc]
 		end, [], Examples).
 								 

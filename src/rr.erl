@@ -104,7 +104,10 @@ main(Args) ->
     io:format("Model accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
     Auc = rr_eval:auc(Dict, rr_example:count(Test)),
     io:format("Model AUC: ~p ~n", [Auc]),
-
+    
+    Brier = rr_eval:brier(Dict, rr_example:count(Test)),
+    io:format("Model Brier score: ~p ~n", [Brier]),
+    
     Now = now(),
     io:format(standard_error, "*** Model evaluated in ~p second(s)*** ~n", 
 	      [timer:now_diff(Now, Then) / 1000000]).    

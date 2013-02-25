@@ -9,7 +9,8 @@
 
 
 -export([accuracy/1,
-	 auc/2]).
+	 auc/2,
+	 brier/2]).
 
 accuracy(Predictions) ->
     {Correct, Incorrect} = correct(Predictions),
@@ -75,7 +76,23 @@ find_prob(Class, Probs) ->
 	false ->
 	    0
     end.
-    
 
+brier(Predictions, NoExamples) ->
+   calculate_brier_score_for_classes(dict:fetch_keys(Predictions), Predictions, 0) / NoExamples.
 
-    
+calculate_brier_score_for_classes([], _, Score) ->
+    Score;
+calculate_brier_score_for_classes([Actual|Rest], Predictions, Score) ->
+    calculate_brier_score_for_classes(Rest, Predictions, 
+				      calculate_brier_score(dict:fetch(Actual, Predictions), Actual, Score)).
+
+calculate_brier_score([], _, Score) ->
+    Score;
+calculate_brier_score([{_, Probs}|Rest], Actual, Score) ->
+    calculate_brier_score(Rest, Actual, lists:foldl(fun ({Class, Prob}, Acc) ->
+							    if Class == Actual ->
+								    Acc + math:pow(1 - Prob, 2);
+							       true ->
+								    Acc + math:pow(Prob, 2)
+							    end
+						    end, Score, Probs)).
