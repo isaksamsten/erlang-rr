@@ -10,7 +10,8 @@
 
 -export([accuracy/1,
 	 auc/2,
-	 brier/2]).
+	 brier/2,
+	 precision/1]).
 
 accuracy(Predictions) ->
     {Correct, Incorrect} = correct(Predictions),
@@ -96,3 +97,19 @@ calculate_brier_score([{_, Probs}|Rest], Actual, Score) ->
 								    Acc + math:pow(Prob, 2)
 							    end
 						    end, Score, Probs)).
+
+precision(Predictions) ->
+    precision_for_classes(dict:fetch_keys(Predictions), Predictions, []).
+
+precision_for_classes([], _, Acc) ->
+    Acc;
+precision_for_classes([Actual|Rest], Predictions, Acc) ->
+    {Tp, Fp} = lists:foldl(fun ({{Pred, _}, _}, {Tp, Fp}) ->
+				   if Pred == Actual ->
+					   {Tp + 1, Fp};
+				      true -> 
+					   {Tp, Fp + 1}
+				   end
+			   end, {0, 0}, dict:fetch(Actual, Predictions)),
+    precision_for_classes(Rest, Predictions, [{Actual, Tp / (Tp + Fp)}|Acc]).
+

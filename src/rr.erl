@@ -82,15 +82,14 @@ main(Args) ->
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
     
-    io:format("Evaluating '~s' using ~p trees on ~p cores \n", [InputFile, Classifiers, Cores]),
+    io:format("*** Evaluating '~s' using ~p trees on ~p cores *** \n", [InputFile, Classifiers, Cores]),
 
     Then = now(),
-    
+    random:seed(now()),
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
     Examples = rr_example:suffle_dataset(Examples0),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
-    io:format("TotalNoExamples: ~p ~n", [rr_example:count(Train)]),
     Conf = #rr_conf{
 	      cores = Cores,
 	      score = Score,
@@ -101,13 +100,23 @@ main(Args) ->
 	      no_features = length(Features)},
     Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
-    io:format("Model accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
-    Auc = rr_eval:auc(Dict, rr_example:count(Test)),
-    io:format("Model AUC: ~p ~n", [Auc]),
+    NoTestExamples = rr_example:count(Test),
+    io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
+
+    Auc = rr_eval:auc(Dict, NoTestExamples),
+    io:format("Area under ROC~n"),
+    lists:foreach(fun({Class, A}) ->
+			  io:format(" * ~s: ~p ~n", [Class, A])
+		  end, Auc),
+    io:format("Average:~p ~n", [lists:foldl(fun({_, P}, A) -> A + P / length(Auc) end, 0, Auc)]),
     
-    Brier = rr_eval:brier(Dict, rr_example:count(Test)),
-    io:format("Model Brier score: ~p ~n", [Brier]),
-    
+    io:format("Precision~n"),
+    lists:foreach(fun({Class, P}) ->
+			  io:format(" * ~s: ~p ~n", [Class, P])
+		  end, rr_eval:precision(Dict)),
+
+    Brier = rr_eval:brier(Dict, NoTestExamples),
+    io:format("Brier: ~p ~n", [Brier]),
     Now = now(),
     io:format(standard_error, "*** Model evaluated in ~p second(s)*** ~n", 
 	      [timer:now_diff(Now, Then) / 1000000]).    

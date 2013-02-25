@@ -32,7 +32,7 @@ predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
     {Prediction, Probs} = predict_majority(Model, Example, Conf),
-    io:format("~p \t ~p \t ~p \t ~p ~n", [Example, Actual, Prediction, Probs]),
+%    io:format("~p \t ~p \t ~p \t ~p ~n", [Example, Actual, Prediction, Probs]),
     predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
 								 [{Prediction, Probs}|Predictions]
 							 end, [{Prediction, Probs}], Dict)).
@@ -121,24 +121,30 @@ base_build_process(Coordinator, Base, Conf) ->
     random:seed({A,B,C}),
     base_build_process(Coordinator, Base, Conf, []).
 
-base_build_process(Coordinator, Base, Conf, Acc) ->
+base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_}, 
+					       evaluate=Evaluate,
+					       score=Score} = Conf, Acc) ->
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id, Features, Examples} ->
 	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples),
-	    Conf0 = Conf#rr_conf{evaluate = case Conf#rr_conf.evaluate of
+	    Conf0 = Conf#rr_conf{evaluate = case Evaluate of
 						{random, Prob} -> random_evaluator(Prob);
 						Fun -> Fun
 					    end},
-	    Conf1 = Conf0#rr_conf{score = case Conf0#rr_conf.score of
+	    Conf1 = Conf0#rr_conf{score = case Score of
 					     random ->
 						 random_score();
 					     Fun0 -> Fun0
 					 end},
 	    Model = Base:generate_model(Features, Bag, Conf1),
-%	    Dict = Base:evaluate_model(Model, OutBag, Conf1),
-
-%	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
+	    Rem = if T > 10 -> round(T/10); true -> T end,
+	    case Id rem Rem of
+		0 ->
+		    io:format("Building model ~p/~p ~n", [Id, T]);
+		_ ->
+		    ok
+	    end,
 	    base_build_process(Coordinator, Base, Conf, [Model|Acc]);
 	{completed, Coordinator} ->
 	    base_evaluator_process(Coordinator, self(), Base, Conf, Acc)
