@@ -101,7 +101,7 @@ main(Args) ->
     Then = now(),
     Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
-    Time = timer:now_diff(now(), Then) / 1000000
+    Time = timer:now_diff(now(), Then) / 1000000,
 
     NoTestExamples = rr_example:count(Test),
     io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
