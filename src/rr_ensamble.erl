@@ -141,7 +141,7 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 	    Rem = if T > 10 -> round(T/10); true -> T end,
 	    case Id rem Rem of
 		0 ->
-		    io:format("Building model ~p/~p ~n", [Id, T]);
+		    io:format(standard_error, "Building model ~p/~p ~n", [Id, T]);
 		_ ->
 		    ok
 	    end,

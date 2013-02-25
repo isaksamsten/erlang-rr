@@ -66,7 +66,7 @@ main(Args) ->
 	       log ->
 		   fun rr_tree:best_subset_evaluate_split/4;
 	       ntry ->
-		   NoFeatures = get_opt(no_features, Options),
+		   _NoFeatures = get_opt(no_features, Options),
 		   illegal();
 	       resample ->
 		   NoResamples = get_opt(no_resamples, Options),
@@ -82,9 +82,8 @@ main(Args) ->
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
     
-    io:format("*** Evaluating '~s' using ~p trees on ~p cores *** \n", [InputFile, Classifiers, Cores]),
+    io:format(standard_error, "*** Evaluating '~s' using ~p trees on ~p cores *** \n", [InputFile, Classifiers, Cores]),
 
-    Then = now(),
     random:seed(now()),
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
@@ -98,8 +97,12 @@ main(Args) ->
 	      split = fun rr_tree:random_split/3,
 	      base_learner = {Classifiers, rr_tree},
 	      no_features = length(Features)},
+
+    Then = now(),
     Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
+    Time = timer:now_diff(now(), Then) / 1000000
+
     NoTestExamples = rr_example:count(Test),
     io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
 
@@ -117,9 +120,8 @@ main(Args) ->
 
     Brier = rr_eval:brier(Dict, NoTestExamples),
     io:format("Brier: ~p ~n", [Brier]),
-    Now = now(),
-    io:format(standard_error, "*** Model evaluated in ~p second(s)*** ~n", 
-	      [timer:now_diff(Now, Then) / 1000000]).    
+    io:format("Time: ~p seconds ~n", [Time]),
+    io:format(standard_error, "*** Model evaluated in ~p second(s)*** ~n", [Time]).    
     
 
 %%
