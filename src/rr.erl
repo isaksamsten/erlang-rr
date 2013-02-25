@@ -104,6 +104,9 @@ main(Args) ->
     Time = timer:now_diff(now(), Then) / 1000000,
 
     NoTestExamples = rr_example:count(Test),
+    io:format("*** Start ***~n"),
+    io:format("File: ~p ~n", [InputFile]),
+    io:format("Trees: ~p ~n", [Classifiers]),
     io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
 
     Auc = rr_eval:auc(Dict, NoTestExamples),
@@ -121,6 +124,7 @@ main(Args) ->
     Brier = rr_eval:brier(Dict, NoTestExamples),
     io:format("Brier: ~p ~n", [Brier]),
     io:format("Time: ~p seconds ~n", [Time]),
+    io:format("*** End ***~n"),
     io:format(standard_error, "*** Model evaluated in ~p second(s)*** ~n", [Time]).    
     
 
