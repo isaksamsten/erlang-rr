@@ -161,7 +161,7 @@ weka_evaluate_split(Features, Examples, Total, Conf, NoFeatures) ->
     Cand = evaluate_split(Features0, Examples, Total, Conf),
     Gain = entropy(Examples) - Cand#rr_candidate.score,
     if Gain =< 0.001 ->
-	    weka_evaluate_split(ordset:subtract(Features, ordsets:from_list(Features0)),
+	    weka_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)),
 				Examples, Total, Conf, NoFeatures);
        true ->
 	    Cand
