@@ -96,7 +96,7 @@ main(Args) ->
 	      split = fun rr_tree:random_split/3,
 	      base_learner = {Classifiers, rr_tree},
 	      no_features = length(Features)},
-    Model = rr_ensamble:generate_model(Features, Train, Conf),
+    Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
 
     io:format("Model accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
