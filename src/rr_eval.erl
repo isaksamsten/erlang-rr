@@ -8,7 +8,8 @@
 -module(rr_eval).
 
 
--export([accuracy/1]).
+-export([accuracy/1,
+	 auc/2]).
 
 accuracy(Predictions) ->
     {Correct, Incorrect} = correct(Predictions),
@@ -17,10 +18,64 @@ accuracy(Predictions) ->
 
 correct(Predictions) ->
     dict:fold(fun (Actual, Values, Acc) ->
-		      lists:foldl(fun({Predict, _},  {C, I}) ->
+		      lists:foldl(fun({{Predict, _}, _Probs},  {C, I}) ->
 					  case Actual == Predict of
 					      true -> {C+1, I};
 					      false -> {C, I+1}
 					  end
 				  end, Acc, Values)
 	      end, {0, 0}, Predictions).
+
+auc(Predictions, NoExamples) ->
+    calculate_auc_for_classes(dict:fetch_keys(Predictions), Predictions, NoExamples, []).
+
+calculate_auc_for_classes([], _, _, Acc) ->
+    Acc;
+calculate_auc_for_classes([Pos|Rest], Predictions, NoExamples, Auc) ->
+    PosEx = dict:fetch(Pos, Predictions),
+    Sorted = sorted_predictions(
+	       lists:map(fun ({_, P}) -> {pos, find_prob(Pos, P)} end, PosEx), 
+	       dict:fold(fun(Class, Values, Acc) ->
+				 if Class /= Pos ->
+					 lists:foldl(fun({_, P}, Acc0) ->
+							     [{neg, find_prob(Pos, P)}|Acc0] 
+						     end, Acc, Values);
+				    true ->
+					 Acc
+				 end
+			 end, [], Predictions)),
+    NoPosEx = length(PosEx),
+    calculate_auc_for_classes(Rest, Predictions, NoExamples, 
+			      [{Pos, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
+						   NoPosEx, NoExamples - NoPosEx, 0)}|Auc]).
+
+calculate_auc([], _Tp, _Fp, Tp_prev, Fp_prev, _Prob_prev, NoPos, NoNeg, Auc) ->
+    (Auc + abs(NoNeg - Fp_prev) * (NoPos + Tp_prev)/2)/(NoPos * NoNeg);
+calculate_auc([{Class, Prob}|Rest], Tp, Fp, Tp_prev, Fp_prev, OldProb, NoPos, NoNeg, Auc) ->
+    {NewAuc, NewProb, NewFp_p, NewTp_p} = if Prob /= OldProb ->
+					      {Auc + abs(Fp - Fp_prev) * (Tp + Tp_prev) / 2, Prob, Fp, Tp};
+					 true ->
+					      {Auc, OldProb, Fp_prev, Tp_prev}
+				      end,
+    {NewTp, NewFp} = if Class == pos ->
+			     {Tp + 1, Fp};
+			true ->
+			     {Tp, Fp + 1}
+		     end,
+    calculate_auc(Rest, NewTp, NewFp, NewTp_p, NewFp_p, NewProb, NoPos, NoNeg, NewAuc).
+					      
+
+sorted_predictions(Pos, Neg) ->
+    lists:sort(fun({_, A}, {_, B}) -> A > B end, Pos ++ Neg).
+
+find_prob(Class, Probs) ->
+    case lists:keyfind(Class, 1, Probs) of
+	{Class, Prob} ->
+	    Prob;
+	false ->
+	    0
+    end.
+    
+
+
+    

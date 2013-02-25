@@ -473,12 +473,13 @@ generate_featurestrap(N, Length, Set) ->
 %%						    
 random_features(Features, Subset) ->
     Strap = generate_featurestrap(Features, Subset),
-    lists:foldl(fun({Type, Id}, Acc) ->
-			case sets:is_element(Id, Strap) of
-			    true -> [{Type, Id}|Acc];
-			    false -> Acc
-			end
-		end, [], Features).    
+    {_, F} = lists:foldl(fun({Type, Id}, {Index, Acc}) ->
+				 case sets:is_element(Index, Strap) of
+				     true -> {Index + 1, [{Type, Id}|Acc]};
+				     false -> {Index + 1, Acc}
+				 end
+			 end, {1, []}, Features),
+    F.
 
 %%
 %% Return the dataset splitted into {Train, Test} with "Ratio"

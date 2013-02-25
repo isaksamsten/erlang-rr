@@ -34,8 +34,8 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
     {Prediction, Probs} = predict_majority(Model, Example, Conf),
     io:format("~p \t ~p \t ~p \t ~p ~n", [Example, Actual, Prediction, Probs]),
     predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
-								 [Prediction|Predictions]
-							 end, [Prediction], Dict)).
+								 [{Prediction, Probs}|Predictions]
+							 end, [{Prediction, Probs}], Dict)).
 %%
 %% Predict 
 %%
@@ -136,9 +136,9 @@ base_build_process(Coordinator, Base, Conf, Acc) ->
 					     Fun0 -> Fun0
 					 end},
 	    Model = Base:generate_model(Features, Bag, Conf1),
-	    Dict = Base:evaluate_model(Model, OutBag, Conf1),
+%	    Dict = Base:evaluate_model(Model, OutBag, Conf1),
 
-	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
+%	    io:format("Building model ~p (OOB accuracy: ~p) ~n", [Id, rr_eval:accuracy(Dict)]),
 	    base_build_process(Coordinator, Base, Conf, [Model|Acc]);
 	{completed, Coordinator} ->
 	    base_evaluator_process(Coordinator, self(), Base, Conf, Acc)

@@ -18,28 +18,30 @@
 -include("rr_tree.hrl").
 
 cmd_spec() ->
-    [{help,           $h,          "help",      undefined,
+    [{help,           $h,           "help",         undefined,
       "Show this help"},
-     {input_file,     $i,          "input",     string, 
+     {input_file,     $i,           "input",        string, 
       "Input data set"},
-     {classifiers,    $m,          undefined,   {integer, 10},
+     {classifiers,    $m,           undefined,     {integer, 10},
       "Number of rulesets to generate"},
-     {cores,          $c,           undefined,  {integer, erlang:system_info(schedulers)},
+     {cores,          $c,           undefined,     {integer, erlang:system_info(schedulers)},
       "Number of cores to use when evaluating and building the model"},
-     {split,          $s,           undefined,  {float, 0.66},
+     {split,          $s,           undefined,     {float, 0.66},
       "Spliting ratio Train/Test"},
-     {score,          undefined,    "score",    {atom, info},
+     {score,          undefined,    "score",       {atom, info},
       "Scoring function"},
-     {eval,           undefined,    "eval",     {atom, log},
-      "Feature evaluation strategies"},
-     {max_depth,      undefined,    "depth",    {integer, 1000},
+     {eval,           undefined,    "eval",        {atom, log},
+      "Feature evaluation strategies (log/resample/mtry)"},
+     {max_depth,      undefined,    "depth",       {integer, 1000},
       "Max depth of single decision tree"},
-     {min_example,    undefined,    "examples", {integer, 2},
+     {min_example,    undefined,    "examples",    {integer, 2},
       "Min number of examples allowed in split"},
-     {no_resamples,   undefined,    "resample", {integer, 6},
+     {no_resamples,   undefined,    "resample",    {integer, 6},
       "Resample N random features K times if gain =< min-gain"},
-     {min_gain,       undefined,    "min-gain", {float, 0},
-      "If eval=resample, min-gain controls the minimum allowed gain for not resampling"}
+     {min_gain,       undefined,    "min-gain",    {float, 0},
+      "If eval=resample, min-gain controls the minimum allowed gain for not resampling"},
+     {no_features,    undefined,    "no-features", {integer, 1},
+      "If eval=mtry, no-features controls the number of features to inspect at each split"}
     ].
 
 main(Args) ->
@@ -64,6 +66,7 @@ main(Args) ->
 	       log ->
 		   fun rr_tree:best_subset_evaluate_split/4;
 	       ntry ->
+		   NoFeatures = get_opt(no_features, Options),
 		   illegal();
 	       resample ->
 		   NoResamples = get_opt(no_resamples, Options),
@@ -98,8 +101,10 @@ main(Args) ->
 	      no_features = length(Features)},
     Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
-
     io:format("Model accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
+    Auc = rr_eval:auc(Dict, rr_example:count(Test)),
+    io:format("Model AUC: ~p ~n", [Auc]),
+
     Now = now(),
     io:format(standard_error, "*** Model evaluated in ~p second(s)*** ~n", 
 	      [timer:now_diff(Now, Then) / 1000000]).    

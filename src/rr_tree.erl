@@ -133,16 +133,21 @@ resampled_evaluate(NoResamples, Delta) ->
 	    resampled_subset_evaluate_split(Features, Examples, Total, Conf, NoResamples, Delta)
     end.
     
+resampled_subset_evaluate_split(_Features, _Examples, _Total, #rr_conf{no_features=0}, _, _) ->
+    no_information;
 resampled_subset_evaluate_split(_Features, _Examples, _Total, _Conf, 0, _) ->
     no_information;
-resampled_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf, NoResamples, Delta) ->
+resampled_subset_evaluate_split(Features, Examples, Total, 
+				#rr_conf{no_features=NoFeatures} = Conf, NoResamples, Delta) ->
     Log = round(math:log(NoFeatures) / math:log(2)) + 1,
     Features0 = rr_example:random_features(Features, Log),
     Cand = evaluate_split(Features0, Examples, Total, Conf),
 
     Gain = abs(entropy(Examples) - Cand#rr_candidate.score),
     if  Gain =< Delta ->
-	    resampled_subset_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)), Examples, Total, Conf, NoResamples - 1, Delta);
+	    resampled_subset_evaluate_split(Features, 
+					    Examples, Total, Conf, 
+					    NoResamples - 1, Delta);
 	true ->
 	    Cand
     end.
