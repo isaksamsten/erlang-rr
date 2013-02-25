@@ -145,8 +145,8 @@ resampled_subset_evaluate_split(Features, Examples, Total,
 
     Gain = abs(entropy(Examples) - Cand#rr_candidate.score),
     if  Gain =< Delta ->
-	    resampled_subset_evaluate_split(Features, 
-					    Examples, Total, Conf, 
+	    resampled_subset_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)), 
+					    Examples, Total, Conf#rr_conf{no_features=NoFeatures - Log}, 
 					    NoResamples - 1, Delta);
 	true ->
 	    Cand
