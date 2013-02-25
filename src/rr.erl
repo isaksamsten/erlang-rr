@@ -66,8 +66,8 @@ main(Args) ->
 	       log ->
 		   fun rr_tree:best_subset_evaluate_split/4;
 	       ntry ->
-		   _NoFeatures = get_opt(no_features, Options),
-		   illegal();
+		   NoFeatures = get_opt(no_features, Options),
+		   rr_tree:weka_evaluate(NoFeatures);
 	       resample ->
 		   NoResamples = get_opt(no_resamples, Options),
 		   MinGain = get_opt(min_gain, Options),

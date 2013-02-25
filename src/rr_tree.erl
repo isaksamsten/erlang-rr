@@ -67,12 +67,6 @@ predict(Attributes, #rr_node{feature={{numeric, Id}, T}, left=Left, right=Right}
     end.
 	    
 %% 
-%% TODO: 
-%%    * implement support for resampling (if no attribute contains any information),
-%%      this could (possibly) be done by implementing a new Evaluate-function 
-%%      (resampled_evaluate(Evaluation, Resample))
-%%    * make the function tail recursive (for improved performance)
-%%    
 %% Build a decision tree node from "Features" and "Examples"
 %%  if |Feature| == 0 and |Examples| == 0: make_error_node  
 %%  if |Feature| == 0: make_leaf majority(Examples)
@@ -107,13 +101,14 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
     end.
 
 %%
-%% Create a decision node
+%% Create a decision node, on "Feature" scoring "Score",
+%% having "Left" and "Right" branches
 %%
 make_node(Feature, Score, Left, Right) ->
     #rr_node{score=Score, feature=Feature, left=Left, right=Right}.
 
 %%
-%% Create a leaf node which predicts Class
+%% Create a leaf node which predicts "Class"
 %%
 make_leaf([], Class) ->
     #rr_leaf{score=0, distribution={0, 0}, class=Class};
@@ -128,11 +123,15 @@ laplace(C, N) ->
     (C+1)/(N+2).
 
 
+%%
+%% Return a functions which resamples log(Features) + 1 k times if arg
+%% max gain(Features) < Delta
+%%
 resampled_evaluate(NoResamples, Delta) ->
     fun (Features, Examples, Total, Conf) ->
 	    resampled_subset_evaluate_split(Features, Examples, Total, Conf, NoResamples, Delta)
     end.
-    
+
 resampled_subset_evaluate_split(_Features, _Examples, _Total, #rr_conf{no_features=0}, _, _) ->
     no_information;
 resampled_subset_evaluate_split(_Features, _Examples, _Total, _Conf, 0, _) ->
@@ -151,6 +150,23 @@ resampled_subset_evaluate_split(Features, Examples, Total,
 	true ->
 	    Cand
     end.
+
+weka_evaluate(NoFeatures) ->
+    fun(Features, Examples, Total, Conf) ->
+	    weka_evaluate_split(Features, Examples, Total, Conf, NoFeatures)
+    end.
+
+weka_evaluate_split(Features, Examples, Total, Conf, NoFeatures) ->
+    Features0 = rr_example:random_features(Features, NoFeatures),
+    Cand = evaluate_split(Features0, Examples, Total, Conf),
+    Gain = entropy(Examples) - Cand#rr_candidate.score,
+    if Gain =< 0.001 ->
+	    weka_evaluate_split(ordset:subtract(Features, ordsets:from_list(Features0)),
+				Examples, Total, Conf, NoFeatures);
+       true ->
+	    Cand
+    end.
+
 
 %%
 %% Evaluate log2(|Features|) + 1 to find the attribute that splits the
@@ -207,10 +223,10 @@ deterministic_split(Feature, Examples, _) ->
     rr_example:split(Feature, Examples).
 
 %%
-%% If random:uniform() =< "Alpha" select the best split
-%% deterministically, otherwise select randomly
+%% If random:uniform() =< "Alpha": select the best split
+%% deterministically, otherwise select a split randomly
 %%
-random_splitter(Alpha) ->
+random_split(Alpha) ->
     fun (Feature, Examples, Conf) ->
 	    Random = random:uniform(),
 	    if Random =< Alpha ->
@@ -221,7 +237,7 @@ random_splitter(Alpha) ->
     end.
 
 %%
-%% Evaluate all Features to find the "best" according to "Score"
+%% Evaluate all "Features" to find the "best" according to "Score"
 %%
 evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->
     {_, T, ExSplit} = Split(F, Examples, Conf),
@@ -230,7 +246,7 @@ evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split}
 								  split=ExSplit}).
 
 %%
-%% Evaluate a list of candidates
+%% Evaluate a list of candidate split points.
 %%
 evaluate_split([], _, _, _, Acc) ->
     Acc;

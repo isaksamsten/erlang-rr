@@ -13,11 +13,20 @@
 	 brier/2,
 	 precision/1]).
 
+%%
+%% Calculate the accuracy (i.e. the percentage of correctly classified
+%% examples)
+%%
+%% Output: float() -> [0, 1]
+%%
 accuracy(Predictions) ->
     {Correct, Incorrect} = correct(Predictions),
     Correct / (Correct + Incorrect).
 
-
+%%
+%% Return a tuple() containing number of {Correct, Incorrect}
+%% predictions
+%%
 correct(Predictions) ->
     dict:fold(fun (Actual, Values, Acc) ->
 		      lists:foldl(fun({{Predict, _}, _Probs},  {C, I}) ->
@@ -28,6 +37,12 @@ correct(Predictions) ->
 				  end, Acc, Values)
 	      end, {0, 0}, Predictions).
 
+%%
+%% Calculate the area under ROC for predictions (i.e. the ability of
+%% the model to rank true positives ahead of false positives)
+%%
+%% Output: [{c1, a1}, ..., {ci, ai}]
+%%
 auc(Predictions, NoExamples) ->
     calculate_auc_for_classes(dict:fetch_keys(Predictions), Predictions, NoExamples, []).
 
@@ -66,10 +81,12 @@ calculate_auc([{Class, Prob}|Rest], Tp, Fp, Tp_prev, Fp_prev, OldProb, NoPos, No
 		     end,
     calculate_auc(Rest, NewTp, NewFp, NewTp_p, NewFp_p, NewProb, NoPos, NoNeg, NewAuc).
 					      
-
 sorted_predictions(Pos, Neg) ->
     lists:sort(fun({_, A}, {_, B}) -> A > B end, Pos ++ Neg).
 
+%%
+%% Find probability for predicting "Class" in range [0, 1]
+%%
 find_prob(Class, Probs) ->
     case lists:keyfind(Class, 1, Probs) of
 	{Class, Prob} ->
@@ -78,6 +95,13 @@ find_prob(Class, Probs) ->
 	    0
     end.
 
+%%
+%% Calculate the brier score for predictions (i.e. the mean square
+%% difference between the predicted probability assigned to the
+%% possible outcomes and the actual outcome)
+%%
+%% Output: float() -> [0, 1]
+%%
 brier(Predictions, NoExamples) ->
    calculate_brier_score_for_classes(dict:fetch_keys(Predictions), Predictions, 0) / NoExamples.
 
@@ -98,6 +122,11 @@ calculate_brier_score([{_, Probs}|Rest], Actual, Score) ->
 							    end
 						    end, Score, Probs)).
 
+%%
+%% Calculate the precision when predicting each class
+%%
+%% Output: [{c1, p1}, ..., {ci, pi}]
+%%
 precision(Predictions) ->
     precision_for_classes(dict:fetch_keys(Predictions), Predictions, []).
 
