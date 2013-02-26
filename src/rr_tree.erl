@@ -183,7 +183,7 @@ weka_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoTotal} = C
 subset_evaluate(NoFeatures) ->
     fun (Features, Examples, Total, Conf) ->
 	    Features0 = rr_example:random_features(Features, NoFeatures),
-	    evaluate_split(Features0, Examples, Total, Conf).	    
+	    evaluate_split(Features0, Examples, Total, Conf)
     end.
 
 %%
