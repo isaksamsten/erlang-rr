@@ -124,30 +124,37 @@ laplace(C, N) ->
 %% Return a functions which resamples log(Features) + 1 k times if arg
 %% max gain(Features) < Delta
 %%
-resampled_evaluate(NoResamples, Delta) ->
+resampled_evaluate(NoResamples, NoFeatures, Delta) ->
     fun (Features, Examples, Total, Conf) ->
-	    resampled_subset_evaluate_split(Features, Examples, Total, Conf, NoResamples, Delta)
+	    resampled_subset_evaluate_split(Features, Examples, Total, Conf, NoResamples, Delta, NoFeatures)
     end.
 
-resampled_subset_evaluate_split(_Features, _Examples, _Total, #rr_conf{no_features=0}, _, _) ->
+resampled_subset_evaluate_split(_Features, _Examples, _Total, 
+				#rr_conf{no_features=NoFeatures}, _, _, _) when NoFeatures =< 0 ->
     no_information;
-resampled_subset_evaluate_split(_Features, _Examples, _Total, _Conf, 0, _) ->
+resampled_subset_evaluate_split(_Features, _Examples, _Total, _Conf, 0, _, _) ->
     no_information;
 resampled_subset_evaluate_split(Features, Examples, Total, 
-				#rr_conf{no_features=NoFeatures} = Conf, NoResamples, Delta) ->
-    Log = round(math:log(NoFeatures) / math:log(2)) + 1,
-    Features0 = rr_example:random_features(Features, Log),
+				#rr_conf{no_features=NoFeatures} = Conf, NoResamples, Delta, Log) ->
+    Features0 = if NoFeatures =< Log ->
+			Features;
+		   true ->
+			rr_example:random_features(Features, Log)
+		end,
     Cand = evaluate_split(Features0, Examples, Total, Conf),
 
     Gain = abs(entropy(Examples) - Cand#rr_candidate.score),
     if  Gain =< Delta ->
 	    resampled_subset_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)), 
 					    Examples, Total, Conf#rr_conf{no_features=NoFeatures - Log}, 
-					    NoResamples - 1, Delta);
+					    NoResamples - 1, Delta, Log);
 	true ->
 	    Cand
     end.
 
+%%
+%% Uses the same algorithm as Weka for resampling non-informative
+%% 
 weka_evaluate(NoFeatures) ->
     fun(Features, Examples, Total, Conf) ->
 	    weka_evaluate_split(Features, Examples, Total, Conf, NoFeatures)
@@ -170,16 +177,17 @@ weka_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoTotal} = C
 	    Cand
     end.
 
+subset_evaluate(NoFeatures) ->
+    fun (Features, Examples, Total, Conf) ->
+	    best_subset_evaluate_split(Features, Examples, Total, Conf, NoFeatures)
+    end.
 
 %%
 %% Evaluate log2(|Features|) + 1 to find the attribute that splits the
 %% dataset best
 %%
-%% TODO: investigate "round()" or "trunc()"
-%% 
-best_subset_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf) ->
-    Log = round(math:log(NoFeatures) / math:log(2)) + 1,
-    Features0 = rr_example:random_features(Features, Log),
+best_subset_evaluate_split(Features, Examples, Total, Conf, NoFeatures) ->
+    Features0 = rr_example:random_features(Features, NoFeatures),
     evaluate_split(Features0, Examples, Total, Conf).
 
 %%
@@ -194,21 +202,6 @@ random_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures
 %%
 best_evaluate_split(Features, Examples, Total, Conf) ->
     evaluate_split(Features, Examples, Total, Conf).
-
-
-%%
-%% Randomly select an evalation method If alpha == 0 only select
-%% splits at random, if == 1 only select the log2 best split 
-%%
-random_evaluator(Alpha) ->
-    fun (Features, Examples, Total, Conf) ->
-	    Random = random:uniform(),
-	    if Random =< Alpha ->
-		    random_evaluate_split(Features, Examples, Total, Conf);
-	       true ->
-		    best_subset_evaluate_split(Features, Examples, Total, Conf)
-	    end
-    end.
 
 %%
 %% Randomly split Example set on Feature by randomly selecting a

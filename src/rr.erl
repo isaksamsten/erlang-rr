@@ -17,36 +17,42 @@
 
 -include("rr_tree.hrl").
 
-cmd_spec() ->
-    [{help,           $h,           "help",         undefined,
-      "Show this help"},
-     {input_file,     $i,           "input",        string, 
-      "Input data set"},
-     {classifiers,    $m,           undefined,     {integer, 10},
-      "Number of rulesets to generate"},
-     {cores,          $c,           undefined,     {integer, erlang:system_info(schedulers)},
-      "Number of cores to use when evaluating and building the model"},
-     {split,          $s,           undefined,     {float, 0.66},
-      "Spliting ratio Train/Test"},
-     {score,          undefined,    "score",       {atom, info},
-      "Scoring function"},
-     {eval,           undefined,    "eval",        {atom, log},
-      "Feature evaluation strategies (log/resample/mtry)"},
-     {max_depth,      undefined,    "depth",       {integer, 1000},
-      "Max depth of single decision tree"},
-     {min_example,    undefined,    "examples",    {integer, 2},
-      "Min number of examples allowed in split"},
-     {no_resamples,   undefined,    "resample",    {integer, 6},
-      "Resample N random features K times if gain =< min-gain"},
-     {min_gain,       undefined,    "min-gain",    {float, 0},
-      "If eval=resample, min-gain controls the minimum allowed gain for not resampling"},
-     {no_features,    undefined,    "no-features", {integer, 1},
-      "If eval=mtry, no-features controls the number of features to inspect at each split"}
-    ].
+-define(CMD_SPEC,
+	[{help,           $h,           "help",         undefined,
+	  "Show this help"},
+	 {input_file,     $i,           "input",        string, 
+	  "Input data set"},
+	 {cores,          $c,           undefined,     {integer, erlang:system_info(schedulers)},
+	  "Number of cores to use when evaluating and building the model"},
+	 {split,          $s,           undefined,     {float, 0.66},
+	  "Spliting ratio Train/Test"},
+	 {score,          undefined,    "score",       {atom, info},
+	  "Measure for evaluating the goodness of a split"},
+
+	 {classifiers,    $m,           "no-trees",     {integer, 10},
+	  "Number of trees to generate"},
+
+	 {max_depth,      undefined,    "max-depth",       {integer, 1000},
+	  "Max depth of single decision tree"},
+	 {min_example,    undefined,    "min-examples",    {integer, 2},
+	  "Min number of examples allowed in split"},
+
+	 {weka,           undefined,    "weka",        undefined,
+	  "Same as --resample, however with K=inf"},
+	 {resample,       undefined,    "resample",    undefined,
+	  "Resample N random features K times if gain =< min-gain"},
+
+	 {no_resamples,   undefined,    "no-resample", {integer, 6},
+	  "Number of times to resample, if best gain =< --min-gain"},
+	 {min_gain,       undefined,    "min-gain",    {float, 0},
+	  "Controls the minimum allowed gain for not resampling"},
+	 {no_features,    undefined,    "no-features", {integer, -1},
+	  "Control the number of features to inspect at each split"}
+	]).
 
 main(Args) ->
     rr_example:init(),
-    Options = case getopt:parse(cmd_spec(), Args) of
+    Options = case getopt:parse(?CMD_SPEC, Args) of
 		  {ok, Parsed} -> 
 		      Parsed;
 		  {error, _} ->
@@ -59,20 +65,37 @@ main(Args) ->
 	    ok
     end,
     InputFile = get_opt(input_file, Options),
-    Classifiers = get_opt(classifiers, Options),
-    Cores = get_opt(cores, Options),
     Split = get_opt(split, Options),
-    Eval = case get_opt(eval, Options) of
-	       log ->
-		   fun rr_tree:best_subset_evaluate_split/4;
-	       ntry ->
-		   NoFeatures = get_opt(no_features, Options),
-		   rr_tree:weka_evaluate(NoFeatures);
-	       resample ->
-		   NoResamples = get_opt(no_resamples, Options),
-		   MinGain = get_opt(min_gain, Options),
-		   rr_tree:resampled_evaluate(NoResamples, MinGain)		   
+    Cores = get_opt(cores, Options),
+        
+    io:format(standard_error, "*** Loading '~s' on ~p core(s) *** \n", [InputFile, Cores]),
+
+    random:seed(now()),
+    Csv = csv:reader(InputFile),
+    {Features, Examples0} = rr_example:load(Csv, Cores),
+    TotalNoFeatures = length(Features),
+
+    Examples = rr_example:suffle_dataset(Examples0),
+    {Train, Test} = rr_example:split_dataset(Examples, Split),
+
+    NoFeatures = case get_opt(no_features, Options) of
+		     X when X =< 0 ->
+			 round(math:log(TotalNoFeatures)/math:log(2)) + 1;
+		     X ->
+			 X
+		 end,	
+    Classifiers = get_opt(classifiers, Options),
+    Eval = case any_opt([weka, resample], Options) of
+		weka ->
+		    rr_tree:weka_evaluate(NoFeatures);
+		resample ->
+		    NoResamples = get_opt(no_resamples, Options),
+		    MinGain = get_opt(min_gain, Options),
+		    rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
+		false ->
+		   rr_tree:subset_evaluate(NoFeatures)
 	    end,
+
     Score = case get_opt(score, Options) of
 		info ->
 		    fun rr_tree:info/2;
@@ -81,14 +104,7 @@ main(Args) ->
 	    end,
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
-    
-    io:format(standard_error, "*** Evaluating '~s' using ~p trees on ~p cores *** \n", [InputFile, Classifiers, Cores]),
 
-    random:seed(now()),
-    Csv = csv:reader(InputFile),
-    {Features, Examples0} = rr_example:load(Csv, Cores),
-    Examples = rr_example:suffle_dataset(Examples0),
-    {Train, Test} = rr_example:split_dataset(Examples, Split),
     Conf = #rr_conf{
 	      cores = Cores,
 	      score = Score,
@@ -96,17 +112,22 @@ main(Args) ->
 	      evaluate = Eval,
 	      split = fun rr_tree:random_split/3,
 	      base_learner = {Classifiers, rr_tree},
-	      no_features = length(Features)},
+	      no_features = TotalNoFeatures },
+    io:format(standard_error, "*** Building model using ~p trees and ~p features *** ~n",
+	      [Classifiers, NoFeatures]),
 
     Then = now(),
     Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
     Time = timer:now_diff(now(), Then) / 1000000,
-
+    io:format(standard_error, "*** Model build in ~p second(s)*** ~n", [Time]),
+    io:format(standard_error, "*** Evaluating model using test set *** ~n~n", []),
+    
     NoTestExamples = rr_example:count(Test),
     io:format("*** Start ***~n"),
     io:format("File: ~p ~n", [InputFile]),
     io:format("Trees: ~p ~n", [Classifiers]),
+    io:format("Features: ~p ~n", [NoFeatures]),
     io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
 
     Auc = rr_eval:auc(Dict, NoTestExamples),
@@ -124,15 +145,13 @@ main(Args) ->
     Brier = rr_eval:brier(Dict, NoTestExamples),
     io:format("Brier: ~p ~n", [Brier]),
     io:format("Time: ~p seconds ~n", [Time]),
-    io:format("*** End ***~n"),
-    io:format(standard_error, "*** Model evaluated in ~p second(s)*** ~n", [Time]).    
-    
+    io:format("*** End ***~n").   
 
 %%
 %% Halts the program if illegal arguments are supplied
 %%
 illegal() ->
-    getopt:usage(cmd_spec(), "rr"),
+    getopt:usage(?CMD_SPEC, "rr"),
     halt().
 
 %%
@@ -148,6 +167,17 @@ get_opt(Arg, Fun1, {Options, _}) ->
 
 get_opt(Arg, Options) ->
     get_opt(Arg, fun illegal/0, Options).
+
+any_opt([], _) ->
+    false;
+any_opt([O|Rest], Options) ->
+    case has_opt(O, Options) of
+	true ->
+	    O;
+	false ->
+	    any_opt(Rest, Options)
+    end.
+
 
 %%
 %% Return true if Arg exist
