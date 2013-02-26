@@ -116,9 +116,6 @@ make_leaf(Covered, {Class, C}) ->
     N = rr_example:count(Covered),
     #rr_leaf{score=laplace(C, N), distribution={C, N-C}, class=Class}.
 
-%%
-%% Calculates the laplace estimate for C and N
-%%
 laplace(C, N) ->
     (C+1)/(N+2).
 
@@ -156,13 +153,19 @@ weka_evaluate(NoFeatures) ->
 	    weka_evaluate_split(Features, Examples, Total, Conf, NoFeatures)
     end.
 
-weka_evaluate_split(Features, Examples, Total, Conf, NoFeatures) ->
-    Features0 = rr_example:random_features(Features, NoFeatures),
+weka_evaluate_split(_, _, _, #rr_conf{no_features=NoTotal}, _) when NoTotal =< 0 ->
+    no_information;
+weka_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoTotal} = Conf, NoFeatures) ->
+    Features0 = if NoTotal =< NoFeatures ->
+			Features;
+		   true -> 
+			rr_example:random_features(Features, NoFeatures)
+		end,
     Cand = evaluate_split(Features0, Examples, Total, Conf),
     Gain = entropy(Examples) - Cand#rr_candidate.score,
-    if Gain =< 0.001 ->
+    if Gain =< 0.000001 ->
 	    weka_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)),
-				Examples, Total, Conf, NoFeatures);
+				Examples, Total, Conf#rr_conf{no_features=NoTotal - NoFeatures}, NoFeatures);
        true ->
 	    Cand
     end.
