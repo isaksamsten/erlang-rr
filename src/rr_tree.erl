@@ -170,25 +170,21 @@ weka_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoTotal} = C
 		end,
     Cand = evaluate_split(Features0, Examples, Total, Conf),
     Gain = entropy(Examples) - Cand#rr_candidate.score,
-    if Gain =< 0.000001 ->
+    if Gain =< 0.0 ->
 	    weka_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)),
 				Examples, Total, Conf#rr_conf{no_features=NoTotal - NoFeatures}, NoFeatures);
        true ->
 	    Cand
     end.
 
+%% 
+%% Evaluate a subset of "NoFeatures" features
+%%
 subset_evaluate(NoFeatures) ->
     fun (Features, Examples, Total, Conf) ->
-	    best_subset_evaluate_split(Features, Examples, Total, Conf, NoFeatures)
+	    Features0 = rr_example:random_features(Features, NoFeatures),
+	    evaluate_split(Features0, Examples, Total, Conf).	    
     end.
-
-%%
-%% Evaluate log2(|Features|) + 1 to find the attribute that splits the
-%% dataset best
-%%
-best_subset_evaluate_split(Features, Examples, Total, Conf, NoFeatures) ->
-    Features0 = rr_example:random_features(Features, NoFeatures),
-    evaluate_split(Features0, Examples, Total, Conf).
 
 %%
 %% Evalate one randomly selected feature
