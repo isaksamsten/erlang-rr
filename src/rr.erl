@@ -8,10 +8,10 @@
 -compile(export_all).
 -author('isak-kar@dsv.su.se').
 
--define(DATE, "2013-02-10").
--define(MAJOR_VERSION, 0).
--define(MINOR_VERSION, 1).
--define(REVISION, 'beta-3').
+-define(DATE, "2013-02-26").
+-define(MAJOR_VERSION, "0").
+-define(MINOR_VERSION, "1").
+-define(REVISION, "0.1").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 
@@ -20,6 +20,8 @@
 -define(CMD_SPEC,
 	[{help,           $h,           "help",         undefined,
 	  "Show this help"},
+	 {version,        $v,           "version",      undefined,
+	  "Show the version"},
 	 {input_file,     $i,           "input",        string, 
 	  "Input data set"},
 	 {cores,          $c,           undefined,     {integer, erlang:system_info(schedulers)},
@@ -58,10 +60,13 @@ main(Args) ->
 		  {error, _} ->
 		      illegal()		      
 	      end,
-    case has_opt(help, Options) of
-	true ->
+    case any_opt([help, version], Options) of
+	help ->
 	    illegal();
-	_ ->
+	version ->
+	    io:format(show_information()),
+	    halt();
+	false ->
 	    ok
     end,
     InputFile = get_opt(input_file, Options),
@@ -189,5 +194,7 @@ has_opt(Arg, {Options, _ }) ->
     
 
 show_information() -> 
-    io_lib:format("Rule learner, Version (of ~s) ~p.~p.~s ~nAll rights reserved ~s", 
-		  [?DATE, ?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?AUTHOR]).
+    io_lib:format("rr (Random Rule Learner) ~s.~s.~s (build date: ~s)
+Copyright (C) 2013+ ~s
+
+Written by ~s", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
