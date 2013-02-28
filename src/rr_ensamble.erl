@@ -15,7 +15,7 @@
 generate_model(Features, Examples, #rr_conf{
 				      base_learner = {Classifiers, Base},
 				      cores = Cores} = Conf) ->
-    ets:new(predictions, [public, named_table]),
+%    ets:new(predictions, [public, named_table]),
     spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf).
     
 

@@ -366,7 +366,7 @@ count(Class, Examples) ->
     end.
 
 majority(Examples) ->
-    {Class, Count, _} = lists:foldl(fun({Class, Count, _}, {OldClass, OldCount, _} = Old) ->
+    {Class, Count, _} = lists:foldl(fun({Class, Count, _}, {_OldClass, OldCount, _} = Old) ->
 					    case Count >= OldCount of 
 						true -> {Class, Count, []};
 						false -> Old
@@ -501,6 +501,51 @@ suffle_dataset(Examples) ->
 			[{Class, Count, Ids}|Acc]
 		end, [], Examples).
 								 
+%%
+%% Todo: make it stratified
+%%
+cross_validation(Fun, Folds, Examples) ->
+    NoExamples = count(Examples),
+    ExampleIds = [Id || {_, Id} <- lists:keysort(1, lists:map(fun(Id) -> {random:uniform(), Id} end, 
+							      lists:seq(1, NoExamples)))],
+    cross_validation(Fun, ExampleIds, Examples, Folds, Folds, NoExamples, []).
+
+cross_validation(_, _, _, _, 0, _, Acc) -> 
+    lists:reverse(Acc);
+cross_validation(Fun, ExampleIds, Examples, Folds, CurrentFold, NoExamples, Acc) -> 
+    {Test, Train} = lists:split(round(NoExamples * 1/Folds), ExampleIds),
+    
+    Test0 = get_examples_with(Test, Examples),
+    Train0 = get_examples_with(Train, Examples),
+
+    Result = Fun(Train0, Test0, Folds - CurrentFold + 1),
+    cross_validation(Fun, Train ++ Test, Examples, Folds, CurrentFold - 1, NoExamples, [Result|Acc]). 
+    
+
+get_examples_with(Ids, Examples) ->
+    get_examples_with(gb_sets:from_list(Ids), Examples, []).
+
+get_examples_with(_, [], Acc) ->
+    Acc;    
+get_examples_with(Ids, [{Class, Count, ExIds}|Rest], Acc) ->
+    get_examples_with(Ids, Rest, [get_examples_with_for_class(Ids, Class, ExIds, [])|Acc]).
+
+get_examples_with_for_class(_, Class, [], Acc) ->
+    {Class, length(Acc), Acc};
+get_examples_with_for_class(Ids, Class, [ExId|Rest], Acc) ->
+    case gb_sets:is_element(ExId, Ids) of
+	true ->
+	    get_examples_with_for_class(Ids, Class, Rest, [ExId|Acc]);
+	false ->
+	    get_examples_with_for_class(Ids, Class, Rest, Acc)
+    end.
+
+
+
+
+
+								      
+
 
 %%
 %% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}

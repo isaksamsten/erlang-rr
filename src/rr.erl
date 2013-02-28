@@ -26,8 +26,16 @@
 	  "Input data set"},
 	 {cores,          $c,           undefined,     {integer, erlang:system_info(schedulers)},
 	  "Number of cores to use when evaluating and building the model"},
-	 {split,          $s,           undefined,     {float, 0.66},
-	  "Spliting ratio Train/Test"},
+	 
+	 {split,          $s,           "split",       undefined,
+	  "Split data set according to --ratio"},
+	 {ratio,          $r,           "ratio",       {float, 0.66},
+	  "Splitting ratio (i.e. ratio is the fraction of training examples)"},
+	 {cv,             $x,           "cross-validate", undefined,
+	  "Cross validation"},
+	 {folds,          undefined,    "folds",       {integer, 10},
+	  "Number of cross validation folds"},	 
+
 	 {score,          undefined,    "score",       {atom, info},
 	  "Measure for evaluating the goodness of a split"},
 
@@ -54,6 +62,8 @@
 
 main(Args) ->
     rr_example:init(),
+    random:seed(now()),
+
     Options = case getopt:parse(?CMD_SPEC, Args) of
 		  {ok, Parsed} -> 
 		      Parsed;
@@ -69,19 +79,24 @@ main(Args) ->
 	false ->
 	    ok
     end,
-    InputFile = get_opt(input_file, Options),
-    Split = get_opt(split, Options),
-    Cores = get_opt(cores, Options),
-        
-    io:format(standard_error, "*** Loading '~s' on ~p core(s) *** \n", [InputFile, Cores]),
 
-    random:seed(now()),
+    InputFile = get_opt(input_file, Options),
+    Cores = get_opt(cores, Options),
+    RunExperiment = case any_opt([cv, split], Options) of
+			split ->
+			    fun run_split/4;
+			cv ->
+			    fun run_cross_validation/4;
+			false ->
+			    io:format("Must select --split or --cross-validation \n"),
+			    illegal()
+		    end,
+
+    io:format(standard_error, "*** Loading '~s' on ~p core(s) *** \n", [InputFile, Cores]),
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
     TotalNoFeatures = length(Features),
-
     Examples = rr_example:suffle_dataset(Examples0),
-    {Train, Test} = rr_example:split_dataset(Examples, Split),
 
     NoFeatures = case get_opt(no_features, Options) of
 		     X when X =< 0 ->
@@ -91,15 +106,15 @@ main(Args) ->
 		 end,	
     Classifiers = get_opt(classifiers, Options),
     Eval = case any_opt([weka, resample], Options) of
-		weka ->
-		    rr_tree:weka_evaluate(NoFeatures);
-		resample ->
-		    NoResamples = get_opt(no_resamples, Options),
-		    MinGain = get_opt(min_gain, Options),
-		    rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
-		false ->
+	       weka ->
+		   rr_tree:weka_evaluate(NoFeatures);
+	       resample ->
+		   NoResamples = get_opt(no_resamples, Options),
+		   MinGain = get_opt(min_gain, Options),
+		   rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
+	       false ->
 		   rr_tree:subset_evaluate(NoFeatures)
-	    end,
+	   end,
 
     Score = case get_opt(score, Options) of
 		info ->
@@ -110,48 +125,92 @@ main(Args) ->
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
 
-    Conf = #rr_conf{
-	      cores = Cores,
-	      score = Score,
-	      prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
-	      evaluate = Eval,
-	      split = fun rr_tree:random_split/3,
-	      base_learner = {Classifiers, rr_tree},
-	      no_features = TotalNoFeatures },
+    Conf = #rr_conf{cores = Cores,
+		    score = Score,
+		    prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
+		    evaluate = Eval,
+		    split = fun rr_tree:random_split/3,
+		    base_learner = {Classifiers, rr_tree},
+		    no_features = TotalNoFeatures},
+
     io:format(standard_error, "*** Building model using ~p trees and ~p features *** ~n",
 	      [Classifiers, NoFeatures]),
 
     Then = now(),
-    Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
-    Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
+    io:format("*** Start ***"),
+    RunExperiment(Features, Examples, Conf, Options),
     Time = timer:now_diff(now(), Then) / 1000000,
-    io:format(standard_error, "*** Model build in ~p second(s)*** ~n", [Time]),
-    io:format(standard_error, "*** Evaluating model using test set *** ~n~n", []),
     
-    NoTestExamples = rr_example:count(Test),
-    io:format("*** Start ***~n"),
+    io:format("~n** Parameters ** ~n"), 
     io:format("File: ~p ~n", [InputFile]),
     io:format("Trees: ~p ~n", [Classifiers]),
     io:format("Features: ~p ~n", [NoFeatures]),
-    io:format("Accuracy: ~p ~n", [rr_eval:accuracy(Dict)]),
+    io:format("Time: ~p seconds ~n", [Time]),
+
+    io:format(standard_error, "*** Model build in ~p second(s)*** ~n", [Time]),
+    io:format("*** End ***~n").   
+
+run_split(Features, Examples, Conf, Options) ->
+    Split = get_opt(ratio, Options),
+    {Train, Test} = rr_example:split_dataset(Examples, Split),
+    Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
+    Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
+    evaluate(Dict, rr_example:count(Test)).
+
+run_cross_validation(Features, Examples, Conf, Options) ->
+    Folds = get_opt(folds, Options),
+    Avg = rr_example:cross_validation(
+	    fun(Train0, Test0, Fold) ->
+		    io:format(standard_error, "*** Fold ~p *** ~n", [Fold]),
+		    io:format("~n** Fold: ~p ** ~n", [Fold]),
+		    M = rr_ensamble:generate_model(ordsets:from_list(Features), Train0, Conf),
+		    D = rr_ensamble:evaluate_model(M, Test0, Conf),
+		    evaluate(D, rr_example:count(Test0))
+	    end, Folds, Examples),
+    io:format("~n** Fold average ** ~n"),
+    lists:foreach(fun({accuracy, A}) ->
+			  io:format("Accuracy: ~p ~n", [A]);
+		     ({auc, A}) ->
+			  io:format("Auc: ~p ~n", [A]);
+		     ({brier, A}) ->
+			  io:format("Brier: ~p ~n", [A])
+		  end, average_cross_validation(Avg, Folds, [accuracy, auc, brier], [])).
+
+average_cross_validation(_, _, [], Acc) ->
+    lists:reverse(Acc);
+average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
+    A = lists:foldl(fun (Measures, Sum) ->
+			    case lists:keyfind(H, 1, Measures) of
+				{H, _, Auc} ->
+				    Sum + Auc;
+				{H, O} ->
+				    Sum + O
+			    end
+		    end, 0, Avg) / Folds,
+    average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
+		    
+
+evaluate(Dict, NoTestExamples) ->
+    Accuracy = rr_eval:accuracy(Dict),
+    io:format("Accuracy: ~p ~n", [Accuracy]),
 
     Auc = rr_eval:auc(Dict, NoTestExamples),
     io:format("Area under ROC~n"),
     lists:foreach(fun({Class, A}) ->
 			  io:format(" * ~s: ~p ~n", [Class, A])
 		  end, Auc),
-    io:format("Average:~p ~n", [lists:foldl(fun({_, P}, A) -> A + P / length(Auc) end, 0, Auc)]),
+    AvgAuc = lists:foldl(fun({_, P}, A) -> A + P / length(Auc) end, 0, Auc),
+    io:format(" average: ~p ~n", [AvgAuc]),
     
     io:format("Precision~n"),
+    Precision = rr_eval:precision(Dict),
     lists:foreach(fun({Class, P}) ->
 			  io:format(" * ~s: ~p ~n", [Class, P])
-		  end, rr_eval:precision(Dict)),
+		  end, Precision),
 
     Brier = rr_eval:brier(Dict, NoTestExamples),
     io:format("Brier: ~p ~n", [Brier]),
-    io:format("Time: ~p seconds ~n", [Time]),
-    io:format("*** End ***~n").   
-
+    [{accuracy, Accuracy}, {auc, Auc, AvgAuc}, {precision, Precision}, {brier, Brier}].
 %%
 %% Halts the program if illegal arguments are supplied
 %%
@@ -197,4 +256,4 @@ show_information() ->
     io_lib:format("rr (Random Rule Learner) ~s.~s.~s (build date: ~s)
 Copyright (C) 2013+ ~s
 
-Written by ~s", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
+Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
