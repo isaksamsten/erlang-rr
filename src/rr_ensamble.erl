@@ -88,6 +88,7 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
     end.
 
 transition_coordinator(Parent, Coordinator, 0, Acc) ->
+    io:format(standard_error, "~n", []), % Note: separate progress (sorry)
     evaluation_coordinator(Parent, Coordinator, Acc);
 transition_coordinator(Parent, Coordinator, Cores, Acc) ->
     receive
@@ -121,7 +122,8 @@ base_build_process(Coordinator, Base, Conf) ->
     random:seed({A,B,C}),
     base_build_process(Coordinator, Base, Conf, []).
 
-base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_}, 
+base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
+					       progress=Progress,
 					       evaluate=Evaluate,
 					       score=Score} = Conf, Acc) ->
     Coordinator ! {build, Coordinator, self()},
@@ -138,10 +140,10 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 					     Fun0 -> Fun0
 					 end},
 	    Model = Base:generate_model(Features, Bag, Conf1),
-	    Rem = if T > 10 -> round(T/10); true -> T end,
+	    Rem = if T > 10 -> round(T/10); true -> 1 end,
 	    case Id rem Rem of
 		0 ->
-		    io:format(standard_error, "Building model ~p/~p ~n", [Id, T]);
+		    Progress(Id, T);
 		_ ->
 		    ok
 	    end,

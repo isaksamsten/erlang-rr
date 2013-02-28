@@ -34,7 +34,9 @@
 	 {cv,             $x,           "cross-validate", undefined,
 	  "Cross validation"},
 	 {folds,          undefined,    "folds",       {integer, 10},
-	  "Number of cross validation folds"},	 
+	  "Number of cross validation folds"},
+	 {progress,       undefined,    "progress",    {atom, dots},
+	  "Showing the progress"},
 
 	 {score,          undefined,    "score",       {atom, info},
 	  "Measure for evaluating the goodness of a split"},
@@ -91,7 +93,17 @@ main(Args) ->
 			    io:format("Must select --split or --cross-validation \n"),
 			    illegal()
 		    end,
-
+    Progress = case get_opt(progress, Options) of
+		   dots ->
+		       fun(_, _) -> io:format(standard_error, "..", []) end;
+		   numeric ->
+		       fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
+		   none ->
+		       fun(_, _) -> ok end;
+		   _ ->
+		       illegal()			   
+	       end,
+    
     io:format(standard_error, "*** Loading '~s' on ~p core(s) *** \n", [InputFile, Cores]),
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
@@ -129,6 +141,7 @@ main(Args) ->
 		    score = Score,
 		    prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
 		    evaluate = Eval,
+		    progress = Progress,
 		    split = fun rr_tree:random_split/3,
 		    base_learner = {Classifiers, rr_tree},
 		    no_features = TotalNoFeatures},
@@ -152,6 +165,7 @@ main(Args) ->
 
 run_split(Features, Examples, Conf, Options) ->
     Split = get_opt(ratio, Options),
+    io:format("~n** Split ~p ** ~n", [Split]),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
     Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),

@@ -15,6 +15,7 @@
 	  evaluate,
 	  score,
 	  split,
+	  progress,
 	  base_learner,
 	  classifiers={100, rr_tree},
 	  cores = 1,
