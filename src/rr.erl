@@ -35,12 +35,12 @@
 	  "Cross validation"},
 	 {folds,          undefined,    "folds",       {integer, 10},
 	  "Number of cross validation folds"},
+
 	 {progress,       undefined,    "progress",    {atom, dots},
 	  "Showing the progress"},
 
 	 {score,          undefined,    "score",       {atom, info},
 	  "Measure for evaluating the goodness of a split"},
-
 	 {classifiers,    $m,           "no-trees",     {integer, 10},
 	  "Number of trees to generate"},
 
@@ -53,6 +53,8 @@
 	  "Same as --resample, however with K=inf"},
 	 {resample,       undefined,    "resample",    undefined,
 	  "Resample N random features K times if gain =< min-gain"},
+	 {sqrt,           undefined,    "sqrt",        undefined,
+	  "Use sqrt(|Features|) at each node"},
 
 	 {no_resamples,   undefined,    "no-resample", {integer, 6},
 	  "Number of times to resample, if best gain =< --min-gain"},
@@ -110,11 +112,17 @@ main(Args) ->
     TotalNoFeatures = length(Features),
     Examples = rr_example:suffle_dataset(Examples0),
 
-    NoFeatures = case get_opt(no_features, Options) of
-		     X when X =< 0 ->
-			 round(math:log(TotalNoFeatures)/math:log(2)) + 1;
-		     X ->
-			 X
+    io:format("~p~n",[Options]),
+    NoFeatures = case any_opt([sqrt, no_features], Options) of
+		     false ->
+			 case get_opt(no_features, Options) of
+			     X when X =< 0 ->
+				 round(math:log(TotalNoFeatures)/math:log(2)) + 1;
+			     X ->
+				 X
+			 end;
+		     sqrt ->
+			 round(math:sqrt(TotalNoFeatures))
 		 end,	
     Classifiers = get_opt(classifiers, Options),
     Eval = case any_opt([weka, resample], Options) of
