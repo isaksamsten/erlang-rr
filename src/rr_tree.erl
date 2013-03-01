@@ -96,7 +96,9 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 		#rr_candidate{feature=Feature, score=Score, split=[{_, LeftExamples}, {_, RightExamples}]}  -> 
 		    Left = build_decision_node(Features, LeftExamples, Conf#rr_conf{depth=Depth + 1}),
 		    Right = build_decision_node(Features, RightExamples, Conf#rr_conf{depth=Depth + 1}),
-		    make_node(Feature, Score, Left, Right)
+		    LeftDist = [{Class, Count} || {Class, Count, _} <- LeftExamples],
+		    RightDist = [{Class, Count} || {Class, Count, _} <- RightExamples],    
+		    make_node(Feature, Score, {LeftDist, RightDist}, Left, Right)
 	    end	   
     end.
 
@@ -104,8 +106,12 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 %% Create a decision node, on "Feature" scoring "Score",
 %% having "Left" and "Right" branches
 %%
-make_node(Feature, Score, Left, Right) ->
-    #rr_node{score=Score, feature=Feature, left=Left, right=Right}.
+make_node(Feature, Score, Dist, Left, Right) ->
+    #rr_node{score=Score, 
+	     feature=Feature, 
+	     distribution=Dist,
+	     left=Left, 
+	     right=Right}.
 
 %%
 %% Create a leaf node which predicts "Class"
@@ -141,8 +147,8 @@ resampled_subset_evaluate_split(Features, Examples, Total,
 		   true ->
 			rr_example:random_features(Features, Log)
 		end,
-    Cand = evaluate_split(Features0, Examples, Total, Conf),
 
+    Cand = evaluate_split(Features0, Examples, Total, Conf),
     Gain = abs(entropy(Examples) - Cand#rr_candidate.score),
     if  Gain =< Delta ->
 	    resampled_subset_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)), 
