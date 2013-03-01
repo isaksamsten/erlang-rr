@@ -112,7 +112,6 @@ main(Args) ->
     TotalNoFeatures = length(Features),
     Examples = rr_example:suffle_dataset(Examples0),
 
-    io:format("~p~n",[Options]),
     NoFeatures = case any_opt([sqrt, no_features], Options) of
 		     false ->
 			 case get_opt(no_features, Options) of

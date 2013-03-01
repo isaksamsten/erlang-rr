@@ -7,7 +7,17 @@
 
 
 %%
+%% Configuration and options for building the trees 
 %%
+%% * prune = function for prepruning (2 args)
+%% * depth = current depth
+%% * evaluate = function for evaluating potential split points (4 args)
+%% * score = score function for scoring split points (2 args)
+%% * split = function for splitting the data set (2 args)
+%% * progress = function called for each 10 precent of trees built
+%% * base_learner = tuple() -> {NumClassifiers, base_learner_module}
+%% * cores = number of execution slots
+%% * no_features = total number of features (currently)
 %%
 -record(rr_conf, {
 	  prune, 
@@ -17,22 +27,29 @@
 	  split,
 	  progress,
 	  base_learner,
-	  classifiers={100, rr_tree},
 	  cores = 1,
 	  no_features
 	 }).
 
 %%
+%% * score = score of current node
+%% * feature = feature at split
+%% * distribution = {Left, Right} where Left and Right are [{Class, Count}, ..., {Class, Count}]
+%% * left = node leading left
+%% * right = node leadning right
 %%
-%%
--record(rr_node, {score, feature, left, right}).
+-record(rr_node, {score, feature, distribution, left, right}).
 
 %%
-%%
+%% * score = score of leaf (e.g. laplace-estimated purity)
+%% * distribution = fraction of {Correct, Incorrect}
+%% * class = the class predicted by leaf
 %%
 -record(rr_leaf, {score, distribution, class}).
 
 %%
-%%
+%% * feature = the feature involving the split
+%% * score = the score of this split (less is better)
+%% * split = [Left, Right]
 %%
 -record(rr_candidate, {feature, score, split}).

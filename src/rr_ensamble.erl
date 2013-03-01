@@ -32,7 +32,6 @@ predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
     {Prediction, Probs} = predict_majority(Model, Example, Conf),
-%    io:format("~p \t ~p \t ~p \t ~p ~n", [Example, Actual, Prediction, Probs]),
     predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
 								 [{Prediction, Probs}|Predictions]
 							 end, [{Prediction, Probs}], Dict)).
