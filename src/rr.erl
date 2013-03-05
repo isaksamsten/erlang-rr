@@ -61,7 +61,11 @@
 	 {min_gain,       undefined,    "min-gain",    {float, 0},
 	  "Controls the minimum allowed gain for not resampling"},
 	 {no_features,    undefined,    "no-features", {integer, -1},
-	  "Control the number of features to inspect at each split"}
+	  "Control the number of features to inspect at each split"},
+	 {log,            $l,           "log"  ,       {atom, none},
+	  "Log level (info, debug, error, none)"},
+	 {log_file,     undefined,      "log-target",  undefined,
+	  "Debug output source"}
 	]).
 
 main(Args) ->
@@ -83,6 +87,18 @@ main(Args) ->
 	false ->
 	    ok
     end,
+    Logger = case get_opt(log_file, fun () ->
+					    Log = rr_log:new(std_err, get_opt(log, Options)),
+					    fun (Level, Message, Params) ->
+						    rr_log:log(Log, Level, Message, Params)
+					    end
+				    end, Options) of
+		 _ ->
+		     ok
+	     end,
+    Logger(info, "Starting application..", []),
+    
+
 
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
@@ -92,7 +108,7 @@ main(Args) ->
 			cv ->
 			    fun run_cross_validation/4;
 			false ->
-			    io:format("Must select --split or --cross-validation \n"),
+			    io:format(standard_error, "Must select --split or --cross-validation \n", []),
 			    illegal()
 		    end,
     Progress = case get_opt(progress, Options) of
@@ -111,6 +127,7 @@ main(Args) ->
     {Features, Examples0} = rr_example:load(Csv, Cores),
     TotalNoFeatures = length(Features),
     Examples = rr_example:suffle_dataset(Examples0),
+
 
     NoFeatures = case any_opt([sqrt, no_features], Options) of
 		     false ->
