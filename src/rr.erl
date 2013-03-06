@@ -62,9 +62,9 @@
 	  "Controls the minimum allowed gain for not resampling"},
 	 {no_features,    undefined,    "no-features", {integer, -1},
 	  "Control the number of features to inspect at each split"},
-	 {log,            $l,           "log"  ,       {atom, none},
+	 {log,            $l,           "log-level",   {atom, info},
 	  "Log level (info, debug, error, none)"},
-	 {log_file,     undefined,      "log-target",  undefined,
+	 {log_target,     undefined,    "log-target",  {string, []},
 	  "Debug output source"}
 	]).
 
@@ -87,21 +87,35 @@ main(Args) ->
 	false ->
 	    ok
     end,
-    Logger = case get_opt(log_file, fun () ->
-					    Log = rr_log:new(std_err, get_opt(log, Options)),
-					    fun (Level, Message, Params) ->
-						    rr_log:log(Log, Level, Message, Params)
-					    end
-				    end, Options) of
-		 _ ->
-		     ok
-	     end,
-    Logger(info, "Starting application..", []),
     
-
-
+    %% Initialize the Logger
+    {Log, Logger} = case get_opt(log_target, Options) of
+			[] ->
+			    Log = rr_log:new(std_err, get_opt(log, Options)),
+			    MaxLevel = rr_log:to_number(get_opt(log, Options)),
+			    {Log, fun (Level, Message, Params) ->
+					  Level0 = rr_log:to_number(Level),
+					  if Level0 > MaxLevel ->
+						  ok;
+					     true -> rr_log:log(Log, Level, Message, Params)
+					  end
+				  end};
+			Target ->
+			    Log = rr_log:new(Target, get_opt(log, Options)),
+			    MaxLevel = rr_log:to_number(get_opt(log, Options)),
+			    {Log, fun (Level, Message, Params) ->
+					  Level0 = rr_log:to_number(Level),
+					  if Level0 > MaxLevel ->
+						  ok;
+					     true -> rr_log:log(Log, Level, Message, Params)
+					  end
+				  end}
+		    end,
+    
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
+
+    %% Selecting model evaluation
     RunExperiment = case any_opt([cv, split], Options) of
 			split ->
 			    fun run_split/4;
@@ -111,6 +125,8 @@ main(Args) ->
 			    io:format(standard_error, "Must select --split or --cross-validation \n", []),
 			    illegal()
 		    end,
+
+    %% Create the progress bar (if any)
     Progress = case get_opt(progress, Options) of
 		   dots ->
 		       fun(_, _) -> io:format(standard_error, "..", []) end;
@@ -122,13 +138,13 @@ main(Args) ->
 		       illegal()			   
 	       end,
     
-    io:format(standard_error, "*** Loading '~s' on ~p core(s) *** \n", [InputFile, Cores]),
+    Logger(info, "Loading '~s' on ~p core(s)", [InputFile, Cores]),
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
     TotalNoFeatures = length(Features),
     Examples = rr_example:suffle_dataset(Examples0),
 
-
+    %% Select number of features to use at each split
     NoFeatures = case any_opt([sqrt, no_features], Options) of
 		     false ->
 			 case get_opt(no_features, Options) of
@@ -139,8 +155,12 @@ main(Args) ->
 			 end;
 		     sqrt ->
 			 round(math:sqrt(TotalNoFeatures))
-		 end,	
+		 end,
+
+    %% Get number of classifiers to build
     Classifiers = get_opt(classifiers, Options),
+    
+    %% Get how the feaures shall be evaluated at each split
     Eval = case any_opt([weka, resample], Options) of
 	       weka ->
 		   rr_tree:weka_evaluate(NoFeatures);
@@ -152,6 +172,7 @@ main(Args) ->
 		   rr_tree:subset_evaluate(NoFeatures)
 	   end,
 
+    %% get the scoring function
     Score = case get_opt(score, Options) of
 		info ->
 		    fun rr_tree:info/2;
@@ -161,6 +182,7 @@ main(Args) ->
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
 
+    %% Initialize the configuration
     Conf = #rr_conf{cores = Cores,
 		    score = Score,
 		    prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
@@ -168,10 +190,11 @@ main(Args) ->
 		    progress = Progress,
 		    split = fun rr_tree:random_split/3,
 		    base_learner = {Classifiers, rr_tree},
-		    no_features = TotalNoFeatures},
+		    no_features = TotalNoFeatures,
+		    log = Logger},
 
-    io:format(standard_error, "*** Building model using ~p trees and ~p features *** ~n",
-	      [Classifiers, NoFeatures]),
+    Logger(info, "Building model using ~p trees and ~p features",
+	   [Classifiers, NoFeatures]),
 
     Then = now(),
     io:format("*** Start ***"),
@@ -183,9 +206,11 @@ main(Args) ->
     io:format("Trees: ~p ~n", [Classifiers]),
     io:format("Features: ~p ~n", [NoFeatures]),
     io:format("Time: ~p seconds ~n", [Time]),
+    io:format("*** End ***~n"),
 
-    io:format(standard_error, "*** Model build in ~p second(s)*** ~n", [Time]),
-    io:format("*** End ***~n").   
+    Logger(debug, "Input parameters ~p", [Options]),
+    Logger(info, "Model built in ~p second(s)", [Time]),
+    rr_log:stop(Log).
 
 run_split(Features, Examples, Conf, Options) ->
     Split = get_opt(ratio, Options),
@@ -249,6 +274,7 @@ evaluate(Dict, NoTestExamples) ->
     Brier = rr_eval:brier(Dict, NoTestExamples),
     io:format("Brier: ~p ~n", [Brier]),
     [{accuracy, Accuracy}, {auc, Auc, AvgAuc}, {precision, Precision}, {brier, Brier}].
+
 %%
 %% Halts the program if illegal arguments are supplied
 %%

@@ -18,8 +18,8 @@
 %% * base_learner = tuple() -> {NumClassifiers, base_learner_module}
 %% * cores = number of execution slots
 %% * no_features = total number of features (currently)
-%% * debug = function taking two arguments: (debug, error, or info) a string, 
-%%           and optional arguments i.e. fun(.., Str, [])
+%% * log = function taking two arguments: (debug, error, or info) a string, 
+%%         and optional arguments i.e. fun(.., Str, [])
 %%
 -record(rr_conf, {
 	  prune, 
