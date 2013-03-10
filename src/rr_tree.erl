@@ -22,7 +22,7 @@ example_depth_stop(MaxExamples, MaxDepth) ->
 %% Generate model from Features and Examples
 %%
 generate_model(Features, Examples, Conf) ->
-    build_decision_node(Features, Examples, Conf).
+    build_decision_node(Features, Examples, Conf, 1).
     
 %%
 %% Evaluate "Examples" using "Model"
@@ -37,8 +37,8 @@ evaluate_model(Model, Examples, Conf) ->
 %%
 predict_all(_, [], _, _, Dict) ->
     Dict;
-predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
-    Prediction = predict(Example, Model, Conf),
+predict_all(Actual, [Example|Rest], Model, #rr_conf{log=Log} = Conf, Dict) ->
+    {Prediction, NodeNr} = predict(Example, Model, []),
     predict_all(Actual, Rest, Model, Conf,
 		dict:update(Actual, fun (Predictions) ->
 					    [Prediction|Predictions]
@@ -47,23 +47,25 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
 %%
 %% Predict what the class for "Attributes"
 %%
-predict(_, #rr_leaf{class=Class, score=Score}, _) ->
-    {Class, Score};
-predict(Attributes, #rr_node{feature={{categoric, Id}, SplitValue}, left=Left, right=Right}, Conf) ->
+predict(_, #rr_leaf{id=NodeNr, class=Class, score=Score}, Acc) ->
+    {{Class, Score}, [NodeNr|Acc]};
+predict(Attributes, #rr_node{id=NodeNr, feature={{categoric, Id}, SplitValue}, left=Left, right=Right}, Acc) ->
     Value = rr_example:feature(Attributes, Id),
+    NewAcc = [NodeNr|Acc],
     case Value == SplitValue of
 	true ->
-	    predict(Attributes, Left, Conf);
+	    predict(Attributes, Left, NewAcc);
 	false ->
-	    predict(Attributes, Right, Conf)
+	    predict(Attributes, Right, NewAcc)
     end;
-predict(Attributes, #rr_node{feature={{numeric, Id}, T}, left=Left, right=Right}, Conf) ->
+predict(Attributes, #rr_node{id=NodeNr, feature={{numeric, Id}, T}, left=Left, right=Right}, Acc) ->
     Value = rr_example:feature(Attributes, Id),
+    NewAcc = [NodeNr|Acc],
     case Value >= T of
 	true ->
-	    predict(Attributes, Left, Conf);
+	    predict(Attributes, Left, NewAcc);
 	false ->
-	    predict(Attributes, Right, Conf)
+	    predict(Attributes, Right, NewAcc)
     end.
 	    
 %% 
@@ -76,29 +78,29 @@ predict(Attributes, #rr_node{feature={{numeric, Id}, T}, left=Left, right=Right}
 %%     Split = select_split(Features, Examples)
 %%     for S in Split: build_node(Features, S)
 %%
-build_decision_node([], [], _) ->
-    make_leaf([], error);
-build_decision_node([], Examples, _) ->
-    make_leaf(Examples, rr_example:majority(Examples));
-build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, _) ->
-    make_leaf(Examples, {Class, Count});
-build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate, depth=Depth} = Conf) ->
+build_decision_node([], [], _, Id) ->
+    make_leaf(Id, [], error);
+build_decision_node([], Examples, _, Id) ->
+    make_leaf(Id, Examples, rr_example:majority(Examples));
+build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, _, Id) ->
+    make_leaf(Id, Examples, {Class, Count});
+build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate, depth=Depth} = Conf, Id) ->
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
 	true ->
-	    make_leaf(Examples, rr_example:majority(Examples));
+	    make_leaf(Id, Examples, rr_example:majority(Examples));
 	false ->
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
 		no_information ->
-		    make_leaf(Examples, rr_example:majority(Examples));
+		    make_leaf(Id, Examples, rr_example:majority(Examples));
 		#rr_candidate{split=[{_, _}]} ->
-		    make_leaf(Examples, rr_example:majority(Examples));
-		#rr_candidate{feature=Feature, score=Score, split=[{_, LeftExamples}, {_, RightExamples}]}  -> 
-		    Left = build_decision_node(Features, LeftExamples, Conf#rr_conf{depth=Depth + 1}),
-		    Right = build_decision_node(Features, RightExamples, Conf#rr_conf{depth=Depth + 1}),
+		    make_leaf(Id, Examples, rr_example:majority(Examples));
+		#rr_candidate{feature=Feature, score=Score, split=[{_, LeftExamples}, {_, RightExamples}]}  ->  
+		    Left = build_decision_node(Features, LeftExamples, Conf#rr_conf{depth=Depth + 1}, Id + 1),
+		    Right = build_decision_node(Features, RightExamples, Conf#rr_conf{depth=Depth + 1}, Id + 2),
 		    LeftDist = [{Class, Count} || {Class, Count, _} <- LeftExamples],
 		    RightDist = [{Class, Count} || {Class, Count, _} <- RightExamples],    
-		    make_node(Feature, Score, {LeftDist, RightDist}, Left, Right)
+		    make_node(Id, Feature, Score, {LeftDist, RightDist}, Left, Right)
 	    end	   
     end.
 
@@ -106,8 +108,9 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 %% Create a decision node, on "Feature" scoring "Score",
 %% having "Left" and "Right" branches
 %%
-make_node(Feature, Score, Dist, Left, Right) ->
-    #rr_node{score=Score, 
+make_node(Id, Feature, Score, Dist, Left, Right) ->
+    #rr_node{id = Id,
+	     score=Score, 
 	     feature=Feature, 
 	     distribution=Dist,
 	     left=Left, 
@@ -116,11 +119,11 @@ make_node(Feature, Score, Dist, Left, Right) ->
 %%
 %% Create a leaf node which predicts "Class"
 %%
-make_leaf([], Class) ->
-    #rr_leaf{score=0, distribution={0, 0}, class=Class};
-make_leaf(Covered, {Class, C}) ->
+make_leaf(Id, [], Class) ->
+    #rr_leaf{id=Id, score=0, distribution={0, 0}, class=Class};
+make_leaf(Id, Covered, {Class, C}) ->
     N = rr_example:count(Covered),
-    #rr_leaf{score=laplace(C, N), distribution={C, N-C}, class=Class}.
+    #rr_leaf{id=Id, score=laplace(C, N), distribution={C, N-C}, class=Class}.
 
 laplace(C, N) ->
     (C+1)/(N+2).

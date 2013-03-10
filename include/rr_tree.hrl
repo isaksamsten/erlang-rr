@@ -41,14 +41,14 @@
 %% * left = node leading left
 %% * right = node leadning right
 %%
--record(rr_node, {score, feature, distribution, left, right}).
+-record(rr_node, {id, score, feature, distribution, left, right}).
 
 %%
 %% * score = score of leaf (e.g. laplace-estimated purity)
 %% * distribution = fraction of {Correct, Incorrect}
 %% * class = the class predicted by leaf
 %%
--record(rr_leaf, {score, distribution, class}).
+-record(rr_leaf, {id, score, distribution, class}).
 
 %%
 %% * feature = the feature involving the split
