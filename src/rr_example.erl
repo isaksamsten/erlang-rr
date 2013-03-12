@@ -182,32 +182,38 @@ format_split_distribution(Acc) ->
 %%
 %% Distribute missing values over the left and right branch
 %%
-distribute_missing_values(_, _, [], [], [], Left, Right) ->
+distribute_missing_values(_, _, [], [], [], Left, Right, _) ->
     format_left_right_split(Left, Right);
-distribute_missing_values(Feature, Examples, [Left|LeftRest], [Right|RightRest], [{_, _, Missing}|MissingRest], LeftAcc, RightAcc) ->
-    case  distribute_missing_values_for_class(Feature, Examples, Missing, Left, Right) of
+distribute_missing_values(Feature, Examples, [Left|LeftRest], [Right|RightRest], 
+			  [{_, _, Missing}|MissingRest], LeftAcc, RightAcc, Distribute) ->
+    case  distribute_missing_values_for_class(Feature, Examples, Missing, Left, Right, Distribute) of
 	{{_, 0, []}, NewRight} ->
-	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest, LeftAcc, [NewRight|RightAcc]);
+	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest,
+				      LeftAcc, [NewRight|RightAcc], Distribute);
 	{NewLeft, {_, 0, []}} ->
-	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest, [NewLeft|LeftAcc], RightAcc);
+	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest, 
+				      [NewLeft|LeftAcc], RightAcc, Distribute);
 	{NewLeft, NewRight} ->
-	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest, [NewLeft|LeftAcc], [NewRight|RightAcc])
+	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest, 
+				      [NewLeft|LeftAcc], [NewRight|RightAcc], Distribute)
     end.
 	    
 
-distribute_missing_values_for_class(_, _, [], Left, Right) ->
+distribute_missing_values_for_class(_, _, [], Left, Right, _) ->
     {Left, Right};
 distribute_missing_values_for_class(Feature, Examples, [MissingEx|RestMissing], 
 				   {Class, NoLeft, Left} = LeftExamples, 
-				   {Class, NoRight, Right} = RightExamples) ->
-    Random = random:uniform(),
-    case Random >= 0.5 of
-	true ->
-	    distribute_missing_values_for_class(Feature, Examples, RestMissing, LeftExamples,
-						{Class, NoRight + 1, [MissingEx|Right]});
+				   {Class, NoRight, Right} = RightExamples, Distribute) ->
+
+    %% If distribute return true, missing values are distribute to the
+    %% left, otherwise they are distributed to the right
+    case Distribute(Feature, Examples, LeftExamples, RightExamples) of
 	false ->
+	    distribute_missing_values_for_class(Feature, Examples, RestMissing, LeftExamples,
+						{Class, NoRight + 1, [MissingEx|Right]}, Distribute);
+	true ->
 	    distribute_missing_values_for_class(Feature, Examples, RestMissing, {Class, NoLeft + 1, [MissingEx|Left]},
-						RightExamples)
+						RightExamples, Distribute)
     end.
 
 
@@ -219,13 +225,13 @@ distribute_missing_values_for_class(Feature, Examples, [MissingEx|RestMissing],
 %%   select_avg_threshold -> >= {Examples >= T}, < {Examples < T}
 %% Else
 %%   fail
-split(Feature, Examples) ->
+split(Feature, Examples, Distribute) ->
     {Value, {Left, Right, Missing}} = split_missing(Feature, Examples),
-    Dist = distribute_missing_values(Feature, Examples, Left, Right, Missing, [], []),
+    Dist = distribute_missing_values(Feature, Examples, Left, Right, Missing, [], [], Distribute),
     {Value, Dist}.
 
 split_missing({categoric, FeatureId} = Feature, Examples) ->
-    Value = random_categoric_split(FeatureId, Examples),
+    Value = resample_random_split(FeatureId, Examples, 5),
     split_categoric_feature(Feature, Value, Examples, [], [], []);
 split_missing({numeric, FeatureId} = Feature, Examples) ->
     Threshold = random_numeric_split(FeatureId, Examples),
@@ -351,12 +357,6 @@ deterministic_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, Feature
 	    deterministic_numeric_split(Rest, {Value, Class}, FeatureId,
 					Gain, Total, NewThreshold, NewDist)
     end.
-					     
-		    
-	     
-    
-
-
 
 %%
 %% Sample a random threshold (based on two examples)
@@ -371,7 +371,20 @@ random_numeric_split(FeatureId, Examples) ->
 	{Value1, '?'} ->
 	    Value1;
 	{Value1, Value2} ->
-	    (Value1 + Value2) / 2
+	    (Value1 + Value2) / 2;
+	{'?', '?'} ->
+	    random_numeric_split(FeatureId, Examples)		
+    end.
+
+
+resample_random_split(_, _, 0) ->
+    '?';
+resample_random_split(FeatureId, Examples, N) ->
+    case random_categoric_split(FeatureId, Examples) of	
+	'?' ->
+	    resample_random_split(FeatureId, Examples, N - 1);
+	X ->  
+	    X
     end.
 
 %%
@@ -380,6 +393,7 @@ random_numeric_split(FeatureId, Examples) ->
 random_categoric_split(FeatureId, Examples) ->
     ExId = sample_example(Examples),
     feature(ExId, FeatureId).
+
 
 
 %%
@@ -584,13 +598,6 @@ get_examples_with_for_class(Ids, Class, [ExId|Rest], Acc) ->
 	false ->
 	    get_examples_with_for_class(Ids, Class, Rest, Acc)
     end.
-
-
-
-
-
-								      
-
 
 %%
 %% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}

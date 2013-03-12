@@ -56,6 +56,9 @@
 	 {sqrt,           undefined,    "sqrt",        undefined,
 	  "Use sqrt(|Features|) at each node"},
 
+	 {missing,        undefined,    "missing",    {atom, random},
+	  "Distributing missing values"},
+
 	 {no_resamples,   undefined,    "no-resample", {integer, 6},
 	  "Number of times to resample, if best gain =< --min-gain"},
 	 {min_gain,       undefined,    "min-gain",    {float, 0},
@@ -114,7 +117,17 @@ main(Args) ->
     
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
-
+    
+    Missing = case get_opt(missing, Options) of
+		  random ->
+		      fun rr_missing:random/4;
+		  biased ->
+		      fun rr_missing:biased/4;
+		  right ->
+		      fun rr_missing:right/4;
+		  _ ->
+		      fun rr_missing:random/4
+	      end,
     %% Selecting model evaluatio
     RunExperiment = case any_opt([cv, split], Options) of
 			split ->
@@ -189,6 +202,7 @@ main(Args) ->
 		    evaluate = Eval,
 		    progress = Progress,
 		    split = fun rr_tree:random_split/3,
+		    distribute = Missing,
 		    base_learner = {Classifiers, rr_tree},
 		    no_features = TotalNoFeatures,
 		    log = Logger},

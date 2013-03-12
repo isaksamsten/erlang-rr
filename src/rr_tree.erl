@@ -212,8 +212,8 @@ best_evaluate_split(Features, Examples, Total, Conf) ->
 %% Randomly split Example set on Feature by randomly selecting a
 %% threshold (sampled from two examples of different class)
 %%
-random_split(Feature, Examples, _) ->
-    rr_example:split(Feature, Examples).
+random_split(Feature, Examples, #rr_conf{distribute=Distribute}) ->
+    rr_example:split(Feature, Examples, Distribute).
 
 %%
 %% Find the best numeric split point deterministically

@@ -13,7 +13,8 @@
 %% * depth = current depth
 %% * evaluate = function for evaluating potential split points (4 args)
 %% * score = score function for scoring split points (2 args)
-%% * split = function for splitting the data set (2 args)
+%% * split = function for splitting the data set (3 args)
+%% * distribute = function for distributing missing values (4 args)
 %% * progress = function called for each 10 precent of trees built
 %% * base_learner = tuple() -> {NumClassifiers, base_learner_module}
 %% * cores = number of execution slots
@@ -27,6 +28,7 @@
 	  evaluate,
 	  score,
 	  split,
+	  distribute,
 	  progress,
 	  base_learner,
 	  cores = 1,
