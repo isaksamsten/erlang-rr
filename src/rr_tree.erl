@@ -93,9 +93,9 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
 		no_information ->
 		    make_leaf(Id, Examples, rr_example:majority(Examples));
-		#rr_candidate{split=[{_, _}]} ->
+		#rr_candidate{split=[_]} ->
 		    make_leaf(Id, Examples, rr_example:majority(Examples));
-		#rr_candidate{feature=Feature, score=Score, split=[{_, LeftExamples}, {_, RightExamples}]}  ->  
+		#rr_candidate{feature=Feature, score=Score, split=[LeftExamples, RightExamples]}  ->  
 		    Left = build_decision_node(Features, LeftExamples, Conf#rr_conf{depth=Depth + 1}, Id + 1),
 		    Right = build_decision_node(Features, RightExamples, Conf#rr_conf{depth=Depth + 1}, Id + 2),
 		    LeftDist = [{Class, Count} || {Class, Count, _} <- LeftExamples],
@@ -241,7 +241,7 @@ random_split(Alpha) ->
 %% Evaluate all "Features" to find the "best" according to "Score"
 %%
 evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->
-    {_, T, ExSplit} = Split(F, Examples, Conf),
+    {T, ExSplit} = Split(F, Examples, Conf),
     evaluate_split(Features, Examples, Total, Conf, #rr_candidate{feature={F, T},
 								  score=Score(ExSplit, Total),
 								  split=ExSplit}).
@@ -254,7 +254,7 @@ evaluate_split([], _, _, _, Acc) ->
 evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, 
 	       #rr_candidate{score=OldScore} = OldCand) ->
     Cand = case Split(F, Examples, Conf) of
-	       {_, Threshold, ExSplit} ->
+	       {Threshold, ExSplit} ->
 		   #rr_candidate{feature = {F, Threshold}, 
 				 score = Score(ExSplit, Total), 
 				 split = ExSplit}		       
@@ -285,7 +285,7 @@ info(ValueSplits, Total) ->
     info(ValueSplits, Total, 0).
 
 info([], _, Acc) -> Acc;
-info([{_Value, Splits}|Rest], Total, Acc) ->
+info([Splits|Rest], Total, Acc) ->
     ClassSum = rr_example:count(Splits),
     info(Rest, Total,
 	 Acc + (ClassSum / Total) * entropy(Splits)).

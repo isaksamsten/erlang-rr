@@ -46,6 +46,10 @@ predict_majority(Model, Example, #rr_conf{base_learner={N, _}}) ->
 	    {hd(Probs), Probs}
     end.
 
+%%
+%% Get the predicted probabilites (i.e. the number of votes/total
+%% number of models)
+%%
 get_prediction_probabilities(Acc, N) ->
     Dict = lists:foldl(fun ({Item, _Laplace}, Dict) ->
 			       dict:update(Item, fun(Count) -> Count + 1  end, 1, Dict)
@@ -104,8 +108,8 @@ transition_coordinator(Parent, Coordinator, Cores, Acc) ->
     end.
 
 %%
-%% Coordinates the build process by sending them a notification (and
-%% an Id) for building the next tree
+%% coordinates the build process by sending them a notification (and
+%% an id) for building the next tree
 %%
 build_coordinator(Parent, Sets, Cores, Features, Examples) ->
     build_coordinator(Parent, self(), 1, Sets, Cores, Features, Examples).
@@ -145,7 +149,7 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 						Fun -> Fun
 					    end},
 	    Conf1 = Conf0#rr_conf{score = case Score of
-					     random ->
+					     ranpdom ->
 						 random_score();
 					     Fun0 -> Fun0
 					 end},
@@ -179,7 +183,7 @@ random_score() ->
 %%
 base_evaluator_process(Coordinator, Self, Base, Conf, Models)->
     receive
-	{evaluate, Coordinator, Self, ExId} -><
+	{evaluate, Coordinator, Self, ExId} ->
 	    Coordinator ! {prediction, Coordinator, Self, make_prediction(Models, Base, ExId, Conf)},
 	    base_evaluator_process(Coordinator, Self, Base, Conf, Models);
 	{exit, Coordinator, Self} ->

@@ -115,13 +115,13 @@ main(Args) ->
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
 
-    %% Selecting model evaluation
+    %% Selecting model evaluatio
     RunExperiment = case any_opt([cv, split], Options) of
 			split ->
 			    fun run_split/4;
 			cv ->
 			    fun run_cross_validation/4;
-			false ->
+			false ->		
 			    io:format(standard_error, "Must select --split or --cross-validation \n", []),
 			    illegal()
 		    end,
