@@ -7,13 +7,24 @@
 -module(rr_missing).
 -compile(export_all).
 
+%%
+%% Distribute the examples evenly over the left and right side
+%%
 random(_, _, _, _) ->
     random:uniform() =< 0.5.
 
-biased(_, _, {_, NoLeft, _}, {_, NoRight, _}) ->
+%%
+%% Distribute examples based on the number of examples falling in each
+%% branch.
+%%
+biased(_, _, NoLeft, NoRight) ->
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     random:uniform() =< LeftFraction.
 
+%%
+%% Distribute every example in the right branch (i.e. consider it
+%% false)
+%%
 right(_, _, _, _) ->
     false.
 

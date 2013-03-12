@@ -182,38 +182,38 @@ format_split_distribution(Acc) ->
 %%
 %% Distribute missing values over the left and right branch
 %%
-distribute_missing_values(_, _, [], [], [], Left, Right, _) ->
+distribute_missing_values(_, _, _, _, [], [], [], Left, Right, _) ->
     format_left_right_split(Left, Right);
-distribute_missing_values(Feature, Examples, [Left|LeftRest], [Right|RightRest], 
+distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, [Left|LeftRest], [Right|RightRest], 
 			  [{_, _, Missing}|MissingRest], LeftAcc, RightAcc, Distribute) ->
-    case  distribute_missing_values_for_class(Feature, Examples, Missing, Left, Right, Distribute) of
+    case  distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, Missing, Left, Right, Distribute) of
 	{{_, 0, []}, NewRight} ->
-	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest,
+	    distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest,
 				      LeftAcc, [NewRight|RightAcc], Distribute);
 	{NewLeft, {_, 0, []}} ->
-	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest, 
+	    distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest, 
 				      [NewLeft|LeftAcc], RightAcc, Distribute);
 	{NewLeft, NewRight} ->
-	    distribute_missing_values(Feature, Examples, LeftRest, RightRest, MissingRest, 
+	    distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest, 
 				      [NewLeft|LeftAcc], [NewRight|RightAcc], Distribute)
     end.
 	    
 
-distribute_missing_values_for_class(_, _, [], Left, Right, _) ->
+distribute_missing_values_for_class(_, _, _, _, [], Left, Right, _) ->
     {Left, Right};
-distribute_missing_values_for_class(Feature, Examples, [MissingEx|RestMissing], 
+distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, [MissingEx|RestMissing], 
 				   {Class, NoLeft, Left} = LeftExamples, 
 				   {Class, NoRight, Right} = RightExamples, Distribute) ->
 
     %% If distribute return true, missing values are distribute to the
     %% left, otherwise they are distributed to the right
-    case Distribute(Feature, Examples, LeftExamples, RightExamples) of
+    case Distribute(Feature, Examples, TotalNoLeft, TotalNoRight) of
 	false ->
-	    distribute_missing_values_for_class(Feature, Examples, RestMissing, LeftExamples,
+	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, LeftExamples,
 						{Class, NoRight + 1, [MissingEx|Right]}, Distribute);
 	true ->
-	    distribute_missing_values_for_class(Feature, Examples, RestMissing, {Class, NoLeft + 1, [MissingEx|Left]},
-						RightExamples, Distribute)
+	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
+						{Class, NoLeft + 1, [MissingEx|Left]}, RightExamples, Distribute)
     end.
 
 
@@ -227,7 +227,9 @@ distribute_missing_values_for_class(Feature, Examples, [MissingEx|RestMissing],
 %%   fail
 split(Feature, Examples, Distribute) ->
     {Value, {Left, Right, Missing}} = split_missing(Feature, Examples),
-    Dist = distribute_missing_values(Feature, Examples, Left, Right, Missing, [], [], Distribute),
+    TotalNoLeft = count(Left),
+    TotalNoRight = count(Right),
+    Dist = distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, Left, Right, Missing, [], [], Distribute),
     {Value, Dist}.
 
 split_missing({categoric, FeatureId} = Feature, Examples) ->
