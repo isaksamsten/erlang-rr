@@ -62,7 +62,9 @@ predict(ExId, #rr_node{id=NodeNr,
 		true ->
 		    predict(ExId, Left, Conf, NewAcc);
 		false ->
-		    predict(ExId, Right, Conf, NewAcc)
+		    predict(ExId, Right, Conf, NewAcc);
+		ignore ->
+		    {{'?', 0.0}, NewAcc}
 	    end;
 	Value when Value == SplitValue ->
 	    predict(ExId, Left, Conf, NewAcc);
@@ -83,7 +85,9 @@ predict(Attributes, #rr_node{id=NodeNr,
 		true ->
 		    predict(Attributes, Left, Conf, NewAcc);
 		false ->
-		    predict(Attributes, Right, Conf, NewAcc)
+		    predict(Attributes, Right, Conf, NewAcc);
+		ignore ->
+		    {{'?', 0.0}, NewAcc}
 	    end;
 	Value when Value >= Threshold ->
 	    predict(Attributes, Left, Conf, NewAcc);

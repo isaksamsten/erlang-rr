@@ -21,6 +21,9 @@ biased(Type, _, _, NoLeft, NoRight) ->
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     random:uniform() =< LeftFraction.
 
+ignore(_, _, _, _, _) ->
+    ignore.
+
 %%
 %% Distribute every example in the right branch (i.e. consider it
 %% false)

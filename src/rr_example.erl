@@ -213,7 +213,11 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 						{Class, NoRight + 1, [MissingEx|Right]}, Distribute);
 	true ->
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
-						{Class, NoLeft + 1, [MissingEx|Left]}, RightExamples, Distribute)
+						{Class, NoLeft + 1, [MissingEx|Left]}, RightExamples, Distribute);
+	ignore ->
+	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
+						LeftExamples, RightExamples, Distribute)
+		
     end.
 
 

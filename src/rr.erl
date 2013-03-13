@@ -125,6 +125,8 @@ main(Args) ->
 		      fun rr_missing:biased/5;
 		  right ->
 		      fun rr_missing:right/5;
+		  ignore ->
+		      fun rr_missing:ignore/5;
 		  _ ->
 		      fun rr_missing:random/5
 	      end,
