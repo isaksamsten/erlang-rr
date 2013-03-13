@@ -199,7 +199,7 @@ make_prediction(Models, Base, ExId, Conf) ->
 make_prediction([], _Base, _ExId, _Conf, Acc) ->
     Acc;
 make_prediction([Model|Models], Base, ExId, #rr_conf{log=Log} = Conf, Acc) ->
-    {Prediction, NodeNr} = Base:predict(ExId, Model, []),
+    {Prediction, NodeNr} = Base:predict(ExId, Model, Conf, []),
     Log(debug, "Example: ~p predicted (~p) by: ~w", [ExId, Prediction, NodeNr]),
     make_prediction(Models, Base, ExId, Conf, [Prediction|Acc]).
 

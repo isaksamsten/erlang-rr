@@ -10,14 +10,14 @@
 %%
 %% Distribute the examples evenly over the left and right side
 %%
-random(_, _, _, _) ->
+random(_, _, _, _, _) ->
     random:uniform() =< 0.5.
 
 %%
 %% Distribute examples based on the number of examples falling in each
 %% branch.
 %%
-biased(_, _, NoLeft, NoRight) ->
+biased(Type, _, _, NoLeft, NoRight) ->
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     random:uniform() =< LeftFraction.
 
@@ -25,6 +25,5 @@ biased(_, _, NoLeft, NoRight) ->
 %% Distribute every example in the right branch (i.e. consider it
 %% false)
 %%
-right(_, _, _, _) ->
+right(_, _, _, _, _) ->
     false.
-

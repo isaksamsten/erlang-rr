@@ -37,8 +37,8 @@ evaluate_model(Model, Examples, Conf) ->
 %%
 predict_all(_, [], _, _, Dict) ->
     Dict;
-predict_all(Actual, [Example|Rest], Model, #rr_conf{log=Log} = Conf, Dict) ->
-    {Prediction, NodeNr} = predict(Example, Model, []),
+predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
+    {Prediction, _NodeNr} = predict(Example, Model, Conf, []),
     predict_all(Actual, Rest, Model, Conf,
 		dict:update(Actual, fun (Predictions) ->
 					    [Prediction|Predictions]
@@ -47,25 +47,48 @@ predict_all(Actual, [Example|Rest], Model, #rr_conf{log=Log} = Conf, Dict) ->
 %%
 %% Predict what the class for "Attributes"
 %%
-predict(_, #rr_leaf{id=NodeNr, class=Class, score=Score}, Acc) ->
+predict(_, #rr_leaf{id=NodeNr, class=Class, score=Score}, _Conf, Acc) ->
     {{Class, Score}, [NodeNr|Acc]};
-predict(Attributes, #rr_node{id=NodeNr, feature={{categoric, Id}, SplitValue}, left=Left, right=Right}, Acc) ->
-    Value = rr_example:feature(Attributes, Id),
+predict(ExId, #rr_node{id=NodeNr, 
+		       feature={{categoric, Id}, SplitValue}, 
+		       distribution={LeftExamples, RightExamples},
+		       left=Left, 
+		       right=Right}, #rr_conf{distribute=Distribute} = Conf, Acc) ->
+    Value = rr_example:feature(ExId, Id),
     NewAcc = [NodeNr|Acc],
-    case Value == SplitValue of
-	true ->
-	    predict(Attributes, Left, NewAcc);
-	false ->
-	    predict(Attributes, Right, NewAcc)
+    case Value of
+	'?' ->
+	    case Distribute(predict, [], [], LeftExamples, RightExamples) of
+		true ->
+		    predict(ExId, Left, Conf, NewAcc);
+		false ->
+		    predict(ExId, Right, Conf, NewAcc)
+	    end;
+	Value when Value == SplitValue ->
+	    predict(ExId, Left, Conf, NewAcc);
+	Value ->
+	    predict(ExId, Right, Conf, NewAcc)
     end;
-predict(Attributes, #rr_node{id=NodeNr, feature={{numeric, Id}, T}, left=Left, right=Right}, Acc) ->
+
+predict(Attributes, #rr_node{id=NodeNr, 
+			     feature={{numeric, Id}, Threshold}, 
+			     distribution={LeftExamples, RightExamples},
+			     left=Left,
+			     right=Right}, #rr_conf{distribute=Distribute} = Conf, Acc) ->
     Value = rr_example:feature(Attributes, Id),
     NewAcc = [NodeNr|Acc],
-    case Value >= T of
-	true ->
-	    predict(Attributes, Left, NewAcc);
-	false ->
-	    predict(Attributes, Right, NewAcc)
+    case Value of
+	'?' ->
+	    case Distribute(predict, [], [], LeftExamples, RightExamples) of
+		true ->
+		    predict(Attributes, Left, Conf, NewAcc);
+		false ->
+		    predict(Attributes, Right, Conf, NewAcc)
+	    end;
+	Value when Value >= Threshold ->
+	    predict(Attributes, Left, Conf, NewAcc);
+	Value ->
+	    predict(Attributes, Right, Conf, NewAcc)
     end.
 	    
 %% 
@@ -98,9 +121,7 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 		#rr_candidate{feature=Feature, score=Score, split=[LeftExamples, RightExamples]}  ->  
 		    Left = build_decision_node(Features, LeftExamples, Conf#rr_conf{depth=Depth + 1}, Id + 1),
 		    Right = build_decision_node(Features, RightExamples, Conf#rr_conf{depth=Depth + 1}, Id + 2),
-		    LeftDist = [{Class, Count} || {Class, Count, _} <- LeftExamples],
-		    RightDist = [{Class, Count} || {Class, Count, _} <- RightExamples],    
-		    make_node(Id, Feature, Score, {LeftDist, RightDist}, Left, Right)
+		    make_node(Id, Feature, {rr_example:count(LeftExamples), rr_example:count(RightExamples)}, Score, Left, Right)
 	    end	   
     end.
 
@@ -108,7 +129,7 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 %% Create a decision node, on "Feature" scoring "Score",
 %% having "Left" and "Right" branches
 %%
-make_node(Id, Feature, Score, Dist, Left, Right) ->
+make_node(Id, Feature, Dist, Score, Left, Right) ->
     #rr_node{id = Id,
 	     score=Score, 
 	     feature=Feature, 

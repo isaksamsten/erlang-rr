@@ -94,23 +94,23 @@ main(Args) ->
     %% Initialize the Logger
     {Log, Logger} = case get_opt(log_target, Options) of
 			[] ->
-			    Log = rr_log:new(std_err, get_opt(log, Options)),
+			    Log0 = rr_log:new(std_err, get_opt(log, Options)),
 			    MaxLevel = rr_log:to_number(get_opt(log, Options)),
-			    {Log, fun (Level, Message, Params) ->
+			    {Log0, fun (Level, Message, Params) ->
 					  Level0 = rr_log:to_number(Level),
 					  if Level0 > MaxLevel ->
 						  ok;
-					     true -> rr_log:log(Log, Level, Message, Params)
+					     true -> rr_log:log(Log0, Level, Message, Params)
 					  end
 				  end};
 			Target ->
-			    Log = rr_log:new(Target, get_opt(log, Options)),
+			    Log0 = rr_log:new(Target, get_opt(log, Options)),
 			    MaxLevel = rr_log:to_number(get_opt(log, Options)),
-			    {Log, fun (Level, Message, Params) ->
+			    {Log0, fun (Level, Message, Params) ->
 					  Level0 = rr_log:to_number(Level),
 					  if Level0 > MaxLevel ->
 						  ok;
-					     true -> rr_log:log(Log, Level, Message, Params)
+					     true -> rr_log:log(Log0, Level, Message, Params)
 					  end
 				  end}
 		    end,
@@ -120,13 +120,13 @@ main(Args) ->
     
     Missing = case get_opt(missing, Options) of
 		  random ->
-		      fun rr_missing:random/4;
+		      fun rr_missing:random/5;
 		  biased ->
-		      fun rr_missing:biased/4;
+		      fun rr_missing:biased/5;
 		  right ->
-		      fun rr_missing:right/4;
+		      fun rr_missing:right/5;
 		  _ ->
-		      fun rr_missing:random/4
+		      fun rr_missing:random/5
 	      end,
     %% Selecting model evaluatio
     RunExperiment = case any_opt([cv, split], Options) of

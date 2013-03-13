@@ -207,7 +207,7 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 
     %% If distribute return true, missing values are distribute to the
     %% left, otherwise they are distributed to the right
-    case Distribute(Feature, Examples, TotalNoLeft, TotalNoRight) of
+    case Distribute(build, Feature, Examples, TotalNoLeft, TotalNoRight) of
 	false ->
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, LeftExamples,
 						{Class, NoRight + 1, [MissingEx|Right]}, Distribute);
