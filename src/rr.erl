@@ -65,6 +65,7 @@
 	  "Controls the minimum allowed gain for not resampling"},
 	 {no_features,    undefined,    "no-features", {integer, -1},
 	  "Control the number of features to inspect at each split"},
+
 	 {log,            $l,           "log-level",   {atom, info},
 	  "Log level (info, debug, error, none)"},
 	 {log_target,     undefined,    "log-target",  {string, []},
@@ -92,112 +93,29 @@ main(Args) ->
     end,
     
     %% Initialize the Logger
-    {Log, Logger} = case get_opt(log_target, Options) of
-			[] ->
-			    Log0 = rr_log:new(std_err, get_opt(log, Options)),
-			    MaxLevel = rr_log:to_number(get_opt(log, Options)),
-			    {Log0, fun (Level, Message, Params) ->
-					  Level0 = rr_log:to_number(Level),
-					  if Level0 > MaxLevel ->
-						  ok;
-					     true -> rr_log:log(Log0, Level, Message, Params)
-					  end
-				  end};
-			Target ->
-			    Log0 = rr_log:new(Target, get_opt(log, Options)),
-			    MaxLevel = rr_log:to_number(get_opt(log, Options)),
-			    {Log0, fun (Level, Message, Params) ->
-					  Level0 = rr_log:to_number(Level),
-					  if Level0 > MaxLevel ->
-						  ok;
-					     true -> rr_log:log(Log0, Level, Message, Params)
-					  end
-				  end}
-		    end,
+    {Log, Logger} = create_logger(Options), 
     
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
-    
-    Missing = case get_opt(missing, Options) of
-		  random ->
-		      fun rr_missing:random/5;
-		  biased ->
-		      fun rr_missing:biased/5;
-		  right ->
-		      fun rr_missing:right/5;
-		  ignore ->
-		      fun rr_missing:ignore/5;
-		  _ ->
-		      fun rr_missing:random/5
-	      end,
-    %% Selecting model evaluatio
-    RunExperiment = case any_opt([cv, split], Options) of
-			split ->
-			    fun run_split/4;
-			cv ->
-			    fun run_cross_validation/4;
-			false ->		
-			    io:format(standard_error, "Must select --split or --cross-validation \n", []),
-			    illegal()
-		    end,
+    Missing = create_missing_values(Options),
+    RunExperiment = create_experiment(Options),
+    Progress = create_progress(Options),
 
-    %% Create the progress bar (if any)
-    Progress = case get_opt(progress, Options) of
-		   dots ->
-		       fun(_, _) -> io:format(standard_error, "..", []) end;
-		   numeric ->
-		       fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
-		   none ->
-		       fun(_, _) -> ok end;
-		   _ ->
-		       illegal()			   
-	       end,
-    
     Logger(info, "Loading '~s' on ~p core(s)", [InputFile, Cores]),
+
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
-    TotalNoFeatures = length(Features),
     Examples = rr_example:suffle_dataset(Examples0),
 
-    %% Select number of features to use at each split
-    NoFeatures = case any_opt([sqrt, no_features], Options) of
-		     false ->
-			 case get_opt(no_features, Options) of
-			     X when X =< 0 ->
-				 round(math:log(TotalNoFeatures)/math:log(2)) + 1;
-			     X ->
-				 X
-			 end;
-		     sqrt ->
-			 round(math:sqrt(TotalNoFeatures))
-		 end,
 
-    %% Get number of classifiers to build
+    TotalNoFeatures = length(Features),
+    NoFeatures = get_no_features(TotalNoFeatures, Options),
     Classifiers = get_opt(classifiers, Options),
-    
-    %% Get how the feaures shall be evaluated at each split
-    Eval = case any_opt([weka, resample], Options) of
-	       weka ->
-		   rr_tree:weka_evaluate(NoFeatures);
-	       resample ->
-		   NoResamples = get_opt(no_resamples, Options),
-		   MinGain = get_opt(min_gain, Options),
-		   rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
-	       false ->
-		   rr_tree:subset_evaluate(NoFeatures)
-	   end,
-
-    %% get the scoring function
-    Score = case get_opt(score, Options) of
-		info ->
-		    fun rr_tree:info/2;
-		gini ->
-		    fun rr_tree:gini/2
-	    end,
+    Eval = create_evaluator(NoFeatures, Options),
+    Score = create_score(Options),
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
 
-    %% Initialize the configuration
     Conf = #rr_conf{cores = Cores,
 		    score = Score,
 		    prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
@@ -209,8 +127,7 @@ main(Args) ->
 		    no_features = TotalNoFeatures,
 		    log = Logger},
 
-    Logger(info, "Building model using ~p trees and ~p features",
-	   [Classifiers, NoFeatures]),
+    Logger(info, "Building model using ~p trees and ~p features", [Classifiers, NoFeatures]),
 
     Then = now(),
     io:format("*** Start ***"),
@@ -290,6 +207,100 @@ evaluate(Dict, NoTestExamples) ->
     Brier = rr_eval:brier(Dict, NoTestExamples),
     io:format("Brier: ~p ~n", [Brier]),
     [{accuracy, Accuracy}, {auc, Auc, AvgAuc}, {precision, Precision}, {brier, Brier}].
+
+create_logger(Options) ->
+    case get_opt(log_target, Options) of
+	[] ->
+	    Log0 = rr_log:new(std_err, get_opt(log, Options)),
+	    MaxLevel = rr_log:to_number(get_opt(log, Options)),
+	    {Log0, fun (Level, Message, Params) ->
+			   Level0 = rr_log:to_number(Level),
+			   if Level0 > MaxLevel ->
+				   ok;
+			      true -> rr_log:log(Log0, Level, Message, Params)
+			   end
+		   end};
+	Target ->
+	    Log0 = rr_log:new(Target, get_opt(log, Options)),
+	    MaxLevel = rr_log:to_number(get_opt(log, Options)),
+	    {Log0, fun (Level, Message, Params) ->
+			   Level0 = rr_log:to_number(Level),
+			   if Level0 > MaxLevel ->
+				   ok;
+			      true -> rr_log:log(Log0, Level, Message, Params)
+			   end
+		   end}
+    end.
+
+create_missing_values(Options) ->
+    case get_opt(missing, Options) of
+	random ->
+	    fun rr_missing:random/5;
+	biased ->
+	    fun rr_missing:biased/5;
+	right ->
+	    fun rr_missing:right/5;
+	ignore ->
+	    fun rr_missing:ignore/5;
+	_ ->
+	    fun rr_missing:random/5
+    end.
+
+create_experiment(Options) ->
+    case any_opt([cv, split], Options) of
+	split ->
+	    fun run_split/4;
+	cv ->
+	    fun run_cross_validation/4;
+	false ->		
+	    io:format(standard_error, "Must select --split or --cross-validation \n", []),
+	    illegal()
+    end.
+
+create_progress(Options) ->
+    case get_opt(progress, Options) of
+	dots ->
+	    fun(_, _) -> io:format(standard_error, "..", []) end;
+	numeric ->
+	    fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
+	none ->
+	    fun(_, _) -> ok end;
+	_ ->
+	    illegal()			   
+    end.
+
+create_score(Options) ->
+    case get_opt(score, Options) of
+	info ->
+	    fun rr_tree:info/2;
+	gini ->
+	    fun rr_tree:gini/2
+    end.
+
+get_no_features(TotalNoFeatures, Options) ->
+    case any_opt([sqrt, no_features], Options) of
+	false ->
+	    case get_opt(no_features, Options) of
+		X when X =< 0 ->
+		    round(math:log(TotalNoFeatures)/math:log(2)) + 1;
+		X ->
+		    X
+	    end;
+	sqrt ->
+	    round(math:sqrt(TotalNoFeatures))
+    end.
+
+create_evaluator(NoFeatures, Options) ->
+    case any_opt([weka, resample], Options) of
+	weka ->
+	    rr_tree:weka_evaluate(NoFeatures);
+	resample ->
+	    NoResamples = get_opt(no_resamples, Options),
+	    MinGain = get_opt(min_gain, Options),
+	    rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
+	false ->
+	    rr_tree:subset_evaluate(NoFeatures)
+    end.
 
 %%
 %% Halts the program if illegal arguments are supplied
