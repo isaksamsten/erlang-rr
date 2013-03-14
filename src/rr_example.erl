@@ -638,7 +638,7 @@ select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, [], _,
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
     case dict:find(N, Bootstrap) of
 	{ok, Times} ->
-	    NewInBag = duplicate_example(ExId, 1, InBag), %% NOTE: could be changed to "Times"
+	    NewInBag = duplicate_example(ExId, Times, InBag), %% NOTE: could be changed to "Times"
 	    select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount},
 						N+1, Rest, Bootstrap, {NewInBag, OutBag});
 	error ->

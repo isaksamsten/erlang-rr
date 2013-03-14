@@ -10,7 +10,7 @@
 
 -define(DATE, "2013-02-26").
 -define(MAJOR_VERSION, "0").
--define(MINOR_VERSION, "1").
+-define(MINOR_VERSION, "2").
 -define(REVISION, "0.1").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
