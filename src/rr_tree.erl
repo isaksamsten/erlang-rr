@@ -58,10 +58,10 @@ predict(ExId, #rr_node{id=NodeNr,
     NewAcc = [NodeNr|Acc],
     case Value of
 	'?' ->
-	    case Distribute(predict, [], [], LeftExamples, RightExamples) of
-		true ->
+	    case Distribute(predict, [], ExId, LeftExamples, RightExamples) of
+		{true, _} ->
 		    predict(ExId, Left, Conf, NewAcc);
-		false ->
+		{false, _} ->
 		    predict(ExId, Right, Conf, NewAcc);
 		ignore ->
 		    {{'?', 0.0}, NewAcc}
@@ -72,27 +72,27 @@ predict(ExId, #rr_node{id=NodeNr,
 	    predict(ExId, Right, Conf, NewAcc)
     end;
 
-predict(Attributes, #rr_node{id=NodeNr, 
+predict(ExId, #rr_node{id=NodeNr, 
 			     feature={{numeric, Id}, Threshold}, 
 			     distribution={LeftExamples, RightExamples},
 			     left=Left,
 			     right=Right}, #rr_conf{distribute=Distribute} = Conf, Acc) ->
-    Value = rr_example:feature(Attributes, Id),
+    Value = rr_example:feature(ExId, Id),
     NewAcc = [NodeNr|Acc],
     case Value of
 	'?' ->
-	    case Distribute(predict, [], [], LeftExamples, RightExamples) of
-		true ->
-		    predict(Attributes, Left, Conf, NewAcc);
-		false ->
-		    predict(Attributes, Right, Conf, NewAcc);
+	    case Distribute(predict, [], ExId, LeftExamples, RightExamples) of
+		{true, _} ->
+		    predict(ExId, Left, Conf, NewAcc);
+		{false, _} ->
+		    predict(ExId, Right, Conf, NewAcc);
 		ignore ->
 		    {{'?', 0.0}, NewAcc}
 	    end;
 	Value when Value >= Threshold ->
-	    predict(Attributes, Left, Conf, NewAcc);
+	    predict(ExId, Left, Conf, NewAcc);
 	Value ->
-	    predict(Attributes, Right, Conf, NewAcc)
+	    predict(ExId, Right, Conf, NewAcc)
     end.
 	    
 %% 

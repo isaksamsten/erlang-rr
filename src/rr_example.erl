@@ -207,13 +207,18 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 
     %% If distribute return true, missing values are distribute to the
     %% left, otherwise they are distributed to the right
-    case Distribute(build, Feature, Examples, TotalNoLeft, TotalNoRight) of
-	false ->
+    case Distribute(build, Feature, MissingEx, TotalNoLeft, TotalNoRight) of
+	{false, {_, NewCount}=NewEx} ->
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, LeftExamples,
-						{Class, NoRight + 1, [MissingEx|Right]}, Distribute);
-	true ->
+						{Class, NoRight + NewCount, [NewEx|Right]}, Distribute);
+	{true, {_, NewCount}=NewEx} ->
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
-						{Class, NoLeft + 1, [MissingEx|Left]}, RightExamples, Distribute);
+						{Class, NoLeft + NewCount, [NewEx|Left]}, RightExamples, Distribute);
+	{both, {{_, NewLeftCount}=NewLeftEx, {_, NewRightCount} = NewRightEx}} ->
+	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing,
+						{Class, NoLeft + NewLeftCount, [NewLeftEx|Left]},
+						{Class, NoRight + NewRightCount, [NewRightEx|Right]}, Distribute);
+	
 	ignore ->
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
 						LeftExamples, RightExamples, Distribute)
@@ -414,10 +419,20 @@ take_class(List, N) ->
 %%
 %% Count the number of examples in "Examples"
 %%
+count(ExId) when is_number(ExId) ->
+    1;
+count({ExId, N}) when is_number(ExId) ->
+    N;
 count(Examples) ->
     lists:foldl(fun({_, Count, _}, Old) ->
 			Count + Old
 		end, 0, Examples).
+
+exid(ExId) when is_number(ExId) ->
+    ExId;
+exid({ExId, _}) when is_number(ExId) ->
+    ExId.
+
 
 %%
 %% Count the occurences of "Class" in "Examples"
@@ -510,8 +525,12 @@ example(Id) ->
 %%
 %% Get feature at index "At" from "Id"
 %%
-feature(Id, At) when is_number(Id)->
-    ets:lookup_element(examples, Id, At + 1).
+feature({ExId, _}, At) when is_number(ExId)->
+    ets:lookup_element(examples, ExId, At + 1);
+feature(ExId, At) when is_number(ExId) ->
+    ets:lookup_element(examples, ExId, At + 1).
+
+
 
 
 %%
@@ -638,13 +657,19 @@ select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, [], _,
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
     case dict:find(N, Bootstrap) of
 	{ok, Times} ->
-	    NewInBag = duplicate_example(ExId, Times, InBag), %% NOTE: could be changed to "Times"
+	    NewInBag = duplicate_example2(ExId, Times, InBag), %% NOTE: could be changed to "Times"
 	    select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount},
 						N+1, Rest, Bootstrap, {NewInBag, OutBag});
 	error ->
 	    select_bootstrap_examples_for_class(Class, {InBagCount,  OutBagCount + 1},
 						N+1, Rest, Bootstrap, {InBag, [ExId|OutBag]})
     end.
+
+duplicate_example2({ExId, _}, N, Acc) ->
+    [{ExId, N}|Acc];
+duplicate_example2(ExId, N, Acc) ->
+    [{ExId, N}|Acc].
+
 
 duplicate_example(_, 0, Acc) ->
     Acc;

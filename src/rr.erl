@@ -84,7 +84,8 @@ main(Args) ->
 	      end,
     case any_opt([help, version], Options) of
 	help ->
-	    illegal();
+	    show_help(),
+	    halt();
 	version ->
 	    io:format(show_information()),
 	    halt();
@@ -138,6 +139,7 @@ main(Args) ->
     io:format("File: ~p ~n", [InputFile]),
     io:format("Trees: ~p ~n", [Classifiers]),
     io:format("Features: ~p ~n", [NoFeatures]),
+    io:format("Examples: ~p ~n", [rr_example:count(Examples)]),
     io:format("Time: ~p seconds ~n", [Time]),
     io:format("*** End ***~n"),
 
@@ -236,14 +238,18 @@ create_missing_values(Options) ->
     case get_opt(missing, Options) of
 	random ->
 	    fun rr_missing:random/5;
-	biased ->
-	    fun rr_missing:biased/5;
+	weighted ->
+	    fun rr_missing:weighted/5;
+	partition ->
+	    fun rr_missing:random_partition/5;
+	wpartition ->
+	    fun rr_missing:weighted_partition/5;
 	right ->
 	    fun rr_missing:right/5;
 	ignore ->
 	    fun rr_missing:ignore/5;
 	_ ->
-	    fun rr_missing:random/5
+	    illegal()
     end.
 
 create_experiment(Options) ->
@@ -308,6 +314,26 @@ create_evaluator(NoFeatures, Options) ->
 illegal() ->
     getopt:usage(?CMD_SPEC, "rr"),
     halt().
+
+show_help() ->
+    getopt:usage(?CMD_SPEC, "rr"),
+    io:format(standard_error, "EXAMPLES
+================================
+Example 1: 10-fold cross validation 'car' dataset:
+   ./rr -i data/car.txt -x --folds 10 > result.txt
+
+Example 2: 0.66 percent training examples, 'heart' dataset. Missing
+values are handled by wighting a random selection towards the most
+dominant branch.
+   ./rr -i data/heart.txt -s -r 0.66 --missing wighted > result.txt
+
+Example 3: 10-fold cross validation on a sparse dataset using re-sampled
+feature selection
+  ./rr -i data/sparse.txt -x --resample > result.txt
+
+VERSION
+================================
+~s", [show_information()]).
 
 %%
 %% Get command line option Arg, calling Fun1 if not found
