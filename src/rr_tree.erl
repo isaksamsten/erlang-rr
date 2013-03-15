@@ -59,9 +59,9 @@ predict(ExId, #rr_node{id=NodeNr,
     case Value of
 	'?' ->
 	    case Distribute(predict, [], ExId, LeftExamples, RightExamples) of
-		{true, _} ->
+		{left, _} ->
 		    predict(ExId, Left, Conf, NewAcc);
-		{false, _} ->
+		{right, _} ->
 		    predict(ExId, Right, Conf, NewAcc);
 		ignore ->
 		    {{'?', 0.0}, NewAcc}
@@ -82,9 +82,9 @@ predict(ExId, #rr_node{id=NodeNr,
     case Value of
 	'?' ->
 	    case Distribute(predict, [], ExId, LeftExamples, RightExamples) of
-		{true, _} ->
+		{left, _} ->
 		    predict(ExId, Left, Conf, NewAcc);
-		{false, _} ->
+		{right, _} ->
 		    predict(ExId, Right, Conf, NewAcc);
 		ignore ->
 		    {{'?', 0.0}, NewAcc}
