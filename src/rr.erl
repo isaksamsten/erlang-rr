@@ -308,7 +308,7 @@ create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options) ->
 	    MinGain = get_opt(min_gain, Options),
 	    rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
 	weighted ->
-	    Fraction = get_opt(weight_factor, Options),
+	    Fraction = get_opt(weight_factor, Options), %% NOTE: make this paralell
 	    Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), #rr_conf{score=Score, distribute=Missing}, []),
 	    NewScores = lists:split(length(Scores) div 2, lists:map(fun({_, V}) -> V end, Scores)),
 	    rr_tree:weighted_evaluate(NoFeatures, Fraction, NewScores);

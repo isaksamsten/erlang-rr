@@ -187,7 +187,8 @@ resampled_subset_evaluate_split(Features, Examples, Total,
     end.
 
 %%
-%% 
+%% Definitly need another way of determine what constitutes a good
+%% feature
 %%
 weighted_evaluate(NoFeatures, Fraction, NewScores) ->
     fun (_, Examples, Total, Conf) ->
