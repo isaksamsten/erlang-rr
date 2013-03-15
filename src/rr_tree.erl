@@ -187,6 +187,23 @@ resampled_subset_evaluate_split(Features, Examples, Total,
     end.
 
 %%
+%% 
+%%
+weighted_evaluate(NoFeatures, Fraction, NewScores) ->
+    fun (_, Examples, Total, Conf) ->
+	    weighted_evaluate_split(NewScores, Examples, Total, Conf, NoFeatures, Fraction)
+    end.
+
+weighted_evaluate_split({Good, Bad}, Examples, Total, Conf, NoFeatures0, Fraction) ->
+    NoFeatures = round(NoFeatures0 * Fraction),
+    Features0 = rr_example:random_features(Good, NoFeatures) ++
+	rr_example:random_features(Bad, NoFeatures0 - NoFeatures),
+    evaluate_split(Features0, Examples, Total, Conf).
+
+
+
+
+%%
 %% Uses the same algorithm as Weka for resampling non-informative
 %% 
 weka_evaluate(NoFeatures) ->
@@ -243,10 +260,10 @@ random_split(Feature, Examples, #rr_conf{distribute=Distribute}) ->
 %%
 %% Find the best numeric split point deterministically
 %%
-deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score}) ->
-    rr_example:split({Feature, Score}, Examples);
-deterministic_split(Feature, Examples, _) ->
-    rr_example:split(Feature, Examples).
+deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score, distribute=Distribute}) ->
+    rr_example:split({Feature, Score}, Examples, Distribute);
+deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute}) ->
+    rr_example:split(Feature, Examples, Distribute).
 
 %%
 %% If random:uniform() =< "Alpha": select the best split
@@ -288,6 +305,15 @@ evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split}
 							true -> Cand;
 							false -> OldCand
 						    end).
+
+evaluate_all([], _, _, _, Acc) ->
+    lists:keysort(1, Acc);
+evaluate_all([Feature|Rest], Examples, Total, #rr_conf{score=Score} = Conf, Acc) ->
+    NewAcc = case deterministic_split(Feature, Examples, Conf) of
+		 {_, ExSplit} ->
+		     [{Score(ExSplit, Total), Feature}|Acc]
+	     end,
+    evaluate_all(Rest, Examples, Total, Conf, NewAcc).
 
 %%
 %% Calculate the gini impurity (except 1- to minimize instead of

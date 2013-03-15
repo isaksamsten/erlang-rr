@@ -32,6 +32,7 @@ predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
     {Prediction, Probs} = predict_majority(Model, Example, Conf),
+    rr_example:insert_prediction(Example, Probs),
     predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
 								 [{Prediction, Probs}|Predictions]
 							 end, [{Prediction, Probs}], Dict)).
@@ -143,7 +144,7 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id, Features, Examples} ->
-	    {Bag, OutBag} = rr_example:bootstrap_replicate(Examples),
+	    {Bag, _OutBag} = rr_example:bootstrap_replicate(Examples),
 	    Conf0 = Conf#rr_conf{evaluate = case Evaluate of
 						{random, Prob} -> random_evaluator(Prob);
 						Fun -> Fun

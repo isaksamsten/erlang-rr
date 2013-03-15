@@ -23,21 +23,21 @@ partition(ExId, Fraction) ->
 random_partition(build, _, ExId, _, _) ->
     partition(ExId, 0.5);
 random_partition(predict, _, ExId, _, _) ->
-    {direction(random:uniform()) =< 0.5, ExId}.
+    {direction(random:uniform()) =< 0.5, {rr_example:exid(ExId), rr_example:count(ExId)}}.
 
 weighted_partition(build, _, ExId, NoLeft, NoRight) -> 
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     partition(ExId, LeftFraction);
 weighted_partition(predict, _, ExId, NoLeft, NoRight) -> 
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
-    {direction(random:uniform() =< LeftFraction), ExId}.
+    {direction(random:uniform() =< LeftFraction), {rr_example:exid(ExId), rr_example:count(ExId)}}.
     
 
 %%
 %% Distribute the examples evenly over the left and right side
 %%
 random(_, _, ExId, _, _) ->
-    {direction(random:uniform() =< 0.5), ExId}.
+    {direction(random:uniform() =< 0.5), {rr_example:exid(ExId), rr_example:count(ExId)}}.
 
 %%
 %% Distribute examples based on the number of examples falling in each
@@ -45,7 +45,7 @@ random(_, _, ExId, _, _) ->
 %%
 weighted(_, _, ExId, NoLeft, NoRight) ->
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
-    {direction(random:uniform() =< LeftFraction), ExId}.
+    {direction(random:uniform() =< LeftFraction), {rr_example:exid(ExId), rr_example:count(ExId)}}.
 
 ignore(_, _, _, _, _) ->
     ignore.

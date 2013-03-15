@@ -55,10 +55,14 @@
 	  "Resample N random features K times if gain =< min-gain"},
 	 {sqrt,           undefined,    "sqrt",        undefined,
 	  "Use sqrt(|Features|) at each node"},
+	 {weighted,       undefined,    "weighted",    undefined,
+	  "Calculate the most promesing attributes before model induction, then bias the selection of features towards those that provide information"},
 
 	 {missing,        undefined,    "missing",    {atom, random},
 	  "Distributing missing values"},
 
+	 {weight_factor,  undefined,    "weight-factor", {float, 0.8},
+	  "Weight factor for the --weighted feature selection"},
 	 {no_resamples,   undefined,    "no-resample", {integer, 6},
 	  "Number of times to resample, if best gain =< --min-gain"},
 	 {min_gain,       undefined,    "min-gain",    {float, 0},
@@ -112,10 +116,10 @@ main(Args) ->
     TotalNoFeatures = length(Features),
     NoFeatures = get_no_features(TotalNoFeatures, Options),
     Classifiers = get_opt(classifiers, Options),
-    Eval = create_evaluator(NoFeatures, Options),
     Score = create_score(Options),
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
+    Eval = create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options),
 
     Conf = #rr_conf{cores = Cores,
 		    score = Score,
@@ -187,7 +191,6 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
 		    end, 0, Avg) / Folds,
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
 		    
-
 evaluate(Dict, NoTestExamples) ->
     Accuracy = rr_eval:accuracy(Dict),
     io:format("Accuracy: ~p ~n", [Accuracy]),
@@ -296,15 +299,20 @@ get_no_features(TotalNoFeatures, Options) ->
 	    round(math:sqrt(TotalNoFeatures))
     end.
 
-create_evaluator(NoFeatures, Options) ->
-    case any_opt([weka, resample], Options) of
+create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options) ->
+    case any_opt([weka, resample, weighted], Options) of
 	weka ->
 	    rr_tree:weka_evaluate(NoFeatures);
 	resample ->
 	    NoResamples = get_opt(no_resamples, Options),
 	    MinGain = get_opt(min_gain, Options),
 	    rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
-	false ->
+	weighted ->
+	    Fraction = get_opt(weight_factor, Options),
+	    Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), #rr_conf{score=Score, distribute=Missing}, []),
+	    NewScores = lists:split(length(Scores) div 2, lists:map(fun({_, V}) -> V end, Scores)),
+	    rr_tree:weighted_evaluate(NoFeatures, Fraction, NewScores);
+	false -> 
 	    rr_tree:subset_evaluate(NoFeatures)
     end.
 

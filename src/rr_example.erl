@@ -9,8 +9,12 @@
 -module(rr_example).
 -compile(export_all).
 -export([init/0,
-	 load/2]).
+	 load/2,
+	 insert_prediction/2]).
 
+
+insert_prediction(ExId, Pred) ->
+    ets:insert(predictions, {exid(ExId), Pred}).
 
 %%
 %% Init an ets table that stores all examples in memory. The examples
@@ -19,7 +23,8 @@
 %%
 init() ->
     ets:new(examples, [named_table, public, {read_concurrency, true}]),
-    ets:new(features, [named_table, public]).
+    ets:new(features, [named_table, public]),
+    ets:new(predictions, [named_table, public]).
 
 %%
 %% Load "File" using "Cores"
@@ -119,7 +124,6 @@ format_class_distribution(Examples) ->
 				       {Class, Count, Ids}
 			       end, dict:to_list(Examples))).
 
-
 %%
 %% Merge two dictionaries with class distributions
 %%
@@ -127,8 +131,6 @@ update_class_distribution(Class, Id, Acc) ->
     dict:update(Class, fun({Count, Ids}) ->
 			       {Count + 1, [Id|Ids]}
 		       end, {1, [Id]}, Acc).
-    
-
     
 %%
 %% Parses a type declaration: ["class", "categoric"+, "numeric"+] in
@@ -199,7 +201,6 @@ distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, [Left|Le
 				      [NewLeft|LeftAcc], [NewRight|RightAcc], Distribute)
     end.
 	    
-
 distribute_missing_values_for_class(_, _, _, _, [], Left, Right, _) ->
     {Left, Right};
 distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, [MissingEx|RestMissing], 
@@ -219,7 +220,6 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing,
 						{Class, NoLeft + NewLeftCount, [NewLeftEx|Left]},
 						{Class, NoRight + NewRightCount, [NewRightEx|Right]}, Distribute);
-	
 	ignore ->
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
 						LeftExamples, RightExamples, Distribute)
@@ -232,10 +232,7 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 %%
 split(Feature, Examples, Distribute) ->
     {Value, {Left, Right, Missing}} = split_missing(Feature, Examples),
-    TotalNoLeft = count(Left),
-    TotalNoRight = count(Right),
-    Dist = distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, Left, Right, Missing, [], [], Distribute),
-    {Value, Dist}.
+    {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), Left, Right, Missing, [], [], Distribute)}.
 
 %%
 %% Split into three disjoint subsets, Left, Right and those examples
@@ -327,7 +324,7 @@ deterministic_numeric_split(FeatureId, Examples, Gain) ->
     
     Gt = lists:map(fun({C, Num, _}) -> {C, Num, []} end, Examples),
     Lt = lists:map(fun({C, _, _}) -> {C, 0, []} end, Examples),
-    Dist = [{'<', Lt}, {'>=', Gt}],
+    Dist = [Lt, Gt],
     First = {Value, Class},
     Total = rr_example:count(Examples),
     deterministic_numeric_split(ClassIds, First, FeatureId, Gain, Total, {Value/2, inf}, Dist).
@@ -337,15 +334,15 @@ deterministic_numeric_split([], _, _, _, _, {Threshold, _}, _) ->
 deterministic_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId, 
 			    Gain, Total, {OldThreshold, OldGain}, Dist) ->
 
-    [{Lt, Left}, Right] = Dist, 
+    [Left, Right] = Dist, 
     Dist0 = case lists:keytake(Class, 1, Left) of
 		{value, {Class, Num, _}, ClassRest} ->
-		    [{Lt, [{Class, Num + 1, []}|ClassRest]}, Right]
+		    [[{Class, Num + 1, []}|ClassRest], Right]
 	    end,
-    [Left0, {Gt0, Right0}] = Dist0,
+    [Left0, Right0] = Dist0,
     NewDist = case lists:keytake(Class, 1, Right0) of
 	{value, {Class, Num0, _}, ClassRest0} ->
-	    [Left0, {Gt0, [{Class, Num0 - 1, []}|ClassRest0]}]
+	    [Left0, [{Class, Num0 - 1, []}|ClassRest0]]
     end,
     case Class == OldClass of
 	true -> deterministic_numeric_split(Rest, {Value, Class}, FeatureId,
@@ -650,5 +647,3 @@ sample_class_pair(Examples, Random, NoEx, Acc) ->
 	Other ->
 	    [lists:nth(Other, Examples)|Acc]
     end.
-		     
-	    
