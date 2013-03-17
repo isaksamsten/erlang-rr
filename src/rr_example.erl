@@ -61,7 +61,8 @@ parse_examples(File, Cores, ClassId, Types) ->
 parse_example_process(Parent, File, ClassId, Types, Acc) ->
     case csv:next_line(File) of
 	{ok, Example, Id0} ->
-	    {Class, Attributes} = take_class(Example, ClassId),
+	    {Class, Attributes} = take_feature(Example, ClassId),
+%	    {Id1, Attributes0} = take_feature(Attributes, IdId),
 	    Id = Id0 - 2, %% NOTE: subtracting headers 
 	    ets:insert(examples, format_features(Attributes, Types, 1, [Id])),
 	    parse_example_process(Parent, File, ClassId, Types, update_class_distribution(Class, Id, Acc));
@@ -137,19 +138,21 @@ update_class_distribution(Class, Id, Acc) ->
 %% any order. Returns {ClassId, [features...]}
 %%
 parse_type_declaration(Types) ->
-    parse_type_declaration(Types, missing, 1, []).
+    parse_type_declaration(Types, missing, missing, 1, []).
 
-parse_type_declaration([], ClassId, _, Acc) ->
+parse_type_declaration([], ClassId, _IdId, _, Acc) ->
     {ClassId, lists:reverse(Acc)};
-parse_type_declaration([Type0|Rest], ClassId, Id, Acc) ->
+parse_type_declaration([Type0|Rest], ClassId, IdId, Id, Acc) ->
     Type = list_to_atom(string:to_lower(Type0)),
     case Type of
 	Type when Type =:= numeric;
 		  Type =:= categoric ->
-	    parse_type_declaration(Rest, ClassId, Id + 1, [Type|Acc]);
+	    parse_type_declaration(Rest, ClassId, IdId, Id + 1, [Type|Acc]);
 	Type when Type =:= class;
 		  ClassId =:= missing ->
-	    parse_type_declaration(Rest, Id, Id + 1, Acc);
+	    parse_type_declaration(Rest, Id, IdId, Id + 1, Acc);
+	Type when Type =:= id ->
+	    parse_type_declaration(Rest, ClassId, Id, Id + 1, Acc); % NOTE: not working
 	_ ->
 	    throw({error, {invalid_type_declaration, Id}})
     end.
@@ -158,7 +161,7 @@ parse_type_declaration([Type0|Rest], ClassId, Id, Acc) ->
 %% Parse feature declaration
 %%
 parse_feature_declaration(Features0, ClassId, Types) ->
-    {_, Features} = take_class(Features0, ClassId),
+    {_, Features} = take_feature(Features0, ClassId),
     if length(Features) =/= length(Types) ->
 	    throw({error, {invalid_feature_declaration, {length(Features), '/=', length(Types)}}});
        true ->
@@ -390,9 +393,11 @@ random_categoric_split(FeatureId, Examples) ->
 %%
 %% Take class at id=N and return the the tuple {Class, Classes}
 %%
-take_class([A|R], 1) ->
+take_feature(A, missing) ->
+    {'?', A};
+take_feature([A|R], 1) ->
     {list_to_atom(A), R};
-take_class(List, N) ->
+take_feature(List, N) ->
     {L1, [Item|L2]} = lists:split(N - 1, List),
     {list_to_atom(Item), L1 ++ L2}.
 
