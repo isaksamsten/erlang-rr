@@ -10,12 +10,18 @@
 -include("rr_tree.hrl").
 
 %%
+%%
+%%
+init() ->
+    ets:new(models, [public, named_table]).
+
+
+%%
 %% Generate an ensamble of models from of #rr_conf.base_learners
 %%
 generate_model(Features, Examples, #rr_conf{
 				      base_learner = {Classifiers, Base},
 				      cores = Cores} = Conf) ->
-%    ets:new(predictions, [public, named_table]),
     spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf).
     
 
@@ -155,6 +161,7 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 					     Fun0 -> Fun0
 					 end},
 	    Model = Base:generate_model(Features, Bag, Conf1),
+	    ets:insert(models, {Id, Model}),
 	    Rem = if T > 10 -> round(T/10); true -> 1 end,
 	    case Id rem Rem of
 		0 ->

@@ -35,6 +35,12 @@
 	  "Cross validation"},
 	 {folds,          undefined,    "folds",       {integer, 10},
 	  "Number of cross validation folds"},
+	 {build,          $b,           "build",       undefined,
+	  {"Build model from --input and output to file (--model-file)"}},
+	 {model_file,     undefined,    "model-file",  undefined,
+	  {"Write model to file"}},
+	 {evaluate,       $e,           "evaluate",    undefined,
+	  {"Evaluate --input using --model-file"}},	  
 
 	 {progress,       undefined,    "progress",    {atom, dots},
 	  "Showing the progress"},
@@ -81,6 +87,7 @@
 
 main(Args) ->
     rr_example:init(),
+    rr_ensamble:init(),
     random:seed(now()),
 
     Options = case getopt:parse(?CMD_SPEC, Args) of
@@ -287,11 +294,15 @@ create_missing_values(Options) ->
     end.
 
 create_experiment(Options) ->
-    case any_opt([cv, split], Options) of
+    case any_opt([cv, split, build, evaluate], Options) of
 	split ->
 	    fun run_split/4;
 	cv ->
 	    fun run_cross_validation/4;
+	build ->
+	    ok;
+	evaluate ->
+	    ok;
 	false ->		
 	    io:format(standard_error, "Must select --split or --cross-validation \n", []),
 	    illegal()
