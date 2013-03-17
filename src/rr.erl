@@ -70,6 +70,9 @@
 	 {no_features,    undefined,    "no-features", {integer, -1},
 	  "Control the number of features to inspect at each split"},
 
+	 {output_predictions, $o,       "output-predictions", {boolean, false},
+	  "Ouput predictions"},
+
 	 {log,            $l,           "log-level",   {atom, info},
 	  "Log level (info, debug, error, none)"},
 	 {log_target,     undefined,    "log-target",  {string, []},
@@ -147,9 +150,31 @@ main(Args) ->
     io:format("Time: ~p seconds ~n", [Time]),
     io:format("*** End ***~n"),
 
+
     Logger(debug, "Input parameters ~p", [Options]),
     Logger(info, "Model built in ~p second(s)", [Time]),
     rr_log:stop(Log).
+
+output_predictions(false, _) ->
+    ok;
+output_predictions(true, []) ->
+    ok;
+output_predictions(true, [{Class, _, ExIds}|Examples]) ->
+    output_predictions_for_class(Class, ExIds),
+    output_predictions(true, Examples).
+
+output_predictions_for_class(_, []) ->
+    ok;
+output_predictions_for_class(Class, [ExId|Rest]) ->
+    io:format("~p \t ~p \t", [ExId, Class]),
+    Predictions = ets:lookup_element(predictions, ExId, 2),
+    %%lists:foreach(fun (P) -> io:format("~p \t", [P]) end, Predictions),
+    {Pred, Prob} = hd(Predictions),
+    io:format("~p (~p) ~n", [Pred, Prob]),
+    output_predictions_for_class(Class, Rest).
+			   
+
+
 
 run_split(Features, Examples, Conf, Options) ->
     Split = get_opt(ratio, Options),
@@ -157,7 +182,11 @@ run_split(Features, Examples, Conf, Options) ->
     {Train, Test} = rr_example:split_dataset(Examples, Split),
     Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
-    evaluate(Dict, rr_example:count(Test)).
+    evaluate(Dict, rr_example:count(Test)),
+    io:format("** Predictions ** ~n"), %% NOTE: improve...
+    output_predictions(get_opt(output_predictions, Options), Test).
+    
+
 
 run_cross_validation(Features, Examples, Conf, Options) ->
     Folds = get_opt(folds, Options),
@@ -176,7 +205,9 @@ run_cross_validation(Features, Examples, Conf, Options) ->
 			  io:format("Auc: ~p ~n", [A]);
 		     ({brier, A}) ->
 			  io:format("Brier: ~p ~n", [A])
-		  end, average_cross_validation(Avg, Folds, [accuracy, auc, brier], [])).
+		  end, average_cross_validation(Avg, Folds, [accuracy, auc, brier], [])),
+    io:format("** Predictions ** ~n"), %% NOTE: improve...
+    output_predictions(get_opt(output_predictions, Options), Examples).
 
 average_cross_validation(_, _, [], Acc) ->
     lists:reverse(Acc);
