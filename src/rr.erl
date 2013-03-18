@@ -36,11 +36,11 @@
 	 {folds,          undefined,    "folds",       {integer, 10},
 	  "Number of cross validation folds"},
 	 {build,          $b,           "build",       undefined,
-	  {"Build model from --input and output to file (--model-file)"}},
-	 {model_file,     undefined,    "model-file",  undefined,
-	  {"Write model to file"}},
+	  "Build model from --input and output to file (--model-file)"},
+	 {model_file,     undefined,    "model-file",  {string, []},
+	  "Write model to file"},
 	 {evaluate,       $e,           "evaluate",    undefined,
-	  {"Evaluate --input using --model-file"}},	  
+	  "Evaluate --input using --model-file"},	  
 
 	 {progress,       undefined,    "progress",    {atom, dots},
 	  "Showing the progress"},
@@ -193,6 +193,10 @@ run_split(Features, Examples, Conf, Options) ->
     io:format("** Predictions ** ~n"), %% NOTE: improve...
     output_predictions(get_opt(output_predictions, Options), Test).
     
+run_build_process(Features, Examples, Conf, Options) ->
+    Model = rr_ensamble:generate_model(ordsets:from_list(Features), Examples, Conf),
+    rr_ensamble:model2file(Model, get_opt(model_file, Options)).
+
 
 
 run_cross_validation(Features, Examples, Conf, Options) ->
@@ -279,6 +283,8 @@ create_missing_values(Options) ->
     case get_opt(missing, Options) of
 	random ->
 	    fun rr_missing:random/5;
+	weightedr ->
+	    fun rr_missing:weighted_random/5;
 	weighted ->
 	    fun rr_missing:weighted/5;
 	partition ->
@@ -287,6 +293,8 @@ create_missing_values(Options) ->
 	    fun rr_missing:weighted_partition/5;
 	right ->
 	    fun rr_missing:right/5;
+	left ->
+	    fun rr_missing:left/5;
 	ignore ->
 	    fun rr_missing:ignore/5;
 	_ ->
@@ -300,7 +308,7 @@ create_experiment(Options) ->
 	cv ->
 	    fun run_cross_validation/4;
 	build ->
-	    ok;
+	    fun run_build_process/4;
 	evaluate ->
 	    ok;
 	false ->		
@@ -352,7 +360,7 @@ create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options) ->
 	weighted ->
 	    Fraction = get_opt(weight_factor, Options), %% NOTE: make this paralell
 	    Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), #rr_conf{score=Score, distribute=Missing}, []),
-	    NewScores = lists:split(length(Scores) div 2, lists:map(fun({_, V}) -> V end, Scores)),
+	    NewScores = lists:split(trunc(length(Scores) * Fraction), lists:map(fun({_, V}) -> V end, Scores)),
 	    rr_tree:weighted_evaluate(NoFeatures, Fraction, NewScores);
 	false -> 
 	    rr_tree:subset_evaluate(NoFeatures)

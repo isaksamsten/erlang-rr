@@ -195,10 +195,8 @@ weighted_evaluate(NoFeatures, Fraction, NewScores) ->
 	    weighted_evaluate_split(NewScores, Examples, Total, Conf, NoFeatures, Fraction)
     end.
 
-weighted_evaluate_split({Good, Bad}, Examples, Total, Conf, NoFeatures0, Fraction) ->
-    NoFeatures = round(NoFeatures0 * Fraction),
-    Features0 = rr_example:random_features(Good, NoFeatures) ++
-	rr_example:random_features(Bad, NoFeatures0 - NoFeatures),
+weighted_evaluate_split({Good, _Bad}, Examples, Total, Conf, NoFeatures, Fraction) ->
+    Features0 = rr_example:random_features(Good, NoFeatures),
     evaluate_split(Features0, Examples, Total, Conf).
 
 

@@ -32,6 +32,11 @@ weighted_partition(predict, _, ExId, NoLeft, NoRight) ->
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     {direction(random:uniform() =< LeftFraction), {rr_example:exid(ExId), rr_example:count(ExId)}}.
     
+weighted(_, _, ExId, NoLeft, NoRight) ->
+    LeftFraction = case NoLeft of 0 -> 0; _-> (NoLeft) / (NoLeft + NoRight) end,
+    {direction(LeftFraction >= 0.5), {rr_example:exid(ExId), rr_example:count(ExId)}}.
+		       
+
 
 %%
 %% Distribute the examples evenly over the left and right side
@@ -43,7 +48,7 @@ random(_, _, ExId, _, _) ->
 %% Distribute examples based on the number of examples falling in each
 %% branch.
 %%
-weighted(_, _, ExId, NoLeft, NoRight) ->
+weighted_random(_, _, ExId, NoLeft, NoRight) ->
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     {direction(random:uniform() =< LeftFraction), {rr_example:exid(ExId), rr_example:count(ExId)}}.
 
@@ -56,6 +61,8 @@ ignore(_, _, _, _, _) ->
 %%
 right(_, _, ExId, _, _) ->
     {right, {rr_example:exid(ExId), rr_example:count(ExId)}}.
+left(_, _, ExId, _, _) ->
+    {left, {rr_example:exid(ExId), rr_example:count(ExId)}}.
 
 direction(true) ->
     left;

@@ -16,6 +16,14 @@ init() ->
     ets:new(models, [public, named_table]).
 
 
+model2file(Model, File) ->
+    Model ! {exit, self()},
+    receive
+	{done, Model} ->
+	    ets:tab2file(models, File)
+    end.
+
+
 %%
 %% Generate an ensamble of models from of #rr_conf.base_learners
 %%
@@ -98,7 +106,7 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
 	    Parent ! {prediction, Coordinator, Prediction},
 	    evaluation_coordinator(Parent, Coordinator, Processes);
 	{exit, Parent} ->
-	    done %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
+	    Parent ! {done, self()} %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
     end.
 
 %%
@@ -156,7 +164,7 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 						Fun -> Fun
 					    end},
 	    Conf1 = Conf0#rr_conf{score = case Score of
-					     ranpdom ->
+					     random ->
 						 random_score();
 					     Fun0 -> Fun0
 					 end},
