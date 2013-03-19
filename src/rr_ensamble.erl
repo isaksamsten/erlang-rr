@@ -66,7 +66,7 @@ predict_majority(Model, Example, #rr_conf{base_learner={N, _}}) ->
 %% number of models)
 %%
 get_prediction_probabilities(Acc, N) ->
-    Dict = lists:foldl(fun ({Item, _Laplace}, Dict) ->
+    Dict = lists:foldl(fun ({{Item, _Laplace}, _NodeNr}, Dict) ->
 			       dict:update(Item, fun(Count) -> Count + 1  end, 1, Dict)
 		       end, dict:new(), Acc),
     lists:sort(fun({_, Ca}, {_, Cb}) -> Ca > Cb end, 
@@ -177,7 +177,7 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 		_ ->
 		    ok
 	    end,
-	    base_build_process(Coordinator, Base, Conf, [Model|Acc]);
+	    base_build_process(Coordinator, Base, Conf, [{Id, Model}|Acc]);
 	{completed, Coordinator} ->
 	    base_evaluator_process(Coordinator, self(), Base, Conf, Acc)
     end.
@@ -214,10 +214,9 @@ make_prediction(Models, Base, ExId, Conf) ->
 
 make_prediction([], _Base, _ExId, _Conf, Acc) ->
     Acc;
-make_prediction([Model|Models], Base, ExId, #rr_conf{log=Log} = Conf, Acc) ->
+make_prediction([{ModelNr, Model}|Models], Base, ExId, Conf, Acc) ->
     {Prediction, NodeNr} = Base:predict(ExId, Model, Conf, []),
-    Log(debug, "Example: ~p predicted (~p) by: ~w", [ExId, Prediction, NodeNr]),
-    make_prediction(Models, Base, ExId, Conf, [Prediction|Acc]).
+    make_prediction(Models, Base, ExId, Conf, [{Prediction, [ModelNr|NodeNr]}|Acc]).
 
 %%
 %% Returns a random evaluator from 'rr_tree' with Probability 0 < p <=

@@ -40,19 +40,21 @@
 	 {model_file,     undefined,    "model-file",  {string, []},
 	  "Write model to file"},
 	 {evaluate,       $e,           "evaluate",    undefined,
-	  "Evaluate --input using --model-file"},	  
+	  "Evaluate --input using --model-file"},
+	 {proximity,      $p,           "proximity",   undefined,
+	  "Generate a proximity matrix"},
 
 	 {progress,       undefined,    "progress",    {atom, dots},
 	  "Showing the progress"},
 
 	 {score,          undefined,    "score",       {atom, info},
 	  "Measure for evaluating the goodness of a split"},
-	 {classifiers,    $m,           "no-trees",     {integer, 10},
+	 {classifiers,    $m,           "no-trees",    {integer, 10},
 	  "Number of trees to generate"},
 
-	 {max_depth,      undefined,    "max-depth",       {integer, 1000},
+	 {max_depth,      undefined,    "max-depth",   {integer, 1000},
 	  "Max depth of single decision tree"},
-	 {min_example,    undefined,    "min-examples",    {integer, 2},
+	 {min_example,    undefined,    "min-examples",{integer, 2},
 	  "Min number of examples allowed in split"},
 
 	 {weka,           undefined,    "weka",        undefined,
@@ -64,7 +66,7 @@
 	 {weighted,       undefined,    "weighted",    undefined,
 	  "Calculate the most promesing attributes before model induction, then bias the selection of features towards those that provide information"},
 
-	 {missing,        undefined,    "missing",    {atom, random},
+	 {missing,        undefined,    "missing",     {atom, random},
 	  "Distributing missing values"},
 
 	 {weight_factor,  undefined,    "weight-factor", {float, 0.8},
@@ -179,9 +181,12 @@ output_predictions_for_class(Class, [ExId|Rest]) ->
     {Pred, Prob} = hd(Predictions),
     io:format("~p (~p) ~n", [Pred, Prob]),
     output_predictions_for_class(Class, Rest).
-			   
 
-
+run_proximity(Features, Examples, Conf, Options) ->
+    io:format("~n** Proximities ** ~n"),
+    Model = rr_ensamble:generate_model(ordsets:from_list(Features), Examples, Conf),
+    Dict = rr_proximity:generate_proximity(Model, Examples),
+    io:format("~p", [Dict]).
 
 run_split(Features, Examples, Conf, Options) ->
     Split = get_opt(ratio, Options),
@@ -196,8 +201,6 @@ run_split(Features, Examples, Conf, Options) ->
 run_build_process(Features, Examples, Conf, Options) ->
     Model = rr_ensamble:generate_model(ordsets:from_list(Features), Examples, Conf),
     rr_ensamble:model2file(Model, get_opt(model_file, Options)).
-
-
 
 run_cross_validation(Features, Examples, Conf, Options) ->
     Folds = get_opt(folds, Options),
@@ -240,7 +243,7 @@ evaluate(Dict, NoTestExamples) ->
     Auc = rr_eval:auc(Dict, NoTestExamples),
     io:format("Area under ROC~n"),
     lists:foreach(fun({Class, A}) ->
-			  io:format(" * ~s: ~p ~n", [Class, A])
+			  io:format("  ~s: ~p ~n", [Class, A])
 		  end, Auc),
     AvgAuc = lists:foldl(fun({_, P}, A) -> A + P / length(Auc) end, 0, Auc),
     io:format(" average: ~p ~n", [AvgAuc]),
@@ -248,7 +251,7 @@ evaluate(Dict, NoTestExamples) ->
     io:format("Precision~n"),
     Precision = rr_eval:precision(Dict),
     lists:foreach(fun({Class, P}) ->
-			  io:format(" * ~s: ~p ~n", [Class, P])
+			  io:format("  ~s: ~p ~n", [Class, P])
 		  end, Precision),
 
     Brier = rr_eval:brier(Dict, NoTestExamples),
@@ -302,7 +305,7 @@ create_missing_values(Options) ->
     end.
 
 create_experiment(Options) ->
-    case any_opt([cv, split, build, evaluate], Options) of
+    case any_opt([cv, split, build, evaluate, proximity], Options) of
 	split ->
 	    fun run_split/4;
 	cv ->
@@ -311,6 +314,8 @@ create_experiment(Options) ->
 	    fun run_build_process/4;
 	evaluate ->
 	    ok;
+	proximity ->
+	    fun run_proximity/4;
 	false ->		
 	    io:format(standard_error, "Must select --split or --cross-validation \n", []),
 	    illegal()
