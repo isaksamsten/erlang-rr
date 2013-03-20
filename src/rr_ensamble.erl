@@ -153,12 +153,13 @@ base_build_process(Coordinator, Base, Conf) ->
 
 base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 					       progress=Progress,
+					       bagging=Bagger,
 					       evaluate=Evaluate,
 					       score=Score} = Conf, Acc) ->
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id, Features, Examples} ->
-	    {Bag, _OutBag} = rr_example:bootstrap_replicate(Examples),
+	    {Bag, OutBag} = Bagger(Examples),
 	    Conf0 = Conf#rr_conf{evaluate = case Evaluate of
 						{random, Prob} -> random_evaluator(Prob);
 						Fun -> Fun

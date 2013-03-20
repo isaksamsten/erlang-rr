@@ -69,6 +69,11 @@
 	 {missing,        undefined,    "missing",     {atom, random},
 	  "Distributing missing values"},
 
+	 {bagging,        undefined,    "bagging",     undefined,
+	  "Use a bootstrap replicate for building each tree [default]"},
+	 {subagging,     undefined,    "subagging",  undefined,
+	  "Use a subbag for building each tree"},
+
 	 {weight_factor,  undefined,    "weight-factor", {float, 0.8},
 	  "Weight factor for the --weighted feature selection"},
 	 {no_resamples,   undefined,    "no-resample", {integer, 6},
@@ -122,7 +127,7 @@ main(Args) ->
 
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
-    Examples = rr_example:suffle_dataset(Examples0),
+    Examples = rr_example:shuffle_dataset(Examples0),
 
 
     TotalNoFeatures = length(Features),
@@ -131,12 +136,14 @@ main(Args) ->
     Score = create_score(Options),
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
-    Eval = create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options),
+    Eval = create_evaluator(NoFeatures, ordsets:from_list(Features), Examples, Missing, Score, Options),
+    Bagging = create_bagger(Options),
 
     Conf = #rr_conf{cores = Cores,
 		    score = Score,
 		    prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
 		    evaluate = Eval,
+		    bagging = Bagging,
 		    progress = Progress,
 		    split = fun rr_tree:random_split/3,
 		    distribute = Missing,
@@ -184,22 +191,22 @@ output_predictions_for_class(Class, [ExId|Rest]) ->
 
 run_proximity(Features, Examples, Conf, Options) ->
     io:format("~n** Proximities ** ~n"),
-    Model = rr_ensamble:generate_model(ordsets:from_list(Features), Examples, Conf),
-    Dict = rr_proximity:generate_proximity(Model, Examples),
+    Model = rr_ensamble:generate_model(Features, Examples, Conf),
+    Dict = rr_proximity:generate_proximity(Model, Examples, Conf),
     io:format("~p", [Dict]).
 
 run_split(Features, Examples, Conf, Options) ->
     Split = get_opt(ratio, Options),
     io:format("~n** Split ~p ** ~n", [Split]),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
-    Model = rr_ensamble:generate_model(ordsets:from_list(Features), Train, Conf),
+    Model = rr_ensamble:generate_model(Features, Train, Conf),
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
     evaluate(Dict, rr_example:count(Test)),
     io:format("** Predictions ** ~n"), %% NOTE: improve...
     output_predictions(get_opt(output_predictions, Options), Test).
     
 run_build_process(Features, Examples, Conf, Options) ->
-    Model = rr_ensamble:generate_model(ordsets:from_list(Features), Examples, Conf),
+    Model = rr_ensamble:generate_model(Features, Examples, Conf),
     rr_ensamble:model2file(Model, get_opt(model_file, Options)).
 
 run_cross_validation(Features, Examples, Conf, Options) ->
@@ -208,7 +215,7 @@ run_cross_validation(Features, Examples, Conf, Options) ->
 	    fun(Train0, Test0, Fold) ->
 		    io:format(standard_error, "*** Fold ~p *** ~n", [Fold]),
 		    io:format("~n** Fold: ~p ** ~n", [Fold]),
-		    M = rr_ensamble:generate_model(ordsets:from_list(Features), Train0, Conf),
+		    M = rr_ensamble:generate_model(Features, Train0, Conf),
 		    D = rr_ensamble:evaluate_model(M, Test0, Conf),
 		    evaluate(D, rr_example:count(Test0))
 	    end, Folds, Examples),
@@ -257,6 +264,15 @@ evaluate(Dict, NoTestExamples) ->
     Brier = rr_eval:brier(Dict, NoTestExamples),
     io:format("Brier: ~p ~n", [Brier]),
     [{accuracy, Accuracy}, {auc, Auc, AvgAuc}, {precision, Precision}, {brier, Brier}].
+
+create_bagger(Options) ->
+    case any_opt([subagging, bagging], Options) of
+	subagging ->
+	    fun rr_example:subset_aggregate/1;
+	_ ->
+	    fun rr_example:bootstrap_aggregate/1
+    end.
+	    
 
 create_logger(Options) ->
     case get_opt(log_target, Options) of

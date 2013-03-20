@@ -538,13 +538,15 @@ split_dataset(Examples, Ratio) ->
 			 [{Class, length(Test), Test}|TestAcc]}
 		end, {[], []}, Examples).
 
-suffle_dataset(Examples) ->
-    lists:foldl(fun({Class, Count, Ids0}, Acc) ->
-			Ids = [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> 
-										   {random:uniform(), Id} 
-									   end, Ids0))],
-			[{Class, Count, Ids}|Acc]
+shuffle_dataset(Examples) ->
+    lists:foldl(fun({Class, Count, Ids}, Acc) ->
+			[{Class, Count, shuffle_list(Ids)}|Acc]
 		end, [], Examples).
+
+shuffle_list(Ids0) ->
+    [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> 
+							 {random:uniform(), Id} 
+						 end, Ids0))].
 								 
 %%
 %% TODO: make it stratified
@@ -588,15 +590,25 @@ get_examples_with_for_class(Ids, Class, [ExId|Rest], Acc) ->
 %% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}
 %% examples.
 %%
-bootstrap_replicate(Examples) ->
+bootstrap_aggregate(Examples) ->
     MaxId = count(Examples),
     Bootstrap = generate_bootstrap(MaxId),
     select_bootstrap_examples(Examples, 1, Bootstrap, {[], []}).
-    
+
 generate_bootstrap(MaxId) ->
     lists:foldl(fun(_, Bootstrap) ->
 			dict:update(random:uniform(MaxId), fun (Count) -> Count + 1 end, 1, Bootstrap)
 		end, dict:new(), lists:seq(1, MaxId)).
+
+
+subset_aggregate(Examples) ->
+    MaxId = count(Examples),
+    {Bootstrap, _Ignore} = lists:split(MaxId div 2, generate_substrap(MaxId)),
+    select_bootstrap_examples(Examples, 1, lists:foldl(fun(N, D) -> dict:store(N, 1, D) end, dict:new(), Bootstrap), {[], []}).
+
+generate_substrap(MaxId) ->
+    shuffle_list(lists:seq(1, MaxId)).
+    
 
 select_bootstrap_examples([], _N, _Bootstrap, Acc) ->
     Acc;
