@@ -159,17 +159,9 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id, Features, Examples} ->
-	    {Bag, OutBag} = Bagger(Examples),
-	    Conf0 = Conf#rr_conf{evaluate = case Evaluate of
-						{random, Prob} -> random_evaluator(Prob);
-						Fun -> Fun
-					    end},
-	    Conf1 = Conf0#rr_conf{score = case Score of
-					     random ->
-						 random_score();
-					     Fun0 -> Fun0
-					 end},
-	    Model = Base:generate_model(Features, Bag, Conf1),
+	    {Bag, _OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
+	    Model = Base:generate_model(Features, Bag, Conf),
+
 	    ets:insert(models, {Id, Model}),
 	    Rem = if T > 10 -> round(T/10); true -> 1 end,
 	    case Id rem Rem of
@@ -183,17 +175,6 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 	    base_evaluator_process(Coordinator, self(), Base, Conf, Acc)
     end.
 
-%%
-%% Use a random score function (i.e. either 
-%%
-random_score() ->
-    Random = random:uniform(),
-    if Random >= 0.5 ->
-	    fun rr_tree:info/2;
-       true ->
-	    fun rr_tree:gini/2
-    end.
-	    
 %%
 %% Recives, {evaluate, Coordinator, ExId}, where "ExId" is an
 %% example. The correct class for "ExId" is predicted using "Models"
