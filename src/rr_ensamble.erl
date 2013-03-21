@@ -74,10 +74,13 @@ get_prediction_probabilities(Acc, N) ->
 				   [{Class, Count/N}|Probs]
 			   end, [], dict:to_list(Dict))).
 
+%%
+%% Spaws classification and evaluator process
+%%
 spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf) ->
     Self = self(),
-    Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores, Features, Examples) end),
-    [spawn_link(fun() -> base_build_process(Coordinator, Base, Conf) end) 
+    Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores) end),
+    [spawn_link(fun() -> base_build_process(Coordinator, Base, Features, Examples, Conf) end) 
 		 || _ <- lists:seq(1, Cores)],
     Coordinator.
     
@@ -126,39 +129,39 @@ transition_coordinator(Parent, Coordinator, Cores, Acc) ->
 %% coordinates the build process by sending them a notification (and
 %% an id) for building the next tree
 %%
-build_coordinator(Parent, Sets, Cores, Features, Examples) ->
-    build_coordinator(Parent, self(), 1, Sets, Cores, Features, Examples).
+build_coordinator(Parent, Sets, Cores) ->
+    build_coordinator(Parent, self(), 1, Sets, Cores).
 
-build_coordinator(Parent, Coordinator, Counter, Sets, Cores, _Features, _Examples) when Sets < Counter->
+build_coordinator(Parent, Coordinator, Counter, Sets, Cores) when Sets < Counter->
     receive
 	{build, Coordinator, Pid} ->
 	    Pid ! {completed, Coordinator},
 	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid])
     end;
-build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Features, Examples) ->
+build_coordinator(Parent, Coordinator, Counter, Sets, Cores) ->
     receive 
 	{build, Coordinator, Pid} ->
-	    Pid ! {build, Counter, Features, Examples},
-	    build_coordinator(Parent, Coordinator, Counter + 1, Sets, Cores, Features, Examples)
+	    Pid ! {build, Counter},
+	    build_coordinator(Parent, Coordinator, Counter + 1, Sets, Cores)
     end.
 
 %%
 %% Process for building bootap replicas and train "Base". Transitions
 %% into 'base_evaluator_process', at {completed, Coordinator}
 %%
-base_build_process(Coordinator, Base, Conf) ->
+base_build_process(Coordinator, Base, Features, Examples, Conf) ->
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A,B,C}),
-    base_build_process(Coordinator, Base, Conf, []).
+    base_build_process(Coordinator, Base, Features, Examples, Conf, []).
 
-base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
-					       progress=Progress,
-					       bagging=Bagger,
-					       evaluate=Evaluate,
-					       score=Score} = Conf, Acc) ->
+base_build_process(Coordinator, Base, Features, Examples, #rr_conf{base_learner={T,_},
+								   progress=Progress,
+								   bagging=Bagger,
+								   evaluate=_Evaluate,
+								   score=_Score} = Conf, Acc) ->
     Coordinator ! {build, Coordinator, self()},
     receive
-	{build, Id, Features, Examples} ->
+	{build, Id} ->
 	    {Bag, _OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
 	    Model = Base:generate_model(Features, Bag, Conf),
 
@@ -170,7 +173,7 @@ base_build_process(Coordinator, Base, #rr_conf{base_learner={T,_},
 		_ ->
 		    ok
 	    end,
-	    base_build_process(Coordinator, Base, Conf, [{Id, Model}|Acc]);
+	    base_build_process(Coordinator, Base, Features, Examples, Conf, [{Id, Model}|Acc]);
 	{completed, Coordinator} ->
 	    base_evaluator_process(Coordinator, self(), Base, Conf, Acc)
     end.
