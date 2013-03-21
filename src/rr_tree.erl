@@ -64,7 +64,7 @@ predict(ExId, #rr_node{id=NodeNr,
 		{right, _} ->
 		    predict(ExId, Right, Conf, NewAcc);
 		ignore ->
-		    {{'?', 0.0}, NewAcc}
+		    {{'?', 0.0}, NewAcc} %% NOTE: predict majority class in current node?
 	    end;
 	Value when Value == SplitValue ->
 	    predict(ExId, Left, Conf, NewAcc);
@@ -87,7 +87,7 @@ predict(ExId, #rr_node{id=NodeNr,
 		{right, _} ->
 		    predict(ExId, Right, Conf, NewAcc);
 		ignore ->
-		    {{'?', 0.0}, NewAcc}
+		    {{'?', 0.0}, NewAcc} %% NOTE: predict majority class in current node?
 	    end;
 	Value when Value >= Threshold ->
 	    predict(ExId, Left, Conf, NewAcc);
@@ -104,6 +104,8 @@ predict(ExId, #rr_node{id=NodeNr,
 %%     if Prune(Examples, Depth): make_leaf majority(Examples)
 %%     Split = select_split(Features, Examples)
 %%     for S in Split: build_node(Features, S)
+%%
+%% TODO: count total number of nodes in the tree
 %%
 build_decision_node([], [], _, Id) ->
     make_leaf(Id, [], error);
@@ -129,10 +131,6 @@ build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate,
 	    end	   
     end.
 
-%%
-%% Create a decision node, on "Feature" scoring "Score",
-%% having "Left" and "Right" branches
-%%
 make_node(Id, Feature, Dist, Score, Left, Right) ->
     #rr_node{id = Id,
 	     score=Score, 
@@ -141,9 +139,6 @@ make_node(Id, Feature, Dist, Score, Left, Right) ->
 	     left=Left, 
 	     right=Right}.
 
-%%
-%% Create a leaf node which predicts "Class"
-%%
 make_leaf(Id, [], Class) ->
     #rr_leaf{id=Id, score=0, distribution={0, 0}, class=Class};
 make_leaf(Id, Covered, {Class, C}) ->

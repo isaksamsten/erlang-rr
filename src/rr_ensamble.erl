@@ -9,20 +9,22 @@
 -compile(export_all).
 -include("rr_tree.hrl").
 
-%%
-%%
-%%
 init() ->
     ets:new(models, [public, named_table]).
 
-
-model2file(Model, File) ->
+save_model(Model, File) ->
     Model ! {exit, self()},
     receive
 	{done, Model} ->
 	    ets:tab2file(models, File)
     end.
 
+load_model(File) ->
+    ets:file2tab(File),
+    load_model().
+
+load_model() ->
+    throw({error, not_implemented}).
 
 %%
 %% Generate an ensamble of models from of #rr_conf.base_learners
@@ -163,7 +165,7 @@ base_build_process(Coordinator, Base, Features, Examples, #rr_conf{base_learner=
     receive
 	{build, Id} ->
 	    {Bag, _OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
-	    Model = Base:generate_model(Features, Bag, Conf),
+	    Model = Base:generate_model(Features, Bag, Conf), %% NOTE: allow for backfitting the OOB-examples to correct class estimates
 
 	    ets:insert(models, {Id, Model}),
 	    Rem = if T > 10 -> round(T/10); true -> 1 end,

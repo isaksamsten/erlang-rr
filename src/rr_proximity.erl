@@ -1,5 +1,11 @@
+%%% @author Isak Karlsson <isak@dhcp-159-52.dsv.su.se>
+%%% @copyright (C) 2013, Isak Karlsson
+%%% @doc
+%%% Module for generating a proximity matrix from an induced model
+%%% @end
+%%% Created : 21 Mar 2013 by Isak Karlsson <isak@dhcp-159-52.dsv.su.se>
 -module(rr_proximity).
--compile(export_all).
+-export([generate_proximity/3]).
 
 
 generate_proximity(Model, Examples, Conf) ->
