@@ -193,7 +193,14 @@ run_proximity(Features, Examples, Conf, Options) ->
     io:format("~n** Proximities ** ~n"),
     Model = rr_ensamble:generate_model(Features, Examples, Conf),
     Dict = rr_proximity:generate_proximity(Model, Examples, Conf),
-    io:format("~p", [Dict]).
+    dict:fold(fun (I, V, DictAcc) ->
+		      List0 = dict:fold(fun (J, Prox, Acc) ->
+					       [{J, Prox}|Acc]
+				end, [], V),
+		      List = lists:reverse(lists:keysort(2, List0)),
+		      io:format("~p most proximate to ~p ~n", [I, lists:sublist(List, 3)]),
+		      dict:store(I, List, DictAcc)
+	      end, dict:new(), Dict).
 
 run_split(Features, Examples, Conf, Options) ->
     Split = get_opt(ratio, Options),
