@@ -55,6 +55,16 @@ weighted_random(_, _, ExId, NoLeft, NoRight) ->
 ignore(_, _, _, _, _) ->
     ignore.
 
+proximity(build, _, ExId, _, _) ->
+    %% Prox = sample a number of examples from ets:lookup(proximity
+    %% ..)  mean or mode this value and use that to split to the right
+    %% or left branch.
+    left; % TODO: require implementation
+proximity(predict, _, ExId, Left, Right) ->
+    left.
+
+
+
 %%
 %% Distribute every example in the right branch (i.e. consider it
 %% false)
