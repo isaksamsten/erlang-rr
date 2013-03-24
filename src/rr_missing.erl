@@ -67,25 +67,11 @@ proximity(_, {{Type, Feature}, Value} = F, ExId, NoLeft, NoRight) ->
 	    weighted(build, F, ExId, NoLeft, NoRight);
 	 Avg ->
 	    {direction(Type, Value, Avg), exid(ExId)}
-    end.
-%% proximity(predict, F, ExId, Left, Right) ->
-%%     weighted(predict, F, ExId, Left, Right). 
+    end.    
 
-first_missing(_, [], _) ->
-    '?';
-first_missing(_, _, 0) ->
-    '?';
-first_missing(FeatureId, [{ExId, Score}|Rest], N) ->
-    case rr_example:feature(ExId, FeatureId) of
-	'?' ->
-	    first_missing(FeatureId, Rest, N - 1);
-	Value ->
-	    Value
-    end.
-	    
-
-    
-
+%%
+%% NOTE: this is really bad..
+%%
 average_proximity(numeric, FeatureId, Prox, N) ->
     mean_proximity(Prox, FeatureId, N, []);
 average_proximity(categoric, FeatureId, Prox, N) ->
