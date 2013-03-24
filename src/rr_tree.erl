@@ -23,8 +23,8 @@ example_depth_stop(MaxExamples, MaxDepth) ->
 %%
 generate_model(Features, Examples, Conf) ->
     Info = info_content(Examples, rr_example:count(Examples)),
-    {Tree, Importance, Total, _} = build_decision_node(Features, Examples, Info, dict:new(), 0, Conf, 1),
-    io:format("Built tree: ~p ~n", [Total]),
+    {Tree, _Importance, _Total, _} = build_decision_node(Features, Examples, dict:new(), 0, Info, Conf, 1),
+%    io:format("Built tree: ~p ~p ~n", [lists:keysort(2, dict:to_list(Importance)), Total]),
     Tree.
     
 %%
@@ -85,40 +85,44 @@ predict(ExId, #rr_node{id=NodeNr,
 %%     for S in Split: build_node(Features, S)
 %%
 %% TODO: count total number of nodes in the tree
+%% 
+%% Return: {Node, Importance, TotalReduction, ErrorReduction}
 %%
-build_decision_node([], [], Importance, Info, Total, _, Id) ->
-    {make_leaf(Id, [], error), Total, Importance, Info};
-build_decision_node([], Examples, Importance, Info, Total, _, Id) ->
-    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Info};
-build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Info, Total, _, Id) ->
-    {make_leaf(Id, Examples, {Class, Count}), Importance, Total, Info};
-build_decision_node(Features, Examples, Importance, Info, Total, #rr_conf{prune=Prune, 
+build_decision_node([], [], Importance, Total, Error, _, Id) ->
+    {make_leaf(Id, [], error), Importance, Total, Error};
+build_decision_node([], Examples, Importance, Total, Error, _, Id) ->
+    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Error};
+build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, Error, _, Id) ->
+    {make_leaf(Id, Examples, {Class, Count}), Importance, Total, Error};
+build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune=Prune, 
 									  evaluate=Evaluate, 
 									  depth=Depth} = Conf, Id) ->
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
 	true ->
-	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Info};
+	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Error};
 	false ->
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
 		no_information ->
-		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, 0};
+		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Error};
 		#rr_candidate{split={_, _}} ->
-		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, 0};
+		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Error};
 		#rr_candidate{feature=Feature, 
 			      score={Score, LeftError, RightError}, 
-			      split={both, LeftExamples, RightExamples}}  ->  
-		    {Left, LeftImportance, TotalLeft, LeftInfo} = build_decision_node(Features, LeftExamples, Importance, 
-										      Info, Total,
-										      Conf#rr_conf{depth=Depth + 1}, Id + 1),
-		    {Right, RightImportance, TotalRight, RightInfo} = build_decision_node(Features, RightExamples, LeftImportance, 
-											  LeftInfo, TotalLeft,
-											  Conf#rr_conf{depth=Depth + 1}, Id + 2),
-		    Reduction = RightInfo - (LeftError + RightError),
-		    {make_node(Id, Feature, {rr_example:count(LeftExamples), 
-					     rr_example:count(RightExamples),
-					     rr_example:majority(Examples)}, Score, Left, Right), 
-		     dict:update_counter(Feature, Reduction, RightImportance), Total + Reduction, Reduction}
+			      split={both, LeftExamples, RightExamples}}  ->  %% NOTE: need to fix variable imprtnce
+
+		    NewReduction = Error - (LeftError + RightError),
+		    NewImportance = dict:update_counter(element(1, Feature), NewReduction, Importance),		    
+
+		    {LeftNode, LeftImportance, TotalLeft, LeftReduction} = 
+			build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError, 
+					    Conf#rr_conf{depth=Depth + 1}, Id + 1),
+
+		    {RightNode, RightImportance, TotalRight, RightReduction} = 
+			build_decision_node(Features, RightExamples, LeftImportance, TotalLeft, RightError, 
+					    Conf#rr_conf{depth=Depth + 1}, Id + 2),
+		    Distribution = {rr_example:count(LeftExamples), rr_example:count(RightExamples), rr_example:majority(Examples)},
+		    {make_node(Id, Feature, Distribution, Score, LeftNode, RightNode), RightImportance, TotalRight, NewReduction}
 	    end	   
     end.
 
@@ -224,7 +228,9 @@ correlation_evaluate(NoFeatures) ->
 	    FeaturesA = rr_example:random_features(Features, NoFeatures),
 	    FeaturesB = rr_example:random_features(Features, NoFeatures),
 	    
-	    Combination = lists:zipwith(fun (A, B) -> {combined, A, B} end, FeaturesA, FeaturesB),
+	    Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB],
+
+		%lists:zipwith(fun (A, B) -> {combined, A, B} end, FeaturesA, FeaturesB),
 	    evaluate_split(Combination, Examples, Total, Conf)
     end.
 	    
@@ -327,15 +333,15 @@ info({both, Left, Right}, Total) ->
     {LeftInfo + RightInfo, LeftInfo, RightInfo};
 info({left, Left}, Total) ->
     LeftInfo = info_content(Left, Total),
-    {LeftInfo, LeftInfo, 0};
+    {LeftInfo, LeftInfo, 0.0};
 info({right, Right}, Total) ->
     RightInfo = info_content(Right, Total),
-    {RightInfo, 0, RightInfo}.
+    {RightInfo, 0.0, RightInfo}.
 
     
 info_content(Side, Total) ->
     NoSide = rr_example:count(Side),
-    (NoSide / Total) * entropy(Side).
+    (NoSide / Total) * (Total * entropy(Side)).
         
 
 %%

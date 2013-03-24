@@ -54,7 +54,7 @@
 
 	 {max_depth,      undefined,    "max-depth",   {integer, 1000},
 	  "Max depth of single decision tree"},
-	 {min_example,    undefined,    "min-examples",{integer, 2},
+	 {min_example,    undefined,    "min-examples",{integer, 1},
 	  "Min number of examples allowed in split"},
 
 	 {combination,    undefined,    "combination", undefined,
