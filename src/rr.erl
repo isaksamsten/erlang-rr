@@ -57,6 +57,8 @@
 	 {min_example,    undefined,    "min-examples",{integer, 2},
 	  "Min number of examples allowed in split"},
 
+	 {combination,    undefined,    "combination", undefined,
+	  "Combination of random features"},
 	 {weka,           undefined,    "weka",        undefined,
 	  "Same as --resample, however with K=inf"},
 	 {resample,       undefined,    "resample",    undefined,
@@ -418,7 +420,7 @@ get_no_features(TotalNoFeatures, Options) ->
     end.
 
 create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options) ->
-    case any_opt([weka, resample, weighted], Options) of
+    case any_opt([weka, resample, weighted, combination], Options) of
 	weka ->
 	    rr_tree:weka_evaluate(NoFeatures);
 	resample ->
@@ -427,9 +429,12 @@ create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options) ->
 	    rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
 	weighted ->
 	    Fraction = get_opt(weight_factor, Options), %% NOTE: make this paralell
-	    Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), #rr_conf{score=Score, distribute=Missing}, []),
+	    Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), 
+					  #rr_conf{score=Score, distribute=Missing}, []),
 	    NewScores = lists:split(trunc(length(Scores) * Fraction), lists:map(fun({_, V}) -> V end, Scores)),
 	    rr_tree:weighted_evaluate(NoFeatures, Fraction, NewScores);
+	combination ->
+	    rr_tree:correlation_evaluate(NoFeatures);
 	false -> 
 	    rr_tree:subset_evaluate(NoFeatures)
     end.

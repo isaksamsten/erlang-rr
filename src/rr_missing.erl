@@ -92,8 +92,6 @@ mode_proximity(Prox, FeatureId, N, Dict) ->
 	    mode_proximity(Rest, FeatureId, N, dict:update_counter(P, 1, Dict))
     end.
 	    
-		    
-
 mean_proximity([], _, _, List) ->
     case List of
 	[] ->

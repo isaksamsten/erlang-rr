@@ -185,6 +185,17 @@ format_split_distribution(Acc) ->
 			      end, [], dict:to_list(Acc))).
 
 %%
+%% Format the Left and Right branch
+%% TODO: rewrite to allow for sending a tuple instead...
+%%
+format_left_right_split([], Right) ->
+    {right, Right};
+format_left_right_split(Left, []) ->
+    {left, Left};
+format_left_right_split(Left, Right) ->
+    {both, Left, Right}.
+
+%%
 %% Distribute missing values over the left and right branch using
 %% "Distribute"
 %%
@@ -242,20 +253,27 @@ split(Feature, Examples, Distribute) ->
 %% Split into three disjoint subsets, Left, Right and those examples
 %% having a missing value for "Feature"
 %%
-split_missing({categoric, FeatureId} = Feature, Examples) ->
-    Value = resample_random_split(FeatureId, Examples, 5),
-    split_categoric_feature(Feature, Value, Examples, [], [], []);
-split_missing({numeric, FeatureId} = Feature, Examples) ->
-    Threshold = random_numeric_split(FeatureId, Examples),
-    split_numeric_feature(Feature, Threshold, Examples, [], [], []);
-split_missing({{numeric, FeatureId} = Feature, Gain}, Examples) ->
-    Threshold = deterministic_numeric_split(FeatureId, Examples, Gain),
-    split_numeric_feature(Feature, Threshold, Examples, [], [], []).
+split_missing(Feature, Examples) ->
+    Value = sample_split_value(Feature, Examples),
+    split_feature(Feature, Value, Examples, [], [], []).
+
+sample_split_value(Feature, Examples) ->
+    case Feature of
+	{categoric, FeatureId} ->
+	    resample_random_split(FeatureId, Examples, 5);
+	{numeric, FeatureId} ->
+	    random_numeric_split(FeatureId, Examples);
+	{combined, A, B} ->
+	    sample_split_value(A, B, Examples)
+    end.
+
+sample_split_value(FeatureA, FeatureB, Examples) ->
+    {combined, sample_split_value(FeatureA, Examples), sample_split_value(FeatureB, Examples)}.
+    
 
 %%
-%% TODO: refactor repeated code
 %% Split the class distribution:
-%%  NOTE: LEFT is >= or == and RIGHT is < or /= NOTE: Needs to handle missing values
+%%  NOTE: LEFT is >= or == and RIGHT is < or /= 
 %%
 split_class_distribution(_, [], _, Left, Right, Missing) ->
     {Left, Right, Missing};
@@ -264,59 +282,62 @@ split_class_distribution(Feature, [ExampleId|Examples], Class,
 			 {Class, NoRight, Right} = RightExamples,
 			 {Class, NoMissing, Missing} = MissingExamples) ->
     case distribute(Feature, ExampleId) of
-	'?' ->
+	{'?', Count} ->
 	    split_class_distribution(Feature, Examples, Class, LeftExamples, RightExamples, 
-				     {Class, NoMissing + 1, [ExampleId|Missing]});
-	left ->
-	    split_class_distribution(Feature, Examples, Class, {Class, NoLeft + 1, [ExampleId|Left]}, 
+				     {Class, NoMissing + Count, [ExampleId|Missing]});
+	{left, Count} ->
+	    split_class_distribution(Feature, Examples, Class, {Class, NoLeft + Count, [ExampleId|Left]}, 
 				     RightExamples, MissingExamples);
-	right ->
+	{right, Count} ->
 	    split_class_distribution(Feature, Examples, Class, LeftExamples, 
-				     {Class, NoRight + 1, [ExampleId|Right]}, MissingExamples)
+				     {Class, NoRight + Count, [ExampleId|Right]}, MissingExamples)
     end.
 
 distribute({{categoric, FeatureId}, SplitValue}, ExId) ->
-    case feature(ExId, FeatureId) of
+    {case feature(ExId, FeatureId) of
 	'?' -> '?';
 	Value when Value == SplitValue -> left;
 	_ -> right
-    end;
+    end, count(ExId)};
 distribute({{numeric, FeatureId}, Threshold}, ExId) ->
-    case feature(ExId, FeatureId) of
+    {case feature(ExId, FeatureId) of
 	'?' -> '?';
 	Value when Value >= Threshold -> left;
 	_ -> right
-    end.
-	
-%%
-%% Format the Left and Right branch
-%% TODO: rewrite to allow for sending a tuple instead...
-%%
-format_left_right_split([], Right) ->
-    [Right];
-format_left_right_split(Left, []) ->
-    [Left];
-format_left_right_split(Left, Right) ->
-    [Left, Right].
+    end, count(ExId)};
+distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}}, ExId) ->
+    {A, _} = distribute({FeatureA, SplitValueA}, ExId),
+    {B, C} = distribute({FeatureB, SplitValueB}, ExId),
+    {case {A, B} of
+	{'?', B} ->
+	    B;
+	{A, '?'} ->
+	    A;
+	{A, B} when A == B ->
+	    A;
+	{A, B} when A =/= B ->
+	    Rand = random:uniform(),
+	    if Rand >= 0.5 ->
+		    A;
+	       true ->
+		    B
+	    end
+    end, C}.
+	    
+			
+    
 
-split_numeric_feature(_, Threshold, [], Left, Right, Missing) ->
+	
+split_feature(_, Threshold, [], Left, Right, Missing) ->
     {Threshold, {Left, Right, Missing}};
-split_numeric_feature(Feature, Threshold, [{Class, _, ExampleIds}|Examples], Left, Right, Missing) ->
+split_feature(Feature, Threshold, [{Class, _, ExampleIds}|Examples], Left, Right, Missing) ->
     case split_class_distribution({Feature, Threshold}, ExampleIds, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
 	{LeftSplit, RightSplit, MissingSplit} ->
-	    split_numeric_feature(Feature, Threshold, Examples, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
-    end.
-
-split_categoric_feature(_, Value, [], Left, Right, Missing) ->
-    {Value, {Left, Right, Missing}};
-split_categoric_feature(Feature, Value, [{Class, _, ExampleIds}|Examples], Left, Right, Missing) ->
-    case split_class_distribution({Feature, Value}, ExampleIds, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
-	{LeftSplit, RightSplit, MissingSplit} ->
-	    split_categoric_feature(Feature, Value, Examples, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
+	    split_feature(Feature, Threshold, Examples, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
     end.
 
 %%
-%% Find the best numeric split point
+%% Find the best numeric split point. TODO: handle missing values
 %%
 deterministic_numeric_split(FeatureId, Examples, Gain) ->
     [{Value, Class}|ClassIds] = lists:keysort(1, lists:foldl(
@@ -489,10 +510,9 @@ remove_covered(Examples, Covered) ->
 coverage(Examples) ->
     {rr_example:count('+', Examples), rr_example:count('-', Examples)}.
 
-feature({ExId, _}, At) when is_number(ExId)->
-    ets:lookup_element(examples, ExId, At + 1);
-feature(ExId, At) when is_number(ExId) ->
-    ets:lookup_element(examples, ExId, At + 1).
+
+feature(ExId, At) ->
+    ets:lookup_element(examples, exid(ExId), At + 1).
 
 %%
 %% Generate a set of random numbers

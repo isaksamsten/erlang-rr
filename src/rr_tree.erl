@@ -22,7 +22,10 @@ example_depth_stop(MaxExamples, MaxDepth) ->
 %% Generate model from Features and Examples
 %%
 generate_model(Features, Examples, Conf) ->
-    build_decision_node(Features, Examples, Conf, 1).
+    Info = info_content(Examples, rr_example:count(Examples)),
+    {Tree, Importance, Total, _} = build_decision_node(Features, Examples, Info, dict:new(), 0, Conf, 1),
+    io:format("Built tree: ~p ~n", [Total]),
+    Tree.
     
 %%
 %% Evaluate "Examples" using "Model"
@@ -50,48 +53,24 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
 predict(_, #rr_leaf{id=NodeNr, class=Class, score=Score}, _Conf, Acc) ->
     {{Class, Score}, [NodeNr|Acc]};
 predict(ExId, #rr_node{id=NodeNr, 
-		       feature={{categoric, Id}, SplitValue} = F, 
-		       distribution={LeftExamples, RightExamples},
+		       feature=F, 
+		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
 		       right=Right}, #rr_conf{distribute=Distribute} = Conf, Acc) ->
-    Value = rr_example:feature(ExId, Id),
     NewAcc = [NodeNr|Acc],
-    case Value of
-	'?' ->
+    case rr_example:distribute(F, ExId) of
+	{'?', _} ->
 	    case Distribute(predict, F, ExId, LeftExamples, RightExamples) of
 		{left, _} ->
 		    predict(ExId, Left, Conf, NewAcc);
 		{right, _} ->
 		    predict(ExId, Right, Conf, NewAcc);
 		ignore ->
-		    {{'?', 0.0}, NewAcc} %% NOTE: predict majority class in current node?
+		    {{Majority, laplace(Count, LeftExamples+RightExamples)}, NewAcc}
 	    end;
-	Value when Value == SplitValue ->
+	{left, _} ->
 	    predict(ExId, Left, Conf, NewAcc);
-	Value ->
-	    predict(ExId, Right, Conf, NewAcc)
-    end;
-
-predict(ExId, #rr_node{id=NodeNr, 
-			     feature={{numeric, Id}, Threshold} = F, 
-			     distribution={LeftExamples, RightExamples},
-			     left=Left,
-			     right=Right}, #rr_conf{distribute=Distribute} = Conf, Acc) ->
-    Value = rr_example:feature(ExId, Id),
-    NewAcc = [NodeNr|Acc],
-    case Value of
-	'?' ->
-	    case Distribute(predict, F, ExId, LeftExamples, RightExamples) of
-		{left, _} ->
-		    predict(ExId, Left, Conf, NewAcc);
-		{right, _} ->
-		    predict(ExId, Right, Conf, NewAcc);
-		ignore ->
-		    {{'?', 0.0}, NewAcc} %% NOTE: predict majority class in current node?
-	    end;
-	Value when Value >= Threshold ->
-	    predict(ExId, Left, Conf, NewAcc);
-	Value ->
+	{right, _} ->
 	    predict(ExId, Right, Conf, NewAcc)
     end.
 	    
@@ -107,27 +86,39 @@ predict(ExId, #rr_node{id=NodeNr,
 %%
 %% TODO: count total number of nodes in the tree
 %%
-build_decision_node([], [], _, Id) ->
-    make_leaf(Id, [], error);
-build_decision_node([], Examples, _, Id) ->
-    make_leaf(Id, Examples, rr_example:majority(Examples));
-build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, _, Id) ->
-    make_leaf(Id, Examples, {Class, Count});
-build_decision_node(Features, Examples, #rr_conf{prune=Prune, evaluate=Evaluate, depth=Depth} = Conf, Id) ->
+build_decision_node([], [], Importance, Info, Total, _, Id) ->
+    {make_leaf(Id, [], error), Total, Importance, Info};
+build_decision_node([], Examples, Importance, Info, Total, _, Id) ->
+    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Info};
+build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Info, Total, _, Id) ->
+    {make_leaf(Id, Examples, {Class, Count}), Importance, Total, Info};
+build_decision_node(Features, Examples, Importance, Info, Total, #rr_conf{prune=Prune, 
+									  evaluate=Evaluate, 
+									  depth=Depth} = Conf, Id) ->
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
 	true ->
-	    make_leaf(Id, Examples, rr_example:majority(Examples));
+	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Info};
 	false ->
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
 		no_information ->
-		    make_leaf(Id, Examples, rr_example:majority(Examples));
-		#rr_candidate{split=[_]} ->
-		    make_leaf(Id, Examples, rr_example:majority(Examples));
-		#rr_candidate{feature=Feature, score=Score, split=[LeftExamples, RightExamples]}  ->  
-		    Left = build_decision_node(Features, LeftExamples, Conf#rr_conf{depth=Depth + 1}, Id + 1),
-		    Right = build_decision_node(Features, RightExamples, Conf#rr_conf{depth=Depth + 1}, Id + 2),
-		    make_node(Id, Feature, {rr_example:count(LeftExamples), rr_example:count(RightExamples)}, Score, Left, Right)
+		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, 0};
+		#rr_candidate{split={_, _}} ->
+		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, 0};
+		#rr_candidate{feature=Feature, 
+			      score={Score, LeftError, RightError}, 
+			      split={both, LeftExamples, RightExamples}}  ->  
+		    {Left, LeftImportance, TotalLeft, LeftInfo} = build_decision_node(Features, LeftExamples, Importance, 
+										      Info, Total,
+										      Conf#rr_conf{depth=Depth + 1}, Id + 1),
+		    {Right, RightImportance, TotalRight, RightInfo} = build_decision_node(Features, RightExamples, LeftImportance, 
+											  LeftInfo, TotalLeft,
+											  Conf#rr_conf{depth=Depth + 1}, Id + 2),
+		    Reduction = RightInfo - (LeftError + RightError),
+		    {make_node(Id, Feature, {rr_example:count(LeftExamples), 
+					     rr_example:count(RightExamples),
+					     rr_example:majority(Examples)}, Score, Left, Right), 
+		     dict:update_counter(Feature, Reduction, RightImportance), Total + Reduction, Reduction}
 	    end	   
     end.
 
@@ -194,9 +185,6 @@ weighted_evaluate_split({Good, _Bad}, Examples, Total, Conf, NoFeatures, Fractio
     Features0 = rr_example:random_features(Good, NoFeatures),
     evaluate_split(Features0, Examples, Total, Conf).
 
-
-
-
 %%
 %% Uses the same algorithm as Weka for resampling non-informative
 %% 
@@ -230,6 +218,17 @@ subset_evaluate(NoFeatures) ->
 	    Features0 = rr_example:random_features(Features, NoFeatures),
 	    evaluate_split(Features0, Examples, Total, Conf)
     end.
+
+correlation_evaluate(NoFeatures) ->
+    fun (Features, Examples, Total, Conf) ->
+	    FeaturesA = rr_example:random_features(Features, NoFeatures),
+	    FeaturesB = rr_example:random_features(Features, NoFeatures),
+	    
+	    Combination = lists:zipwith(fun (A, B) -> {combined, A, B} end, FeaturesA, FeaturesB),
+	    evaluate_split(Combination, Examples, Total, Conf)
+    end.
+	    
+
 
 %%
 %% Evalate one randomly selected feature
@@ -322,18 +321,22 @@ gini([{_Value, Splits}|Rest], Total, Acc) ->
     gini(Rest, Total, Acc + math:pow(Fi, 2)).
 	
 
+info({both, Left, Right}, Total) ->
+    LeftInfo = info_content(Left, Total),
+    RightInfo = info_content(Right, Total),
+    {LeftInfo + RightInfo, LeftInfo, RightInfo};
+info({left, Left}, Total) ->
+    LeftInfo = info_content(Left, Total),
+    {LeftInfo, LeftInfo, 0};
+info({right, Right}, Total) ->
+    RightInfo = info_content(Right, Total),
+    {RightInfo, 0, RightInfo}.
 
-%%
-%% Caculate the information for splitting into "ValueSplits"
-%%
-info(ValueSplits, Total) ->
-    info(ValueSplits, Total, 0).
-
-info([], _, Acc) -> Acc;
-info([Splits|Rest], Total, Acc) ->
-    ClassSum = rr_example:count(Splits),
-    info(Rest, Total,
-	 Acc + (ClassSum / Total) * entropy(Splits)).
+    
+info_content(Side, Total) ->
+    NoSide = rr_example:count(Side),
+    (NoSide / Total) * entropy(Side).
+        
 
 %%
 %% Calculate the entropy of Examples
