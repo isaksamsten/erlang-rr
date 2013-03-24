@@ -119,6 +119,7 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
 %%
 transition_coordinator(Parent, Coordinator, 0, Acc) ->
     io:format(standard_error, "~n", []), % Note: separate progress (sorry)
+    Parent ! {done, Coordinator},
     evaluation_coordinator(Parent, Coordinator, Acc);
 transition_coordinator(Parent, Coordinator, Cores, Acc) ->
     receive

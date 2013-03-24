@@ -50,7 +50,7 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
 predict(_, #rr_leaf{id=NodeNr, class=Class, score=Score}, _Conf, Acc) ->
     {{Class, Score}, [NodeNr|Acc]};
 predict(ExId, #rr_node{id=NodeNr, 
-		       feature={{categoric, Id}, SplitValue}, 
+		       feature={{categoric, Id}, SplitValue} = F, 
 		       distribution={LeftExamples, RightExamples},
 		       left=Left, 
 		       right=Right}, #rr_conf{distribute=Distribute} = Conf, Acc) ->
@@ -58,7 +58,7 @@ predict(ExId, #rr_node{id=NodeNr,
     NewAcc = [NodeNr|Acc],
     case Value of
 	'?' ->
-	    case Distribute(predict, [], ExId, LeftExamples, RightExamples) of
+	    case Distribute(predict, F, ExId, LeftExamples, RightExamples) of
 		{left, _} ->
 		    predict(ExId, Left, Conf, NewAcc);
 		{right, _} ->
@@ -73,7 +73,7 @@ predict(ExId, #rr_node{id=NodeNr,
     end;
 
 predict(ExId, #rr_node{id=NodeNr, 
-			     feature={{numeric, Id}, Threshold}, 
+			     feature={{numeric, Id}, Threshold} = F, 
 			     distribution={LeftExamples, RightExamples},
 			     left=Left,
 			     right=Right}, #rr_conf{distribute=Distribute} = Conf, Acc) ->
@@ -81,7 +81,7 @@ predict(ExId, #rr_node{id=NodeNr,
     NewAcc = [NodeNr|Acc],
     case Value of
 	'?' ->
-	    case Distribute(predict, [], ExId, LeftExamples, RightExamples) of
+	    case Distribute(predict, F, ExId, LeftExamples, RightExamples) of
 		{left, _} ->
 		    predict(ExId, Left, Conf, NewAcc);
 		{right, _} ->

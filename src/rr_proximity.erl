@@ -6,23 +6,31 @@
 %%% Created : 21 Mar 2013 by Isak Karlsson <isak@dhcp-159-52.dsv.su.se>
 -module(rr_proximity).
 -export([generate_proximity/3,
+	 examples/1,
 	 init/0]).
 -include("rr_tree.hrl").
 
 init() ->
+    catch ets:delete(proximity),
     ets:new(proximity, [named_table, public, {read_concurrency, true}]).
 
+
+examples(ExId0) ->
+    ExId = rr_example:exid(ExId0),
+    ets:lookup_element(proximity, ExId, 2).
+    
 
 generate_proximity(Model, Examples, #rr_conf{base_learner={Trees, _}} = Conf) ->
     Dict = generate_proximity(Model, Examples, Conf, dict:new()),
     Prox = generate_promixity(Dict, Trees),
     dict:fold(fun (I, V, _) ->
-		      List0 = dict:fold(fun (J, Prox, Acc) ->
-						[{J, Prox}|Acc]
+		      List0 = dict:fold(fun (J, Count, Acc) ->
+						[{J, Count}|Acc]
 					end, [], V),
 		      List = lists:reverse(lists:keysort(2, List0)),
 		      ets:insert(proximity, {I, List}) %% NOTE: only store a subset?
-	      end, [], Prox).
+	      end, [], Prox),
+    Model ! {exit, self()}.
 
 generate_promixity(Dict, Trees) ->
     dict:fold(fun (_, Value, Acc) ->
@@ -47,7 +55,7 @@ generate_proximity(Model, [{_, _, ExIds}|Rest], Conf, Dict) ->
     NewDict = generate_proximity_for_class(Model, ExIds, Conf, Dict),
     generate_proximity(Model, Rest, Conf, NewDict).
 
-generate_proximity_for_class(_, [], Conf, Dict) ->
+generate_proximity_for_class(_, [], _Conf, Dict) ->
     Dict;
 generate_proximity_for_class(Model, [ExId|Rest], Conf, Dict) ->
     Model ! {evaluate, self(), ExId},

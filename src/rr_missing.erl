@@ -55,24 +55,102 @@ weighted_random(_, _, ExId, NoLeft, NoRight) ->
 ignore(_, _, _, _, _) ->
     ignore.
 
-proximity(build, _, ExId, _, _) ->
-    %% Prox = sample a number of examples from ets:lookup(proximity
-    %% ..)  mean or mode this value and use that to split to the right
-    %% or left branch.
-    left; % TODO: require implementation
-proximity(predict, _, ExId, Left, Right) ->
-    left.
 
+%%
+%% Distribute missing values by sampling from the proximate examples
+%%
+proximity(_, {{Type, Feature}, Value} = F, ExId, NoLeft, NoRight) ->
+    Prox = rr_proximity:examples(ExId),
+    Avg = average_proximity(Type, Feature, Prox, 5),
+    case Avg of
+	 '?' ->
+	    weighted(build, F, ExId, NoLeft, NoRight);
+	 Avg ->
+	    {direction(Type, Value, Avg), exid(ExId)}
+    end.
+%% proximity(predict, F, ExId, Left, Right) ->
+%%     weighted(predict, F, ExId, Left, Right). 
 
+first_missing(_, [], _) ->
+    '?';
+first_missing(_, _, 0) ->
+    '?';
+first_missing(FeatureId, [{ExId, Score}|Rest], N) ->
+    case rr_example:feature(ExId, FeatureId) of
+	'?' ->
+	    first_missing(FeatureId, Rest, N - 1);
+	Value ->
+	    Value
+    end.
+	    
+
+    
+
+average_proximity(numeric, FeatureId, Prox, N) ->
+    mean_proximity(Prox, FeatureId, N, []);
+average_proximity(categoric, FeatureId, Prox, N) ->
+    mode_proximity(Prox, FeatureId, N, dict:new()).
+
+mode_proximity(Prox, FeatureId, N, Dict) -> 
+    case Prox of
+	[] ->
+	    [{F, _}|_] = lists:reverse(lists:keysort(2, dict:to_list(Dict))),
+	    F;
+	_ when N == 0 ->
+	    [{F, _}|_] = lists:reverse(lists:keysort(2, dict:to_list(Dict))),
+	    F;
+	['?'|Rest] ->
+	    io:format(standard_error, "Missing value... ~n", []),
+	    mode_proximity(Rest, FeatureId, N, Dict);
+	[{P, _Score}|Rest] ->
+	    mode_proximity(Rest, FeatureId, N, dict:update_counter(P, 1, Dict))
+    end.
+	    
+		    
+
+mean_proximity([], _, _, List) ->
+    case List of
+	[] ->
+	    '?';
+	_ ->
+	    lists:sum(List) / length(List)
+    end;
+mean_proximity(_, _, 0, List) ->
+    case List of
+	[] ->
+	    '?';
+	_ ->
+	    lists:sum(List) / length(List)
+    end;
+mean_proximity([{Proximity, _Score}|Rest], FeatureId, N, Acc) ->
+    Value = rr_example:feature(Proximity, FeatureId),
+    case Value of
+	'?' ->
+	    mean_proximity(Rest, FeatureId, N - 1, Acc);
+	_ ->
+	    mean_proximity(Rest, FeatureId, N - 1, [Value|Acc])
+    end.
+	  
+    
 
 %%
 %% Distribute every example in the right branch (i.e. consider it
 %% false)
 %%
 right(_, _, ExId, _, _) ->
-    {right, {rr_example:exid(ExId), rr_example:count(ExId)}}.
+    {right, exid(ExId)}.
 left(_, _, ExId, _, _) ->
-    {left, {rr_example:exid(ExId), rr_example:count(ExId)}}.
+    {left, exid(ExId)}.
+
+
+exid(ExId) ->
+    {rr_example:exid(ExId), rr_example:count(ExId)}.
+
+
+direction(categoric, Value, Avg) ->
+    direction(Value == Avg);
+direction(numeric, Value, Avg) ->
+    direction(Value >= Avg).
 
 direction(true) ->
     left;

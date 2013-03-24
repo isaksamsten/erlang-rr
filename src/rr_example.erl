@@ -235,7 +235,8 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 %%
 split(Feature, Examples, Distribute) ->
     {Value, {Left, Right, Missing}} = split_missing(Feature, Examples),
-    {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), Left, Right, Missing, [], [], Distribute)}.
+    {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 
+				      Left, Right, Missing, [], [], Distribute)}.
 
 %%
 %% Split into three disjoint subsets, Left, Right and those examples

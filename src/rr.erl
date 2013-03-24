@@ -189,18 +189,43 @@ output_predictions_for_class(Class, [ExId|Rest]) ->
     io:format("~p (~p) ~n", [Pred, Prob]),
     output_predictions_for_class(Class, Rest).
 
-run_proximity(Features, Examples, Conf, Options) ->
-    io:format("~n** Proximities ** ~n"),
+run_proximity(Features, Examples, Conf) ->
     rr_proximity:init(),
     Model = rr_ensamble:generate_model(Features, Examples, Conf),
-    Dict = rr_proximity:generate_proximity(Model, Examples, Conf).
+    rr_proximity:generate_proximity(Model, Examples, Conf).
 
 run_split(Features, Examples, Conf, Options) ->
     Split = get_opt(ratio, Options),
     io:format("~n** Split ~p ** ~n", [Split]),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
+
+    Log = Conf#rr_conf.log,
+    case get_opt(missing, Options) of
+	proximity ->
+	    Log(info, "Generating proximity matrix (training) ...", []),
+	    run_proximity(Features, Train, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
+						        distribute = fun rr_missing:weighted/5});
+	_ ->
+	    ok
+    end,
     Model = rr_ensamble:generate_model(Features, Train, Conf),
+    receive 
+	{done, Model} ->
+	    ok
+    end,
+    case get_opt(missing, Options) of
+	proximity ->
+	    Log(info, "Generating proximity matrix (testing)...", []),
+	    run_proximity(Features, Test, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
+						       distribute = fun rr_missing:weighted/5});
+	_ ->
+	    ok
+    end,
+
+
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
+
+
     evaluate(Dict, rr_example:count(Test)),
     io:format("** Predictions ** ~n"), %% NOTE: improve...
     output_predictions(get_opt(output_predictions, Options), Test).
@@ -215,7 +240,29 @@ run_cross_validation(Features, Examples, Conf, Options) ->
 	    fun(Train0, Test0, Fold) ->
 		    io:format(standard_error, "*** Fold ~p *** ~n", [Fold]),
 		    io:format("~n** Fold: ~p ** ~n", [Fold]),
+		    Log = Conf#rr_conf.log,
+
+		    case get_opt(missing, Options) of
+			proximity ->
+			    Log(info, "Generating proximity matrix (training)...", []),
+			    run_proximity(Features, Train0, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
+									 distribute = fun rr_missing:weighted/5});
+			_ ->
+			    ok
+		    end,
 		    M = rr_ensamble:generate_model(Features, Train0, Conf),
+		    receive 
+			{done, M} ->
+			    ok
+		    end,
+		    case get_opt(missing, Options) of
+			proximity ->
+			    Log(info, "Generating proximity matrix (testing)...", []),
+			    run_proximity(Features, Test0, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
+									distribute = fun rr_missing:weighted/5});
+			_ ->
+			    ok
+		    end,
 		    D = rr_ensamble:evaluate_model(M, Test0, Conf),
 		    evaluate(D, rr_example:count(Test0))
 	    end, Folds, Examples),
@@ -310,6 +357,8 @@ create_missing_values(Options) ->
 	    fun rr_missing:random_partition/5;
 	wpartition ->
 	    fun rr_missing:weighted_partition/5;
+	proximity ->
+	    fun rr_missing:proximity/5;
 	right ->
 	    fun rr_missing:right/5;
 	left ->
@@ -330,8 +379,6 @@ create_experiment(Options) ->
 	    fun run_build_process/4;
 	evaluate ->
 	    ok;
-	proximity ->
-	    fun run_proximity/4;
 	false ->		
 	    io:format(standard_error, "Must select --split or --cross-validation \n", []),
 	    illegal()
