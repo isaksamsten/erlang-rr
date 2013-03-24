@@ -23,9 +23,8 @@ example_depth_stop(MaxExamples, MaxDepth) ->
 %%
 generate_model(Features, Examples, Conf) ->
     Info = info_content(Examples, rr_example:count(Examples)),
-    {Tree, _Importance, _Total, _} = build_decision_node(Features, Examples, dict:new(), 0, Info, Conf, 1),
-%    io:format("Built tree: ~p ~p ~n", [lists:keysort(2, dict:to_list(Importance)), Total]),
-    Tree.
+    build_decision_node(Features, Examples, dict:new(), 0, Info, Conf, 1).
+
     
 %%
 %% Evaluate "Examples" using "Model"
@@ -88,12 +87,12 @@ predict(ExId, #rr_node{id=NodeNr,
 %% 
 %% Return: {Node, Importance, TotalReduction, ErrorReduction}
 %%
-build_decision_node([], [], Importance, Total, Error, _, Id) ->
-    {make_leaf(Id, [], error), Importance, Total, Error};
-build_decision_node([], Examples, Importance, Total, Error, _, Id) ->
-    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Error};
-build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, Error, _, Id) ->
-    {make_leaf(Id, Examples, {Class, Count}), Importance, Total, Error};
+build_decision_node([], [], Importance, Total, _Error, _, Id) ->
+    {make_leaf(Id, [], error), Importance, Total};
+build_decision_node([], Examples, Importance, Total, _Error, _, Id) ->
+    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
+build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _, Id) ->
+    {make_leaf(Id, Examples, {Class, Count}), Importance, Total};
 build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune=Prune, 
 									  evaluate=Evaluate, 
 									  depth=Depth} = Conf, Id) ->
@@ -104,25 +103,24 @@ build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune
 	false ->
 	    case Evaluate(Features, Examples, NoExamples, Conf) of
 		no_information ->
-		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Error};
+		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 		#rr_candidate{split={_, _}} ->
-		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Error};
+		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 		#rr_candidate{feature=Feature, 
 			      score={Score, LeftError, RightError}, 
-			      split={both, LeftExamples, RightExamples}}  ->  %% NOTE: need to fix variable imprtnce
-
+			      split={both, LeftExamples, RightExamples}}  ->  
 		    NewReduction = Error - (LeftError + RightError),
 		    NewImportance = dict:update_counter(element(1, Feature), NewReduction, Importance),		    
 
-		    {LeftNode, LeftImportance, TotalLeft, LeftReduction} = 
+		    {LeftNode, LeftImportance, TotalLeft} = 
 			build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError, 
 					    Conf#rr_conf{depth=Depth + 1}, Id + 1),
 
-		    {RightNode, RightImportance, TotalRight, RightReduction} = 
+		    {RightNode, RightImportance, TotalRight} = 
 			build_decision_node(Features, RightExamples, LeftImportance, TotalLeft, RightError, 
 					    Conf#rr_conf{depth=Depth + 1}, Id + 2),
 		    Distribution = {rr_example:count(LeftExamples), rr_example:count(RightExamples), rr_example:majority(Examples)},
-		    {make_node(Id, Feature, Distribution, Score, LeftNode, RightNode), RightImportance, TotalRight, NewReduction}
+		    {make_node(Id, Feature, Distribution, Score, LeftNode, RightNode), RightImportance, TotalRight}
 	    end	   
     end.
 

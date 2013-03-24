@@ -44,6 +44,16 @@ evaluate_model(Models, Examples, Conf) ->
 			predict_all(Class, ExampleIds, Models, Conf, Acc)
 		end, dict:new(), Examples). %% TODO: Model ! {exit, self()}
 
+variable_importance(Model, #rr_conf{base_learner={Classifiers, _}}) ->
+    Model ! {importance, self()},
+    receive
+	{importance, Model, Importance} ->
+	    update_variable_importance(Importance, dict:new(), Classifiers)
+    end.
+	    
+	
+
+
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
@@ -87,17 +97,21 @@ spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf) ->
     Coordinator.
     
 
-collect_predictions([], _, Acc) ->
+collect_task(_, [], _, Acc) ->
     Acc;    
-collect_predictions(Processes, Coordinator, Acc) ->
+collect_task(Task, Processes, Coordinator, Acc) ->
     receive
-	{prediction, Coordinator, Pid, Predictions} ->
-	    collect_predictions(Processes -- [Pid], Coordinator, Acc ++ Predictions)
+	{Task, Coordinator, Pid, Predictions} ->
+	    collect_task(Task, Processes -- [Pid], Coordinator, Acc ++ Predictions)
     end.
 
 submit_prediction(Processes, Coordinator, ExId) ->
     lists:foreach(fun(Process) -> Process ! {evaluate, Coordinator, Process, ExId} end, Processes),
-    collect_predictions(Processes, Coordinator, []).
+    collect_task(prediction, Processes, Coordinator, []).
+
+submit_importance(Processes, Coordinator) ->
+    lists:foreach(fun(Process) -> Process ! {importance, Coordinator, Process} end, Processes),
+    collect_task(importance, Processes, Coordinator, []).
 			  
 
 %%
@@ -109,6 +123,10 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
 	{evaluate, Parent, ExId} ->
 	    Prediction = submit_prediction(Processes, Coordinator, ExId),
 	    Parent ! {prediction, Coordinator, Prediction},
+	    evaluation_coordinator(Parent, Coordinator, Processes);
+	{importance, Parent} ->
+	    Importance = submit_importance(Processes, Coordinator),
+	    Parent ! {importance, Coordinator, Importance},
 	    evaluation_coordinator(Parent, Coordinator, Processes);
 	{exit, Parent} ->
 	    Parent ! {done, self()} %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
@@ -155,19 +173,17 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores) ->
 base_build_process(Coordinator, Base, Features, Examples, Conf) ->
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A,B,C}),
-    base_build_process(Coordinator, Base, Features, Examples, Conf, []).
+    base_build_process(Coordinator, Base, Features, Examples, Conf, dict:new(), []).
 
-base_build_process(Coordinator, Base, Features, Examples, #rr_conf{base_learner={T,_},
-								   progress=Progress,
-								   bagging=Bagger,
-								   evaluate=_Evaluate,
-								   score=_Score} = Conf, Acc) ->
+base_build_process(Coordinator, Base, Features, Examples, 
+		   #rr_conf{base_learner={T,_}, progress=Progress, bagging=Bagger} = Conf, VariableImportance, Models) ->
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id} ->
 	    {Bag, _OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
-	    Model = Base:generate_model(Features, Bag, Conf), %% NOTE: allow for backfitting the OOB-examples to correct class estimates
-
+	    {Model, TreeVariableImportance, ImportanceSum} = Base:generate_model(Features, Bag, Conf),
+	    
+	    NewVariableImportance = update_variable_importance(TreeVariableImportance, VariableImportance, ImportanceSum),
 	    ets:insert(models, {Id, Model}),
 	    Rem = if T > 10 -> round(T/10); true -> 1 end,
 	    case Id rem Rem of
@@ -176,20 +192,23 @@ base_build_process(Coordinator, Base, Features, Examples, #rr_conf{base_learner=
 		_ ->
 		    ok
 	    end,
-	    base_build_process(Coordinator, Base, Features, Examples, Conf, [{Id, Model}|Acc]);
+	    base_build_process(Coordinator, Base, Features, Examples, Conf, NewVariableImportance, [{Id, Model}|Models]);
 	{completed, Coordinator} ->
-	    base_evaluator_process(Coordinator, self(), Base, Conf, Acc)
+	    base_evaluator_process(Coordinator, self(), Base, Conf, VariableImportance, Models)
     end.
 
 %%
 %% Recives, {evaluate, Coordinator, ExId}, where "ExId" is an
 %% example. The correct class for "ExId" is predicted using "Models"
 %%
-base_evaluator_process(Coordinator, Self, Base, Conf, Models)->
+base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models)->
     receive
 	{evaluate, Coordinator, Self, ExId} ->
 	    Coordinator ! {prediction, Coordinator, Self, make_prediction(Models, Base, ExId, Conf)},
-	    base_evaluator_process(Coordinator, Self, Base, Conf, Models);
+	    base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models);
+	{importance, Coordinator, Self} ->
+	    Coordinator ! {importance, Coordinator, Self, dict:to_list(VariableImportance)},
+	    base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models);
 	{exit, Coordinator, Self} ->
 	    done
     end.
@@ -206,10 +225,12 @@ make_prediction([{ModelNr, Model}|Models], Base, ExId, Conf, Acc) ->
     {Prediction, NodeNr} = Base:predict(ExId, Model, Conf, []),
     make_prediction(Models, Base, ExId, Conf, [{Prediction, [ModelNr|NodeNr]}|Acc]).
 
-%%
-%% Returns a random evaluator from 'rr_tree' with Probability 0 < p <=
-%% Prob
-%%
-random_evaluator(Prob) ->
-    rr_tree:random_evaluator(random:uniform() * Prob).
-
+update_variable_importance([], Acc, _) ->
+    Acc;
+update_variable_importance([{Feature, Importance}|Rest], Acc, Total) ->
+    update_variable_importance(Rest, dict:update_counter(Feature, Importance/Total, Acc), Total);
+update_variable_importance(TreeVariables, VariableImportance, Total) ->
+    dict:fold(fun (Feature, Importance, Acc) ->
+		      dict:update_counter(Feature, Importance/Total, Acc)
+	      end, VariableImportance, TreeVariables).
+    

@@ -164,6 +164,7 @@ main(Args) ->
     io:format("File: ~p ~n", [InputFile]),
     io:format("Trees: ~p ~n", [Classifiers]),
     io:format("Features: ~p ~n", [NoFeatures]),
+    io:format("Total No Features: ~p ~n", [TotalNoFeatures]), 
     io:format("Examples: ~p ~n", [rr_example:count(Examples)]),
     io:format("Time: ~p seconds ~n", [Time]),
     io:format("*** End ***~n"),
@@ -211,6 +212,8 @@ run_split(Features, Examples, Conf, Options) ->
 	    ok
     end,
     Model = rr_ensamble:generate_model(Features, Train, Conf),
+    VariableImportance = rr_ensamble:variable_importance(Model, Conf),
+    io:format("~p ~n", [dict:to_list(VariableImportance)]),
     receive 
 	{done, Model} ->
 	    ok
