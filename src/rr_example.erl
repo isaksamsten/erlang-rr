@@ -257,20 +257,6 @@ split_missing(Feature, Examples) ->
     Value = sample_split_value(Feature, Examples),
     split_feature(Feature, Value, Examples, [], [], []).
 
-sample_split_value(Feature, Examples) ->
-    case Feature of
-	{categoric, FeatureId} ->
-	    resample_random_split(FeatureId, Examples, 5);
-	{numeric, FeatureId} ->
-	    random_numeric_split(FeatureId, Examples);
-	{combined, A, B} ->
-	    sample_split_value(A, B, Examples)
-    end.
-
-sample_split_value(FeatureA, FeatureB, Examples) ->
-    {combined, sample_split_value(FeatureA, Examples), sample_split_value(FeatureB, Examples)}.
-    
-
 %%
 %% Split the class distribution:
 %%  NOTE: LEFT is >= or == and RIGHT is < or /= 
@@ -383,8 +369,49 @@ deterministic_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, Feature
 					Gain, Total, NewThreshold, NewDist)
     end.
 
+sample_split_value(Feature, Examples) ->
+    case Feature of
+	{categoric, FeatureId} ->
+	    resample_random_split(FeatureId, Examples, 5);
+	{numeric, FeatureId} ->
+	    random_numeric_split(FeatureId, Examples);
+	{combined, A, B} ->
+	    sample_combined(A, B, Examples)
+    end.
+
+sample_split_value(Feature, Examples, Ex1, Ex2) ->
+    case Feature of
+	{categoric, FeatureId} ->
+	    feature(Ex1, FeatureId);
+	{numeric, FeatureId} ->
+	    case random_numeric_split(FeatureId, Ex1, Ex2) of
+		{'?', '?'} ->
+		    io:format("Out..~n"),
+		    0;
+		X ->
+		    X
+	    end;
+	{combined, A, B} ->
+	    sample_combined(A, B, Examples)
+    end.
+
+%%
+%% Sample these from ONE example
+%%
+sample_combined(FeatureA, FeatureB, Examples) ->
+    {Ex1, Ex2} = sample_example_pair(Examples),
+    {combined, sample_split_value(FeatureA, Examples, Ex1, Ex2), sample_split_value(FeatureB, Examples, Ex1, Ex2)}.
+
 random_numeric_split(FeatureId, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
+    case random_numeric_split(FeatureId, Ex1, Ex2) of
+	{'?', '?'} ->
+	    random_numeric_split(FeatureId, Examples);
+	X ->
+	    X
+    end.
+
+random_numeric_split(FeatureId, Ex1, Ex2) ->
     Value1 = feature(Ex1, FeatureId),
     Value2 = feature(Ex2, FeatureId),
     case {Value1, Value2} of
@@ -395,7 +422,7 @@ random_numeric_split(FeatureId, Examples) ->
 	{Value1, Value2} ->
 	    (Value1 + Value2) / 2;
 	{'?', '?'} ->
-	    random_numeric_split(FeatureId, Examples)		
+	    {'?', '?'}
     end.
 
 resample_random_split(_, _, 0) ->
@@ -513,6 +540,23 @@ coverage(Examples) ->
 
 feature(ExId, At) ->
     ets:lookup_element(examples, exid(ExId), At + 1).
+
+feature_id({{_, Id}, _}) ->
+    Id;
+feature_id({{combined, IdA, IdB}, _}) ->
+    list_to_tuple(lists:sort([feature_id(IdA), feature_id(IdB)]));
+feature_id({_, Id}) ->
+    Id.
+
+feature_name({IdA, IdB}) ->
+    {feature_name(IdA),
+     feature_name(IdB)};
+feature_name(Id) ->
+    ets:lookup_element(features, Id, 2).
+
+
+
+
 
 %%
 %% Generate a set of random numbers

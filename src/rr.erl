@@ -87,6 +87,8 @@
 
 	 {output_predictions, $o,       "output-predictions", {boolean, false},
 	  "Ouput predictions"},
+	 {variable_importance, undefined, "vi",        {integer, 0},
+	  "Output N most important variables"},
 
 	 {log,            $l,           "log-level",   {atom, info},
 	  "Log level (info, debug, error, none)"},
@@ -174,6 +176,28 @@ main(Args) ->
     Logger(info, "Model built in ~p second(s)", [Time]),
     rr_log:stop(Log).
 
+output_variable_importance([], _, _) ->
+    ok;
+output_variable_importance([{FeatureId, Score}|Rest], N, No) ->
+    if N >= No ->
+	    ok;
+       true ->
+	    io:format("~p: ~p ~n", [rr_example:feature_name(FeatureId), Score]),
+	    output_variable_importance(Rest, N + 1, No)
+    end;
+output_variable_importance(Model, Conf, Options) ->
+    case get_opt(variable_importance, Options) of
+	No when No > 1 ->
+	    VariableImportance = rr_ensamble:variable_importance(Model, Conf),
+	    io:format("** Variable Importance ** ~n"),
+	    Sorted = lists:reverse(lists:keysort(2, dict:to_list(VariableImportance))),
+	    output_variable_importance(Sorted, 1, No);	    
+	No ->
+	    ok
+    end.
+
+
+
 output_predictions(false, _) ->
     ok;
 output_predictions(true, []) ->
@@ -212,12 +236,7 @@ run_split(Features, Examples, Conf, Options) ->
 	    ok
     end,
     Model = rr_ensamble:generate_model(Features, Train, Conf),
-    VariableImportance = rr_ensamble:variable_importance(Model, Conf),
-    io:format("~p ~n", [dict:to_list(VariableImportance)]),
-    receive 
-	{done, Model} ->
-	    ok
-    end,
+    output_variable_importance(Model, Conf, Options),
     case get_opt(missing, Options) of
 	proximity ->
 	    Log(info, "Generating proximity matrix (testing)...", []),
@@ -256,10 +275,7 @@ run_cross_validation(Features, Examples, Conf, Options) ->
 			    ok
 		    end,
 		    M = rr_ensamble:generate_model(Features, Train0, Conf),
-		    receive 
-			{done, M} ->
-			    ok
-		    end,
+		    
 		    case get_opt(missing, Options) of
 			proximity ->
 			    Log(info, "Generating proximity matrix (testing)...", []),
@@ -296,6 +312,7 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
 		    
 evaluate(Dict, NoTestExamples) ->
+    io:format("** Evaluation ** ~n"),
     Accuracy = rr_eval:accuracy(Dict),
     io:format("Accuracy: ~p ~n", [Accuracy]),
 
@@ -437,7 +454,8 @@ create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options) ->
 	    NewScores = lists:split(trunc(length(Scores) * Fraction), lists:map(fun({_, V}) -> V end, Scores)),
 	    rr_tree:weighted_evaluate(NoFeatures, Fraction, NewScores);
 	combination ->
-	    rr_tree:correlation_evaluate(NoFeatures);
+%	    rr_tree:correlation_evaluate(NoFeatures);
+	    rr_tree:random_correlation_evaluate(NoFeatures, 0.6);
 	false -> 
 	    rr_tree:subset_evaluate(NoFeatures)
     end.

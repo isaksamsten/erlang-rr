@@ -32,7 +32,11 @@ load_model() ->
 generate_model(Features, Examples, #rr_conf{
 				      base_learner = {Classifiers, Base},
 				      cores = Cores} = Conf) ->
-    spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf).
+    Model = spawn_base_classifiers(Classifiers, Cores, Features, Examples, Base, Conf),
+    receive
+	{done, Model} ->
+	    Model
+    end.
     
 
 %%

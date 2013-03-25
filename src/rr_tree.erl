@@ -110,7 +110,7 @@ build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune
 			      score={Score, LeftError, RightError}, 
 			      split={both, LeftExamples, RightExamples}}  ->  
 		    NewReduction = Error - (LeftError + RightError),
-		    NewImportance = dict:update_counter(element(1, Feature), NewReduction, Importance),		    
+		    NewImportance = dict:update_counter(rr_example:feature_id(Feature), NewReduction, Importance),
 
 		    {LeftNode, LeftImportance, TotalLeft} = 
 			build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError, 
@@ -226,13 +226,23 @@ correlation_evaluate(NoFeatures) ->
 	    FeaturesA = rr_example:random_features(Features, NoFeatures),
 	    FeaturesB = rr_example:random_features(Features, NoFeatures),
 	    
-	    Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB],
+	    Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB, A =/= B],
 
 		%lists:zipwith(fun (A, B) -> {combined, A, B} end, FeaturesA, FeaturesB),
 	    evaluate_split(Combination, Examples, Total, Conf)
     end.
-	    
 
+random_correlation_evaluate(NoFeatures, Fraction) ->
+    Corr = correlation_evaluate(NoFeatures),
+    Sub = subset_evaluate(NoFeatures),
+    fun (Features, Examples, Total, Conf) ->
+	    Random = random:uniform(),
+	    if Random =< Fraction ->
+		    Corr(Features, Examples, Total, Conf);
+	       true ->
+		    Sub(Features, Examples, Total, Conf)
+	    end
+    end.
 
 %%
 %% Evalate one randomly selected feature
