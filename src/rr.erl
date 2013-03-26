@@ -56,7 +56,9 @@
 	  "Max depth of single decision tree"},
 	 {min_example,    undefined,    "min-examples",{integer, 1},
 	  "Min number of examples allowed in split"},
-
+	 
+	 {rule,           undefined,    "rule",        undefined,
+	  "Build, at each node, a rule"},
 	 {combination,    undefined,    "combination", undefined,
 	  "Combination of random features"},
 	 {weka,           undefined,    "weka",        undefined,
@@ -76,7 +78,7 @@
 	 {subagging,     undefined,    "subagging",  undefined,
 	  "Use a subbag for building each tree"},
 
-	 {weight_factor,  undefined,    "weight-factor", {float, 0.8},
+	 {weight_factor,  undefined,    "weight-factor", {float, 0.5},
 	  "Weight factor for the --weighted feature selection"},
 	 {no_resamples,   undefined,    "no-resample", {integer, 6},
 	  "Number of times to resample, if best gain =< --min-gain"},
@@ -140,13 +142,13 @@ main(Args) ->
     Score = create_score(Options),
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
-    Eval = create_evaluator(NoFeatures, ordsets:from_list(Features), Examples, Missing, Score, Options),
+    Eval = create_brancher(NoFeatures, ordsets:from_list(Features), Examples, Missing, Score, Options),
     Bagging = create_bagger(Options),
 
     Conf = #rr_conf{cores = Cores,
 		    score = Score,
 		    prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
-		    evaluate = Eval,
+		    branch = Eval,
 		    bagging = Bagging,
 		    progress = Progress,
 		    split = fun rr_tree:random_split/3,
@@ -439,25 +441,27 @@ get_no_features(TotalNoFeatures, Options) ->
 	    round(math:sqrt(TotalNoFeatures))
     end.
 
-create_evaluator(NoFeatures, Features, Examples, Missing, Score, Options) ->
-    case any_opt([weka, resample, weighted, combination], Options) of
+create_brancher(NoFeatures, Features, Examples, Missing, Score, Options) ->
+    case any_opt([weka, resample, weighted, combination, rule], Options) of
 	weka ->
-	    rr_tree:weka_evaluate(NoFeatures);
+	    rr_branch:weka_evaluate(NoFeatures);
 	resample ->
 	    NoResamples = get_opt(no_resamples, Options),
 	    MinGain = get_opt(min_gain, Options),
-	    rr_tree:resampled_evaluate(NoResamples, NoFeatures, MinGain);
+	    rr_branch:resampled(NoResamples, NoFeatures, MinGain);
 	weighted ->
 	    Fraction = get_opt(weight_factor, Options), %% NOTE: make this paralell
 	    Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), 
 					  #rr_conf{score=Score, distribute=Missing}, []),
 	    NewScores = lists:split(trunc(length(Scores) * Fraction), lists:map(fun({_, V}) -> V end, Scores)),
-	    rr_tree:weighted_evaluate(NoFeatures, Fraction, NewScores);
+	    rr_branch:weighted(NoFeatures, Fraction, NewScores);
 	combination ->
-%	    rr_tree:correlation_evaluate(NoFeatures);
-	    rr_tree:random_correlation_evaluate(NoFeatures, 0.6);
+	    Factor = get_opt(weight_factor, Options),
+	    rr_branch:random_correlation(NoFeatures, Factor);
+	rule ->
+	    rr_branch:rule(NoFeatures);
 	false -> 
-	    rr_tree:subset_evaluate(NoFeatures)
+	    rr_branch:subset(NoFeatures)
     end.
 
 %%

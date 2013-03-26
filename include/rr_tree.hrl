@@ -11,7 +11,7 @@
 %%
 %% * prune = function for prepruning (2 args)
 %% * depth = current depth
-%% * evaluate = function for evaluating potential split points (4 args)
+%% * branch = function for evaluating potential split points (4 args)
 %% * bagging = function for generating a random sample for each tree (1 arg) (default: bagging)
 %% * score = score function for scoring split points (2 args)
 %% * split = function for splitting the data set (3 args)
@@ -26,7 +26,7 @@
 -record(rr_conf, {
 	  prune, 
 	  depth=0,
-	  evaluate,
+	  branch,
 	  bagging,
 	  score,
 	  split,

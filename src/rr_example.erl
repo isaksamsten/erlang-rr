@@ -308,7 +308,13 @@ distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}
 	       true ->
 		    B
 	    end
-    end, C}.
+     end, C};
+distribute({{rule, _RuleConjunction}, placeholder}, ExId) ->
+    %% Distribute all examples for which the rules hold to the left
+    %% RuleConjunction = [rule()...] where rule() = {feature(), Value}
+    %% if [] -> all is true
+    {left, count(ExId)}.
+
 	    
 			
     
@@ -386,7 +392,6 @@ sample_split_value(Feature, Examples, Ex1, Ex2) ->
 	{numeric, FeatureId} ->
 	    case random_numeric_split(FeatureId, Ex1, Ex2) of
 		{'?', '?'} ->
-		    io:format("Out..~n"),
 		    0;
 		X ->
 		    X

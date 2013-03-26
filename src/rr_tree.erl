@@ -10,33 +10,20 @@
 
 -include("rr_tree.hrl").
 
-%%
-%% Stop inducing tree if |Example| < MaxExamples or Depth > MaxDepth
-%%
 example_depth_stop(MaxExamples, MaxDepth) ->
     fun(Examples, Depth) ->
 	    (Examples =< MaxExamples) or (Depth > MaxDepth)
     end.
 
-%%
-%% Generate model from Features and Examples
-%%
 generate_model(Features, Examples, Conf) ->
     Info = info_content(Examples, rr_example:count(Examples)),
     build_decision_node(Features, Examples, dict:new(), 0, Info, Conf, 1).
 
-    
-%%
-%% Evaluate "Examples" using "Model"
-%%
 evaluate_model(Model, Examples, Conf) ->
     lists:foldl(fun({Class, _, ExampleIds}, Acc) ->
 			predict_all(Class, ExampleIds, Model, Conf, Acc)
 		end, dict:new(), Examples).
 
-%%
-%% Predict all "Examples" with the actual class "Actual"
-%%
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
@@ -46,9 +33,6 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
 					    [Prediction|Predictions]
 				    end, [Prediction], Dict)).
 
-%%
-%% Predict what the class for "Attributes"
-%%
 predict(_, #rr_leaf{id=NodeNr, class=Class, score=Score}, _Conf, Acc) ->
     {{Class, Score}, [NodeNr|Acc]};
 predict(ExId, #rr_node{id=NodeNr, 
@@ -85,7 +69,7 @@ predict(ExId, #rr_node{id=NodeNr,
 %%
 %% TODO: count total number of nodes in the tree
 %% 
-%% Return: {Node, Importance, TotalReduction, ErrorReduction}
+%% Return: {Node, Importance, TotalReduction}
 %%
 build_decision_node([], [], Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, [], error), Importance, Total};
@@ -94,14 +78,14 @@ build_decision_node([], Examples, Importance, Total, _Error, _, Id) ->
 build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, Examples, {Class, Count}), Importance, Total};
 build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune=Prune, 
-									  evaluate=Evaluate, 
-									  depth=Depth} = Conf, Id) ->
+									   branch=Branch, 
+									   depth=Depth} = Conf, Id) ->
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
 	true ->
-	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, Error};
+	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 	false ->
-	    case Evaluate(Features, Examples, NoExamples, Conf) of
+	    case Branch(Features, Examples, NoExamples, Conf) of
 		no_information ->
 		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 		#rr_candidate{split={_, _}} ->
@@ -142,168 +126,30 @@ laplace(C, N) ->
     (C+1)/(N+2).
 
 
-%%
-%% Return a functions which resamples log(Features) + 1 k times if arg
-%% max gain(Features) < Delta
-%%
-resampled_evaluate(NoResamples, NoFeatures, Delta) ->
-    fun (Features, Examples, Total, Conf) ->
-	    resampled_subset_evaluate_split(Features, Examples, Total, Conf, NoResamples, Delta, NoFeatures)
-    end.
-
-resampled_subset_evaluate_split(_Features, _Examples, _Total, 
-				#rr_conf{no_features=NoFeatures}, _, _, _) when NoFeatures =< 0 ->
-    no_information;
-resampled_subset_evaluate_split(_Features, _Examples, _Total, _Conf, 0, _, _) ->
-    no_information;
-resampled_subset_evaluate_split(Features, Examples, Total, 
-				#rr_conf{no_features=NoFeatures} = Conf, NoResamples, Delta, Log) ->
-    Features0 = if NoFeatures =< Log ->
-			Features;
-		   true ->
-			rr_example:random_features(Features, Log)
-		end,
-
-    Cand = evaluate_split(Features0, Examples, Total, Conf),
-    Gain = entropy(Examples) - Cand#rr_candidate.score,
-    if  Gain =< Delta ->
-	    resampled_subset_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)), 
-					    Examples, Total, Conf#rr_conf{no_features=NoFeatures - Log}, 
-					    NoResamples - 1, Delta, Log);
-	true ->
-	    Cand
-    end.
-
-%%
-%% Definitly need another way of determine what constitutes a good
-%% feature
-%%
-weighted_evaluate(NoFeatures, Fraction, NewScores) ->
-    fun (_, Examples, Total, Conf) ->
-	    weighted_evaluate_split(NewScores, Examples, Total, Conf, NoFeatures, Fraction)
-    end.
-
-weighted_evaluate_split({Good, _Bad}, Examples, Total, Conf, NoFeatures, Fraction) ->
-    Features0 = rr_example:random_features(Good, NoFeatures),
-    evaluate_split(Features0, Examples, Total, Conf).
-
-%%
-%% Uses the same algorithm as Weka for resampling non-informative
-%% 
-weka_evaluate(NoFeatures) ->
-    fun(Features, Examples, Total, Conf) ->
-	    weka_evaluate_split(Features, Examples, Total, Conf, NoFeatures)
-    end.
-
-weka_evaluate_split(_, _, _, #rr_conf{no_features=NoTotal}, _) when NoTotal =< 0 ->
-    no_information;
-weka_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoTotal} = Conf, NoFeatures) ->
-    Features0 = if NoTotal =< NoFeatures ->
-			Features;
-		   true -> 
-			rr_example:random_features(Features, NoFeatures)
-		end,
-    Cand = evaluate_split(Features0, Examples, Total, Conf),
-    Gain = entropy(Examples) - Cand#rr_candidate.score,
-    if Gain =< 0.0 ->
-	    weka_evaluate_split(ordsets:subtract(Features, ordsets:from_list(Features0)),
-				Examples, Total, Conf#rr_conf{no_features=NoTotal - NoFeatures}, NoFeatures);
-       true ->
-	    Cand
-    end.
-
-%% 
-%% Evaluate a subset of "NoFeatures" features
-%%
-subset_evaluate(NoFeatures) ->
-    fun (Features, Examples, Total, Conf) ->
-	    Features0 = rr_example:random_features(Features, NoFeatures),
-	    evaluate_split(Features0, Examples, Total, Conf)
-    end.
-
-correlation_evaluate(NoFeatures) ->
-    fun (Features, Examples, Total, Conf) ->
-	    FeaturesA = rr_example:random_features(Features, NoFeatures),
-	    FeaturesB = rr_example:random_features(Features, NoFeatures),
-	    
-	    Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB, A =/= B],
-
-		%lists:zipwith(fun (A, B) -> {combined, A, B} end, FeaturesA, FeaturesB),
-	    evaluate_split(Combination, Examples, Total, Conf)
-    end.
-
-random_correlation_evaluate(NoFeatures, Fraction) ->
-    Corr = correlation_evaluate(NoFeatures),
-    Sub = subset_evaluate(NoFeatures),
-    fun (Features, Examples, Total, Conf) ->
-	    Random = random:uniform(),
-	    if Random =< Fraction ->
-		    Corr(Features, Examples, Total, Conf);
-	       true ->
-		    Sub(Features, Examples, Total, Conf)
-	    end
-    end.
-
-%%
-%% Evalate one randomly selected feature
-%%
-random_evaluate_split(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf) ->
-    Feature = lists:nth(random:uniform(NoFeatures), Features),
-    evaluate_split([Feature], Examples, Total, Conf).
-
-%%
-%% Evaluate all features to find the best split point
-%%
-best_evaluate_split(Features, Examples, Total, Conf) ->
-    evaluate_split(Features, Examples, Total, Conf).
-
-%%
-%% Randomly split Example set on Feature by randomly selecting a
-%% threshold (sampled from two examples of different class)
-%%
 random_split(Feature, Examples, #rr_conf{distribute=Distribute}) ->
     rr_example:split(Feature, Examples, Distribute).
 
-%%
-%% Find the best numeric split point deterministically
-%%
 deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score, distribute=Distribute}) ->
     rr_example:split({Feature, Score}, Examples, Distribute);
 deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute}) ->
     rr_example:split(Feature, Examples, Distribute).
 
-%%
-%% If random:uniform() =< "Alpha": select the best split
-%% deterministically, otherwise select a split randomly
-%%
-random_split(Alpha) ->
-    fun (Feature, Examples, Conf) ->
-	    Random = random:uniform(),
-	    if Random =< Alpha ->
-		    deterministic_split(Feature, Examples, Conf);
-	       true ->
-		    random_split(Feature, Examples, Conf)
-	    end
-    end.
-
-%%
-%% Evaluate all "Features" to find the "best" according to "Score"
-%%
+evaluate_split([], _, _, _) ->
+    no_features;
 evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->
     {T, ExSplit} = Split(F, Examples, Conf),
     evaluate_split(Features, Examples, Total, Conf, #rr_candidate{feature={F, T},
 								  score=Score(ExSplit, Total),
 								  split=ExSplit}).
 
-%%
-%% Evaluate a list of candidate split points.
-%%
 evaluate_split([], _, _, _, Acc) ->
     Acc;
 evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, 
 	       #rr_candidate{score=OldScore} = OldCand) ->
+    io:format("Before split....~n"),
     Cand = case Split(F, Examples, Conf) of
 	       {Threshold, ExSplit} ->
+		   io:format("Create candidate...~n"),
 		   #rr_candidate{feature = {F, Threshold}, 
 				 score = Score(ExSplit, Total), 
 				 split = ExSplit}		       
@@ -322,17 +168,22 @@ evaluate_all([Feature|Rest], Examples, Total, #rr_conf{score=Score} = Conf, Acc)
 	     end,
     evaluate_all(Rest, Examples, Total, Conf, NewAcc).
 
-%%
-%% Calculate the gini impurity (except 1- to minimize instead of
-%% maximize)
-%%
-gini(ValueSplits, Total) ->
-    gini(ValueSplits, Total, 0).
+%% TODO: fix
+gini({both, Left, Right}, Total) ->
+    LeftGini = gini_content(Left, Total),
+    RightGini = gini_content(Right, Total),
+    {(LeftGini + RightGini), LeftGini, RightGini};
+gini({left, Left}, Total) ->
+    LeftGini = gini_content(Left, Total),
+    {LeftGini, LeftGini, 0.0};
+gini({right, Right}, Total) ->
+    RightGini = gini_content(Right, Total),
+    {RightGini, 0.0, RightGini}.
 
-gini([], _, Acc) -> Acc;
-gini([{_Value, Splits}|Rest], Total, Acc) -> 
-    Fi = rr_example:count(Splits) / Total,
-    gini(Rest, Total, Acc + math:pow(Fi, 2)).
+    
+gini_content(Examples, Total) -> 
+    Fi = rr_example:count(Examples) / Total,
+    math:pow(Fi, 2).
 	
 
 info({both, Left, Right}, Total) ->
@@ -351,10 +202,6 @@ info_content(Side, Total) ->
     NoSide = rr_example:count(Side),
     (NoSide / Total) * (Total * entropy(Side)).
         
-
-%%
-%% Calculate the entropy of Examples
-%%
 entropy(Examples) ->
     Counts = [C || {_, C, _} <- Examples],
     entropy(Counts, lists:sum(Counts)).
