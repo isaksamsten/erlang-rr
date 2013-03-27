@@ -133,18 +133,6 @@ all(Features, Examples, Total, Conf) ->
 rule(NoFeatures) ->
     fun (Features, Examples, Total, Conf) ->
 	    best_rule(Features, Examples, Total, Conf, NoFeatures)
-	    %% {Class, _, _} = lists:nth(random:uniform(length(Examples)), Examples),
-	    %% Subset = rr_example:random_features(Features, NoFeatures),
-	    %% Binary = rr_example:to_binary(Class, Examples),
-	    %% {Rules, S, Cov} = separate_and_conquer(Subset, Binary, Total, 
-	    %% 					   Conf#rr_conf{score=fun laplace_error/2}, {[], inf}, 
-	    %% 					   rr_example:coverage(Binary)),
-	    %% Rule = {rule, Rules},
-	    %% {_Threshold, ExSplit} = Split(Rule, Examples, Conf),
-	    %% #rr_candidate{feature=Rule,
-	    %% 		  score=Score(ExSplit, Total),
-	    %% 		  split=ExSplit}
-		
     end.
 
 best_rule(Features, Examples, Total, Conf, NoFeatures) ->
@@ -167,9 +155,7 @@ generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score} = Co
     {Class, _, _} = lists:nth(random:uniform(length(Examples)), Examples),
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
-    {Rules, _S, _Cov} = separate_and_conquer(Subset, Binary, Total, 
-					   Conf#rr_conf{score=fun laplace_error/2}, {[], inf}, 
-					   rr_example:coverage(Binary)),
+    {Rules, _S, _Cov} = separate_and_conquer(Subset, Binary, Total, Conf, {[], inf}, rr_example:coverage(Binary)),
     Rule = {rule, Rules},
     {_Threshold, ExSplit} = Split(Rule, Examples, Conf),
     #rr_candidate{feature=Rule,
@@ -180,7 +166,7 @@ separate_and_conquer([], _Examples, _Total, _Conf, {Rules, Score}, Coverage) ->
     {Rules, Score, Coverage};
 separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}, Coverage) ->
     case learn_one_rule(Features, Examples, Total, Conf, Coverage) of
-	1 ->
+	inf ->
 	    {Rules, 1, Coverage};
 	{{Feature, _} = Rule, NewScore, Covered}  ->
 	    case NewScore < Score of
@@ -201,9 +187,9 @@ separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}, Coverage) 
 learn_one_rule(Features, Examples, Total, Conf, _) ->
     case rr_tree:evaluate_split(Features, Examples, Total, Conf) of
 	no_features ->
-	    1;
+	    inf;
 	#rr_candidate{split={_, _}} ->
-	    1;
+	    inf;
 	#rr_candidate{feature=Feature,
 		      split={both, LeftExamples, RightExamples},
 		      score={Score,LeftScore, RightScore}}->

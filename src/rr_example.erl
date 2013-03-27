@@ -319,6 +319,9 @@ distribute({rule, Rule}, ExId) ->
     %% Distribute all examples for which the rules hold to the left
     %% RuleConjunction = [rule()...] where rule() = {feature(), Value}
     %% if [] -> all is true
+
+    %% NOTE: could we do this by sending a fraction (the number of
+    %% rules that apply) to the left and the rest to the right?
     {evaluate_rule(Rule, ExId), count(ExId)}.
 
 evaluate_rule([], _) ->
