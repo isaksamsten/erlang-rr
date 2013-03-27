@@ -166,7 +166,7 @@ separate_and_conquer([], _Examples, _Total, _Conf, {Rules, Score}, Coverage) ->
     {Rules, Score, Coverage};
 separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}, Coverage) ->
     case learn_one_rule(Features, Examples, Total, Conf, Coverage) of
-	inf ->
+	1 ->
 	    {Rules, 1, Coverage};
 	{{Feature, _} = Rule, NewScore, Covered}  ->
 	    case NewScore < Score of
@@ -187,9 +187,9 @@ separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}, Coverage) 
 learn_one_rule(Features, Examples, Total, Conf, _) ->
     case rr_tree:evaluate_split(Features, Examples, Total, Conf) of
 	no_features ->
-	    inf;
+	    1;
 	#rr_candidate{split={_, _}} ->
-	    inf;
+	    1;
 	#rr_candidate{feature=Feature,
 		      split={both, LeftExamples, RightExamples},
 		      score={Score,LeftScore, RightScore}}->
