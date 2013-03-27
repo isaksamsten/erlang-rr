@@ -146,10 +146,8 @@ evaluate_split([], _, _, _, Acc) ->
     Acc;
 evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, 
 	       #rr_candidate{score=OldScore} = OldCand) ->
-    io:format("Before split....~n"),
     Cand = case Split(F, Examples, Conf) of
 	       {Threshold, ExSplit} ->
-		   io:format("Create candidate...~n"),
 		   #rr_candidate{feature = {F, Threshold}, 
 				 score = Score(ExSplit, Total), 
 				 split = ExSplit}		       
@@ -167,6 +165,7 @@ evaluate_all([Feature|Rest], Examples, Total, #rr_conf{score=Score} = Conf, Acc)
 		     [{Score(ExSplit, Total), Feature}|Acc]
 	     end,
     evaluate_all(Rest, Examples, Total, Conf, NewAcc).
+
 
 %% TODO: fix
 gini({both, Left, Right}, Total) ->

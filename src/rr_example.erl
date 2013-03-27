@@ -244,18 +244,24 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 %%  Left Branch: Less than and equal to, or, equal to
 %%  Right branch: Greater than, or, not equal to
 %%
+split({rule, _}=Feature, Examples, Distribute) ->
+    {Left, Right, Missing} = split_feature(Feature, Examples, [], [], []),
+    {none, distribute_missing_values(Feature, Examples, count(Left), count(Right),
+				     Left, Right, Missing, [], [], Distribute)};
 split(Feature, Examples, Distribute) ->
-    {Value, {Left, Right, Missing}} = split_missing(Feature, Examples),
+    {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples),
     {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 
 				      Left, Right, Missing, [], [], Distribute)}.
+
 
 %%
 %% Split into three disjoint subsets, Left, Right and those examples
 %% having a missing value for "Feature"
 %%
-split_missing(Feature, Examples) ->
+split_with_value(Feature, Examples) ->
     Value = sample_split_value(Feature, Examples),
-    split_feature(Feature, Value, Examples, [], [], []).
+    {Value, split_feature({Feature, Value}, Examples, [], [], [])}.
+
 
 %%
 %% Split the class distribution:
@@ -309,23 +315,31 @@ distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}
 		    B
 	    end
      end, C};
-distribute({{rule, _RuleConjunction}, placeholder}, ExId) ->
+distribute({rule, Rule}, ExId) ->
     %% Distribute all examples for which the rules hold to the left
     %% RuleConjunction = [rule()...] where rule() = {feature(), Value}
     %% if [] -> all is true
-    {left, count(ExId)}.
+    {evaluate_rule(Rule, ExId), count(ExId)}.
 
-	    
-			
-    
+evaluate_rule([], _) ->
+    left;
+evaluate_rule([Rule|Rest], ExId) ->
+    case distribute(Rule, ExId) of
+	{left, _} ->
+	    evaluate_rule(Rest, ExId);
+	{right, _} ->
+	    right;
+	{'?', _} ->
+	    '?'
+    end.
 
-	
-split_feature(_, Threshold, [], Left, Right, Missing) ->
-    {Threshold, {Left, Right, Missing}};
-split_feature(Feature, Threshold, [{Class, _, ExampleIds}|Examples], Left, Right, Missing) ->
-    case split_class_distribution({Feature, Threshold}, ExampleIds, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
+
+split_feature(Feature, [], Left, Right, Missing) ->
+    {Left, Right, Missing};
+split_feature(Feature, [{Class, _, ExampleIds}|Examples], Left, Right, Missing) ->
+    case split_class_distribution(Feature, ExampleIds, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
 	{LeftSplit, RightSplit, MissingSplit} ->
-	    split_feature(Feature, Threshold, Examples, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
+	    split_feature(Feature, Examples, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
     end.
 
 %%
@@ -546,16 +560,22 @@ coverage(Examples) ->
 feature(ExId, At) ->
     ets:lookup_element(examples, exid(ExId), At + 1).
 
-feature_id({{_, Id}, _}) ->
-    Id;
+
 feature_id({{combined, IdA, IdB}, _}) ->
     list_to_tuple(lists:sort([feature_id(IdA), feature_id(IdB)]));
+feature_id({{_, Id}, _}) ->
+    Id;
+feature_id({rule, Rules}) ->
+    Ids = [feature_id(Rule) || Rule <- Rules],
+    lists:sort(Ids);
 feature_id({_, Id}) ->
     Id.
 
 feature_name({IdA, IdB}) ->
     {feature_name(IdA),
      feature_name(IdB)};
+feature_name(Rules) when is_list(Rules) ->
+    [feature_name(Rule) || Rule <- Rules];
 feature_name(Id) ->
     ets:lookup_element(features, Id, 2).
 

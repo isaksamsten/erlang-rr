@@ -444,7 +444,7 @@ get_no_features(TotalNoFeatures, Options) ->
 create_brancher(NoFeatures, Features, Examples, Missing, Score, Options) ->
     case any_opt([weka, resample, weighted, combination, rule], Options) of
 	weka ->
-	    rr_branch:weka_evaluate(NoFeatures);
+	    rr_branch:weka(NoFeatures);
 	resample ->
 	    NoResamples = get_opt(no_resamples, Options),
 	    MinGain = get_opt(min_gain, Options),
