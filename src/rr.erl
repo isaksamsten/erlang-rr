@@ -19,83 +19,84 @@
 
 -define(CMD_SPEC,
 	[{help,           $h,           "help",         undefined,
-	  "Show this help"},
+	  "Show this usage information."},
 	 {version,        $v,           "version",      undefined,
-	  "Show the version"},
+	  "Show the program version."},
 	 {input_file,     $i,           "input",        string, 
-	  "Input data set"},
-	 {cores,          $c,           undefined,     {integer, erlang:system_info(schedulers)},
-	  "Number of cores to use when evaluating and building the model"},
+	  "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
+	 {cores,          $c,           "cores",        {integer, erlang:system_info(schedulers)},
+	  "Number of cores used by the algorightm for constructing the model."},
 	 
 	 {split,          $s,           "split",       undefined,
-	  "Split data set according to --ratio"},
+	  "Evaluate the input dataset by splitting it into two disjoint subsets determined by the 'ratio'-argument. The ratio determines the number of training examples."},
 	 {ratio,          $r,           "ratio",       {float, 0.66},
-	  "Splitting ratio (i.e. ratio is the fraction of training examples)"},
+	  "Splitting ratio (i.e. the fraction of training examples). This argument is only valid when 'split' is activated."},
 	 {cv,             $x,           "cross-validate", undefined,
-	  "Cross validation"},
+	  "Split the dataset into k disjoint subsets (determined by the 'folds'-argument) and build and evaluate a model by combining each k-1 folds and train on one fold repeatedly k times."},
 	 {folds,          undefined,    "folds",       {integer, 10},
 	  "Number of cross validation folds"},
 	 {build,          $b,           "build",       undefined,
-	  "Build model from --input and output to file (--model-file)"},
-	 {model_file,     undefined,    "model-file",  {string, []},
-	  "Write model to file"},
+	  "Build a model using the complete dataset and write the produced model to a file determined by the 'model-file'-argument."},
+	 {model_file,     undefined,    "model-file",  {string, none},
+	  "File name when writing a model to file (only applicable when using the 'build' or 'evaluate'-argument')."},
 	 {evaluate,       $e,           "evaluate",    undefined,
-	  "Evaluate --input using --model-file"},
+	  "Evaluate the input dataset using a model read from a file described by the 'model-file'-argument."},
 	 {proximity,      $p,           "proximity",   undefined,
-	  "Generate a proximity matrix"},
+	  "Generate a proximity matrix, which is available to support imputation of missing values (by supplying 'proximity' to the 'missing'-argument)."},
 
 	 {progress,       undefined,    "progress",    {atom, dots},
-	  "Showing the progress"},
+	  "Show a progress bar while building a model. Available options include: 'dots', 'numeric' and 'none'. "},
 
 	 {score,          undefined,    "score",       {atom, info},
-	  "Measure for evaluating the goodness of a split"},
+	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info' and 'gini', where 'info' denotes information entropy and 'gini' the gini-impurity."},
 	 {classifiers,    $m,           "no-trees",    {integer, 10},
-	  "Number of trees to generate"},
+	  "Defines the number of classifiers (trees) to build."},
 
 	 {max_depth,      undefined,    "max-depth",   {integer, 1000},
-	  "Max depth of single decision tree"},
+	  "Defines the maximum allowed depth for a single decision tree."},
 	 {min_example,    undefined,    "min-examples",{integer, 1},
-	  "Min number of examples allowed in split"},
+	  "Min number of examples allowed for splitting a node"},
 	 
 	 {rule,           undefined,    "rule",        undefined,
-	  "Build, at each node, a rule"},
+	  "Build, at each node, k (determined by 'no-features') rules from m (determined by 'no-features') features. Thus including a decision based on [1, m] features at each branch."},
 	 {combination,    undefined,    "combination", undefined,
-	  "Combination of random features"},
+	  "Generate k * (k - 1), where k is determined by 'no-features' combinations of features and evaluate the goodness of these at each split point. To allow for single features to be included, the attribute 'weight-factor' determines the probability of generating combinations (defaulting to 0.5)."},
 	 {weka,           undefined,    "weka",        undefined,
-	  "Same as --resample, however with K=inf"},
+	  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k=inf times."},
 	 {resample,       undefined,    "resample",    undefined,
-	  "Resample N random features K times if gain =< min-gain"},
+	  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k (determined by 'no-resamples') times."},
 	 {sqrt,           undefined,    "sqrt",        undefined,
-	  "Use sqrt(|Features|) at each node"},
+	  "Select sqrt(F) features, where F is the total number of features, at each split point and from these select the most promising. It is often a good strategy to use this option if your dataset has many (potentially) irrelevant predictors."},
 	 {weighted,       undefined,    "weighted",    undefined,
-	  "Calculate the most promesing attributes before model induction, then bias the selection of features towards those that provide information"},
+	  "Calculate the most promising attributes before model induction, then bias the selection of features towards those that provide the highest a-priori information"},
 
 	 {missing,        undefined,    "missing",     {atom, random},
-	  "Distributing missing values"},
+	  "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
 
 	 {bagging,        undefined,    "bagging",     undefined,
-	  "Use a bootstrap replicate for building each tree [default]"},
-	 {subagging,     undefined,    "subagging",  undefined,
-	  "Use a subbag for building each tree"},
+	  "To increase model diversity, a bootstrap replicate (i.e. sampling with replacement) of the original dataset is used when building each tree. [default]"},
+	 {subagging,     undefined,    "subagging",    undefined,
+	  "To increase model diversity and improve performance on large datasets, generate a subsample aggregate (i.e. a sample without replacement) from the original dataset."},
 
 	 {weight_factor,  undefined,    "weight-factor", {float, 0.5},
-	  "Weight factor for the --weighted feature selection"},
+	  "Used for controlling the randomness of the 'combination' and 'weighted'-arguments."},
 	 {no_resamples,   undefined,    "no-resample", {integer, 6},
-	  "Number of times to resample, if best gain =< --min-gain"},
+	  "Number of re-samples."},
 	 {min_gain,       undefined,    "min-gain",    {float, 0},
-	  "Controls the minimum allowed gain for not resampling"},
+	  "Minimum allowed gain for not re-sampling (if the 'resample'-argument is specified)."},
+	 
 	 {no_features,    undefined,    "no-features", {integer, -1},
-	  "Control the number of features to inspect at each split"},
+	  "Number of features to inspect at each split. If set to -1 log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
 
 	 {output_predictions, $o,       "output-predictions", {boolean, false},
-	  "Ouput predictions"},
+	  "Write the predictions to standard out."},
 	 {variable_importance, undefined, "vi",        {integer, 0},
-	  "Output N most important variables"},
+	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
 
 	 {log,            $l,           "log-level",   {atom, info},
-	  "Log level (info, debug, error, none)"},
-	 {log_target,     undefined,    "log-target",  {string, []},
-	  "Debug output source"}
+	  "Log level. Available options include: 'debug', 'info', 'error' and 'none', where 'debug' output everything and 'none' output nothing.)"},
+	 {log_target,     undefined,    "log-target",  {string, "stderr"},
+	  "Write debug output to soure. Options include: 'stderr' or any valid file name, where 'stderr' writes output to standard output."}
 	]).
 
 main(Args) ->
@@ -152,7 +153,8 @@ main(Args) ->
 		    bagging = Bagging,
 		    progress = Progress,
 		    split = fun rr_tree:random_split/3,
-		    distribute = Missing,
+		    distribute = fun rr_example:distribute/2,
+		    distribute_missing = Missing,
 		    base_learner = {Classifiers, rr_tree},
 		    no_features = TotalNoFeatures,
 		    log = Logger},
@@ -233,7 +235,7 @@ run_split(Features, Examples, Conf, Options) ->
 	proximity ->
 	    Log(info, "Generating proximity matrix (training) ...", []),
 	    run_proximity(Features, Train, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
-						        distribute = fun rr_missing:weighted/5});
+						        distribute_missing = fun rr_missing:weighted/5});
 	_ ->
 	    ok
     end,
@@ -243,7 +245,7 @@ run_split(Features, Examples, Conf, Options) ->
 	proximity ->
 	    Log(info, "Generating proximity matrix (testing)...", []),
 	    run_proximity(Features, Test, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
-						       distribute = fun rr_missing:weighted/5});
+						       distribute_missing = fun rr_missing:weighted/5});
 	_ ->
 	    ok
     end,
@@ -272,7 +274,7 @@ run_cross_validation(Features, Examples, Conf, Options) ->
 			proximity ->
 			    Log(info, "Generating proximity matrix (training)...", []),
 			    run_proximity(Features, Train0, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
-									 distribute = fun rr_missing:weighted/5});
+									 distribute_missing = fun rr_missing:weighted/5});
 			_ ->
 			    ok
 		    end,
@@ -282,7 +284,7 @@ run_cross_validation(Features, Examples, Conf, Options) ->
 			proximity ->
 			    Log(info, "Generating proximity matrix (testing)...", []),
 			    run_proximity(Features, Test0, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
-									distribute = fun rr_missing:weighted/5});
+									distribute_missing = fun rr_missing:weighted/5});
 			_ ->
 			    ok
 		    end,
@@ -347,7 +349,7 @@ create_bagger(Options) ->
 
 create_logger(Options) ->
     case get_opt(log_target, Options) of
-	[] ->
+	"stderr" ->
 	    Log0 = rr_log:new(std_err, get_opt(log, Options)),
 	    MaxLevel = rr_log:to_number(get_opt(log, Options)),
 	    {Log0, fun (Level, Message, Params) ->
@@ -373,8 +375,8 @@ create_missing_values(Options) ->
     case get_opt(missing, Options) of
 	random ->
 	    fun rr_missing:random/5;
-	weightedr ->
-	    fun rr_missing:weighted_random/5;
+	randomw ->
+	    fun rr_missing:random_weighted/5;
 	weighted ->
 	    fun rr_missing:weighted/5;
 	partition ->
@@ -452,7 +454,7 @@ create_brancher(NoFeatures, Features, Examples, Missing, Score, Options) ->
 	weighted ->
 	    Fraction = get_opt(weight_factor, Options), %% NOTE: make this paralell
 	    Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), 
-					  #rr_conf{score=Score, distribute=Missing}, []),
+					  #rr_conf{score=Score, distribute_missing=Missing}, []),
 	    NewScores = lists:split(trunc(length(Scores) * Fraction), lists:map(fun({_, V}) -> V end, Scores)),
 	    rr_branch:weighted(NoFeatures, Fraction, NewScores);
 	combination ->

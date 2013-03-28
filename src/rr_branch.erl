@@ -156,7 +156,7 @@ generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score} = Co
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
     {Rules, _S, _Cov} = separate_and_conquer(Subset, Binary, Total, Conf, {[], inf}, rr_example:coverage(Binary)),
-    Rule = {rule, Rules},
+    Rule = {rule, Rules, length(Rules)},
     {_Threshold, ExSplit} = Split(Rule, Examples, Conf),
     #rr_candidate{feature=Rule,
 		  score=Score(ExSplit, Total),

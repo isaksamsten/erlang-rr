@@ -48,7 +48,7 @@ random(_, _, ExId, _, _) ->
 %% Distribute examples based on the number of examples falling in each
 %% branch.
 %%
-weighted_random(_, _, ExId, NoLeft, NoRight) ->
+random_weighted(_, _, ExId, NoLeft, NoRight) ->
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     {direction(random:uniform() =< LeftFraction), {rr_example:exid(ExId), rr_example:count(ExId)}}.
 

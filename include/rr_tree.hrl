@@ -15,7 +15,8 @@
 %% * bagging = function for generating a random sample for each tree (1 arg) (default: bagging)
 %% * score = score function for scoring split points (2 args)
 %% * split = function for splitting the data set (3 args)
-%% * distribute = function for distributing missing values (5 args)
+%% * distribute = function for distributing values (2 args)
+%% * distribute_missing = function for distributing missing values (5 args)
 %% * progress = function called for each 10 precent of trees built
 %% * base_learner = tuple() -> {NumClassifiers, base_learner_module}
 %% * cores = number of execution slots
@@ -31,6 +32,7 @@
 	  score,
 	  split,
 	  distribute,
+	  distribute_missing,
 	  progress,
 	  base_learner,
 	  cores = 1,

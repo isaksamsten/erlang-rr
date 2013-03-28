@@ -39,7 +39,7 @@ predict(ExId, #rr_node{id=NodeNr,
 		       feature=F, 
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
-		       right=Right}, #rr_conf{distribute=Distribute} = Conf, Acc) ->
+		       right=Right}, #rr_conf{distribute_missing=Distribute} = Conf, Acc) ->
     NewAcc = [NodeNr|Acc],
     case rr_example:distribute(F, ExId) of
 	{'?', _} ->
@@ -126,13 +126,16 @@ laplace(C, N) ->
     (C+1)/(N+2).
 
 
-random_split(Feature, Examples, #rr_conf{distribute=Distribute}) ->
-    rr_example:split(Feature, Examples, Distribute).
+random_split(Feature, Examples, #rr_conf{distribute=Distribute, distribute_missing=Missing}) ->
+    rr_example:split(Feature, Examples, Distribute, Missing).
 
-deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score, distribute=Distribute}) ->
-    rr_example:split({Feature, Score}, Examples, Distribute);
-deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute}) ->
-    rr_example:split(Feature, Examples, Distribute).
+deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score, 
+							       distribute=Distribute, 
+							       distribute_missing=Missing}) ->
+    rr_example:split({Feature, Score}, Examples, Distribute, Missing);
+deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute, 
+						distribute_missing=Missing}) ->
+    rr_example:split(Feature, Examples, Distribute, Missing).
 
 evaluate_split([], _, _, _) ->
     no_features;

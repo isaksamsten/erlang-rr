@@ -244,46 +244,50 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 %%  Left Branch: Less than and equal to, or, equal to
 %%  Right branch: Greater than, or, not equal to
 %%
-split({rule, _}=Feature, Examples, Distribute) ->
-    {Left, Right, Missing} = split_feature(Feature, Examples, [], [], []),
-    {none, distribute_missing_values(Feature, Examples, count(Left), count(Right),
-				     Left, Right, Missing, [], [], Distribute)};
-split(Feature, Examples, Distribute) ->
-    {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples),
+split(Feature, Examples, Distribute, DistributeMissing) ->
+    {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples, Distribute),
     {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 
-				      Left, Right, Missing, [], [], Distribute)}.
+				      Left, Right, Missing, [], [], DistributeMissing)}.
 
 
 %%
 %% Split into three disjoint subsets, Left, Right and those examples
 %% having a missing value for "Feature"
 %%
-split_with_value(Feature, Examples) ->
+split_with_value(Feature, Examples, Distribute) when element(1, Feature) == numeric;
+						     element(1, Feature) == categoric;
+						     element(1, Feature) == combined->
     Value = sample_split_value(Feature, Examples),
-    {Value, split_feature({Feature, Value}, Examples, [], [], [])}.
+    {Value, split_feature({Feature, Value}, Examples, Distribute, [], [], [])};
+split_with_value(Feature, Examples, Distribute) ->
+    {none, split_feature(Feature, Examples, Distribute, [], [], [])}.
+
 
 
 %%
 %% Split the class distribution:
 %%  NOTE: LEFT is >= or == and RIGHT is < or /= 
 %%
-split_class_distribution(_, [], _, Left, Right, Missing) ->
+split_class_distribution(_, [], _, _, Left, Right, Missing) ->
     {Left, Right, Missing};
-split_class_distribution(Feature, [ExampleId|Examples], Class, 
+split_class_distribution(Feature, [ExampleId|Examples], Distribute, Class, 
 			 {Class, NoLeft, Left} = LeftExamples, 
 			 {Class, NoRight, Right} = RightExamples,
 			 {Class, NoMissing, Missing} = MissingExamples) ->
-    case distribute(Feature, ExampleId) of
-	{'?', Count} ->
-	    split_class_distribution(Feature, Examples, Class, LeftExamples, RightExamples, 
-				     {Class, NoMissing + Count, [ExampleId|Missing]});
-	{left, Count} ->
-	    split_class_distribution(Feature, Examples, Class, {Class, NoLeft + Count, [ExampleId|Left]}, 
-				     RightExamples, MissingExamples);
-	{right, Count} ->
-	    split_class_distribution(Feature, Examples, Class, LeftExamples, 
-				     {Class, NoRight + Count, [ExampleId|Right]}, MissingExamples)
-    end.
+    {NewLeftExamples, NewRightExamples NewMissingExamples}
+	case Distribute(Feature, ExampleId) of
+	    {'?', Count} ->
+		{LeftExamples, RightExamples, {Class, NoMissing + Count, [ExampleId|Missing]}};
+	    {left, Count} ->
+		{{Class, NoLeft + Count, [ExampleId|Left]}, RightExamples, MissingExamples};
+	    {right, Count} ->
+		{LeftExamples, {Class, NoRight + Count, [ExampleId|Right]}, MissingExamples};
+	    {all, {_, NewNoLeft} = NewLeftEx, 
+	     {_, NewNoRight} = NewRightEx,
+	      {_, NewNoMissing} = NewMissingEx} ->
+{Class, NoLeft + NewNoLeft, [NewLeftEx|Left]}, {Class, NoRight + NewNoRight, [NewRightEx|Right]},
+				     {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}
+    end.%% NOTE: call split_class_Dist...
 
 distribute({{categoric, FeatureId}, SplitValue}, ExId) ->
     {case feature(ExId, FeatureId) of
@@ -305,6 +309,8 @@ distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}
 	    B;
 	{A, '?'} ->
 	    A;
+	 {'?', '?'} ->
+	     '?';
 	{A, B} when A == B ->
 	    A;
 	{A, B} when A =/= B ->
@@ -315,7 +321,7 @@ distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}
 		    B
 	    end
      end, C};
-distribute({rule, Rule}, ExId) ->
+distribute({rule, Rule, _Lenght}, ExId) ->
     %% Distribute all examples for which the rules hold to the left
     %% RuleConjunction = [rule()...] where rule() = {feature(), Value}
     %% if [] -> all is true
@@ -337,12 +343,12 @@ evaluate_rule([Rule|Rest], ExId) ->
     end.
 
 
-split_feature(Feature, [], Left, Right, Missing) ->
+split_feature(_Feature, [], _, Left, Right, Missing) ->
     {Left, Right, Missing};
-split_feature(Feature, [{Class, _, ExampleIds}|Examples], Left, Right, Missing) ->
-    case split_class_distribution(Feature, ExampleIds, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
+split_feature(Feature, [{Class, _, ExampleIds}|Examples], Distribute, Left, Right, Missing) ->
+    case split_class_distribution(Feature, ExampleIds, Distribute, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
 	{LeftSplit, RightSplit, MissingSplit} ->
-	    split_feature(Feature, Examples, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
+	    split_feature(Feature, Examples, Distribute, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
     end.
 
 %%
@@ -568,7 +574,7 @@ feature_id({{combined, IdA, IdB}, _}) ->
     list_to_tuple(lists:sort([feature_id(IdA), feature_id(IdB)]));
 feature_id({{_, Id}, _}) ->
     Id;
-feature_id({rule, Rules}) ->
+feature_id({rule, Rules, _Length}) ->
     Ids = [feature_id(Rule) || Rule <- Rules],
     lists:sort(Ids);
 feature_id({_, Id}) ->
