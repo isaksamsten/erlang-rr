@@ -274,7 +274,7 @@ split_class_distribution(Feature, [ExampleId|Examples], Distribute, Class,
 			 {Class, NoLeft, Left} = LeftExamples, 
 			 {Class, NoRight, Right} = RightExamples,
 			 {Class, NoMissing, Missing} = MissingExamples) ->
-    {NewLeftExamples, NewRightExamples NewMissingExamples}
+    {NewLeftExamples, NewRightExamples, NewMissingExamples} = 
 	case Distribute(Feature, ExampleId) of
 	    {'?', Count} ->
 		{LeftExamples, RightExamples, {Class, NoMissing + Count, [ExampleId|Missing]}};
@@ -282,12 +282,16 @@ split_class_distribution(Feature, [ExampleId|Examples], Distribute, Class,
 		{{Class, NoLeft + Count, [ExampleId|Left]}, RightExamples, MissingExamples};
 	    {right, Count} ->
 		{LeftExamples, {Class, NoRight + Count, [ExampleId|Right]}, MissingExamples};
-	    {all, {_, NewNoLeft} = NewLeftEx, 
-	     {_, NewNoRight} = NewRightEx,
-	      {_, NewNoMissing} = NewMissingEx} ->
-{Class, NoLeft + NewNoLeft, [NewLeftEx|Left]}, {Class, NoRight + NewNoRight, [NewRightEx|Right]},
-				     {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}
-    end.%% NOTE: call split_class_Dist...
+	    {left, {_, NewNo} = NewEx, {_, NewNoMissing} = NewMissingEx} ->
+		{{Class, NoLeft + NewNo, [NewEx|Left]}, RightExamples, {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
+	    {right, {_, NewNo} = NewEx, {_, NewNoMissing} = NewMissingEx} ->
+		{LeftExamples, {Class, NoLeft + NewNo, [NewEx|Right]}, {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
+	    {all, {_, NewNoLeft} = NewLeftEx, {_, NewNoRight} = NewRightEx, {_, NewNoMissing} = NewMissingEx} ->
+		{{Class, NoLeft + NewNoLeft, [NewLeftEx|Left]}, 
+		 {Class, NoRight + NewNoRight, [NewRightEx|Right]},
+		 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}}
+	end,
+    split_class_distribution(Feature, Examples, Distribute, Class, NewLeftExamples, NewRightExamples, NewMissingExamples).
 
 distribute({{categoric, FeatureId}, SplitValue}, ExId) ->
     {case feature(ExId, FeatureId) of
@@ -486,6 +490,9 @@ count(Examples) ->
     lists:foldl(fun({_, Count, _}, Old) ->
 			Count + Old
 		end, 0, Examples).
+
+clone(ExId) ->
+    {exid(ExId), exid(ExId)}.
 
 exid(ExId) when is_number(ExId) ->
     ExId;
