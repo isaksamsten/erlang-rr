@@ -332,7 +332,7 @@ distribute({rule, Rule, _Lenght}, ExId) ->
 
     %% NOTE: could we do this by sending a fraction (the number of
     %% rules that apply) to the left and the rest to the right?
-    {evaluate_rule(Rule, ExId), count(ExId)}.
+    {rr_rule:evaluate_rule(Rule, ExId), count(ExId)}.
 
 evaluate_rule([], _) ->
     left;

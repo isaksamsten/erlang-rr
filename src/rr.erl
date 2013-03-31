@@ -49,7 +49,7 @@
 
 	 {score,          undefined,    "score",       {atom, info},
 	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info' and 'gini', where 'info' denotes information entropy and 'gini' the gini-impurity."},
-	 {classifiers,    $m,           "no-trees",    {integer, 10},
+	 {classifiers,    $n,           "no-trees",    {integer, 10},
 	  "Defines the number of classifiers (trees) to build."},
 
 	 {max_depth,      undefined,    "max-depth",   {integer, 1000},
@@ -70,8 +70,11 @@
 	 {weighted,       undefined,    "weighted",    undefined,
 	  "Calculate the most promising attributes before model induction, then bias the selection of features towards those that provide the highest a-priori information"},
 
-	 {missing,        undefined,    "missing",     {atom, random},
+	 {missing,        $m,           "missing",     {atom, random},
 	  "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
+
+	 {distribute,     $d,           "distribute",  {atom, default},
+	  "Distribute examples at each split according to different strategies. Available option include: 'default' or 'rulew'. If 'default' is selected, examples are distributed to either left or right. If 'rulew' is selected, fractions of each example are distributed according to how many antecedents each rule-node classifies the example."},
 
 	 {bagging,        undefined,    "bagging",     undefined,
 	  "To increase model diversity, a bootstrap replicate (i.e. sampling with replacement) of the original dataset is used when building each tree. [default]"},
@@ -145,6 +148,7 @@ main(Args) ->
     MinEx = get_opt(min_example, Options),
     Eval = create_brancher(NoFeatures, ordsets:from_list(Features), Examples, Missing, Score, Options),
     Bagging = create_bagger(Options),
+    Distribute = create_distribute(Options),
 
     Conf = #rr_conf{cores = Cores,
 		    score = Score,
@@ -153,7 +157,7 @@ main(Args) ->
 		    bagging = Bagging,
 		    progress = Progress,
 		    split = fun rr_tree:random_split/3,
-		    distribute = fun rr_example:distribute/2,
+		    distribute = Distribute,
 		    distribute_missing = Missing,
 		    base_learner = {Classifiers, rr_tree},
 		    no_features = TotalNoFeatures,
@@ -196,7 +200,7 @@ output_variable_importance(Model, Conf, Options) ->
 	    io:format("** Variable Importance ** ~n"),
 	    Sorted = lists:reverse(lists:keysort(2, dict:to_list(VariableImportance))),
 	    output_variable_importance(Sorted, 1, No);	    
-	No ->
+	_No ->
 	    ok
     end.
 
@@ -345,7 +349,16 @@ create_bagger(Options) ->
 	_ ->
 	    fun rr_example:bootstrap_aggregate/1
     end.
-	    
+
+create_distribute(Options) ->	
+    case get_opt(distribute, Options) of
+	default ->
+	    fun rr_example:distribute/2;
+	rulew ->
+	    illegal();
+	_ ->
+	    illegal()
+    end.
 
 create_logger(Options) ->
     case get_opt(log_target, Options) of
