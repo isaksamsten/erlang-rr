@@ -209,9 +209,9 @@ entropy(Examples) ->
     entropy(Counts, lists:sum(Counts)).
 
 entropy(Counts, Total) ->
-    -1 * lists:foldl(fun (0, Count) ->
+    -1 * lists:foldl(fun (0.0, Count) ->
 			     Count;
 			 (Class, Count) ->
 			     Fraction = Class / Total,
 			     Count + Fraction * math:log(Fraction)%/math:log(2)
-		     end, 0, Counts).
+		     end, 0.0, Counts).

@@ -355,7 +355,7 @@ create_distribute(Options) ->
 	default ->
 	    fun rr_example:distribute/2;
 	rulew ->
-	    illegal();
+	    fun rr_rule:distribute_weighted/2;
 	_ ->
 	    illegal()
     end.

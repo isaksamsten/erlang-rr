@@ -289,7 +289,11 @@ split_class_distribution(Feature, [ExampleId|Examples], Distribute, Class,
 	    {all, {_, NewNoLeft} = NewLeftEx, {_, NewNoRight} = NewRightEx, {_, NewNoMissing} = NewMissingEx} ->
 		{{Class, NoLeft + NewNoLeft, [NewLeftEx|Left]}, 
 		 {Class, NoRight + NewNoRight, [NewRightEx|Right]},
-		 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}}
+		 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
+	    {both, {_, NewNoLeft} = NewLeftEx, {_, NewNoRight} = NewRightEx} ->
+		{{Class, NoLeft + NewNoLeft, [NewLeftEx|Left]},
+		 {Class, NoRight + NewNoRight, [NewRightEx|Right]},
+		 MissingExamples}
 	end,
     split_class_distribution(Feature, Examples, Distribute, Class, NewLeftExamples, NewRightExamples, NewMissingExamples).
 
@@ -329,7 +333,6 @@ distribute({rule, Rule, _Lenght}, ExId) ->
     %% Distribute all examples for which the rules hold to the left
     %% RuleConjunction = [rule()...] where rule() = {feature(), Value}
     %% if [] -> all is true
-
     %% NOTE: could we do this by sending a fraction (the number of
     %% rules that apply) to the left and the rest to the right?
     {rr_rule:evaluate_rule(Rule, ExId), count(ExId)}.
