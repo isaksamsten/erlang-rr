@@ -8,10 +8,10 @@
 -compile(export_all).
 -author('isak-kar@dsv.su.se').
 
--define(DATE, "2013-02-26").
+-define(DATE, "2013-04-02").
 -define(MAJOR_VERSION, "0").
--define(MINOR_VERSION, "2").
--define(REVISION, "3.0").
+-define(MINOR_VERSION, "3").
+-define(REVISION, "0.0").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 
@@ -494,13 +494,20 @@ Example 1: 10-fold cross validation 'car' dataset:
    ./rr -i data/car.txt -x --folds 10 > result.txt
 
 Example 2: 0.66 percent training examples, 'heart' dataset. Missing
-values are handled by wighting a random selection towards the most
+values are handled by weighting a random selection towards the most
 dominant branch.
-   ./rr -i data/heart.txt -s -r 0.66 --missing wighted > result.txt
+   ./rr -i data/heart.txt -s -r 0.66 --missing weighted > result.txt
 
 Example 3: 10-fold cross validation on a sparse dataset using re-sampled
 feature selection
   ./rr -i data/sparse.txt -x --resample > result.txt
+
+Example 4: 0.7 percent training examples, 'heart' dataset. Missing
+values are handled by by weighting examples with missing values
+towards the most dominant branch. Each node in the tree is composed
+of a rule (1..n conjunctions) and the 20 most importante variables
+are listed.
+  ./rr -i data/heart.txt -s --ratio 0.7 --rule --vi=20 > result.txt
 
 VERSION
 ================================
