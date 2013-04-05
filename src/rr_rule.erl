@@ -31,7 +31,7 @@ generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score} = Co
     {Class, _, _} = lists:nth(random:uniform(length(Examples)), Examples),
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
-    {Rules, _S, _Cov} = separate_and_conquer(Subset, Binary, Total, Conf, {[], inf}, rr_example:coverage(Binary)),
+    {Rules, _S, _Cov} = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=fun laplace_error/2}, {[], inf}, rr_example:coverage(Binary)),
     Rule = {rule, Rules, length(Rules)},
     {_Threshold, ExSplit} = Split(Rule, Examples, Conf),
 %    io:format("~p ~n", [Total]),
@@ -79,15 +79,13 @@ learn_one_rule(Features, Examples, Total, Conf, _) ->
 
 
 %%
+%% Extend to support variable number of classes
+%% TODO: implement the m-estimate etc.
+%%
 laplace_error({both, LeftEx, RightEx}, _Total) ->
-    Left = laplace_error(LeftEx),
-    Right = laplace_error(RightEx),
-    Smallest = if Left > Right ->
-		       1 - Left;
-		  true ->
-		       1 - Right
-	       end,
-    {Smallest, 1-Left, 1-Right};
+    Left = 1-laplace_error(LeftEx),
+    Right = 1-laplace_error(RightEx),
+    {Left+Right, Left, Right};
 laplace_error({left, Side}, _) ->
     Left = 1 - laplace_error(Side),
     {Left, Left, 0.0};

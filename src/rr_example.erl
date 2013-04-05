@@ -625,14 +625,16 @@ generate_featurestrap(N, Length, Set) ->
 %% Return a random subset of size "Subset" from Features
 %%						    
 random_features(Features, Subset) ->
-    Strap = generate_featurestrap(Features, Subset),
-    {_, F} = lists:foldl(fun({Type, Id}, {Index, Acc}) ->
-				 case sets:is_element(Index, Strap) of
-				     true -> {Index + 1, [{Type, Id}|Acc]};
-				     false -> {Index + 1, Acc}
-				 end
-			 end, {1, []}, Features),
-    F.
+    {Top, _} = lists:split(Subset, shuffle_list(Features)),
+    Top.
+    %% Strap = generate_featurestrap(Features, Subset),
+    %% {_, F} = lists:foldl(fun({Type, Id}, {Index, Acc}) ->
+    %% 				 case sets:is_element(Index, Strap) of
+    %% 				     true -> {Index + 1, [{Type, Id}|Acc]};
+    %% 				     false -> {Index + 1, Acc}
+    %% 				 end
+    %% 			 end, {1, []}, Features),
+    %% F.
 
 %%
 %% Return the dataset splitted into {Train, Test} with "Ratio"
@@ -734,7 +736,7 @@ select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, [], _,
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
     case dict:find(N, Bootstrap) of
 	{ok, Times} ->
-	    NewInBag = duplicate_example(ExId, Times, InBag), %% NOTE: could be changed to "Times"
+	    NewInBag = duplicate_example(ExId, Times, InBag),
 	    select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount},
 						N+1, Rest, Bootstrap, {NewInBag, OutBag});
 	error ->

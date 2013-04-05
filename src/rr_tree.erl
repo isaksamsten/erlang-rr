@@ -202,7 +202,7 @@ info({right, Right}, Total) ->
     
 info_content(Side, Total) ->
     NoSide = rr_example:count(Side),
-    Total * ((NoSide / Total) * (entropy(Side))).
+    Total * (NoSide / Total) * entropy(Side).
         
 entropy(Examples) ->
     Counts = [C || {_, C, _} <- Examples],

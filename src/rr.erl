@@ -256,8 +256,6 @@ run_split(Features, Examples, Conf, Options) ->
 
 
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
-
-
     evaluate(Dict, rr_example:count(Test)),
     io:format("** Predictions ** ~n"), %% NOTE: improve...
     output_predictions(get_opt(output_predictions, Options), Test).
