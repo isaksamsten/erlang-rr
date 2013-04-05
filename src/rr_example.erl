@@ -440,8 +440,8 @@ sample_combined(FeatureA, FeatureB, Examples) ->
 random_numeric_split(FeatureId, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
     case random_numeric_split(FeatureId, Ex1, Ex2) of
-	{'?', '?'} ->
-	    random_numeric_split(FeatureId, Examples);
+	'?' ->
+	   '?';
 	X ->
 	    X
     end.
@@ -457,7 +457,7 @@ random_numeric_split(FeatureId, Ex1, Ex2) ->
 	{Value1, Value2} ->
 	    (Value1 + Value2) / 2;
 	{'?', '?'} ->
-	    {'?', '?'}
+	    '?'
     end.
 
 resample_random_split(_, _, 0) ->
@@ -515,7 +515,7 @@ count(Class, Examples) ->
 
 majority(Examples) ->
     {Class, Count, _} = lists:foldl(fun({Class, Count, _}, {_OldClass, OldCount, _} = Old) ->
-					    case Count >= OldCount of 
+					    case Count > OldCount of 
 						true -> {Class, Count, []};
 						false -> Old
 					    end

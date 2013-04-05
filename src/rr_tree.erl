@@ -39,11 +39,11 @@ predict(ExId, #rr_node{id=NodeNr,
 		       feature=F, 
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
-		       right=Right}, #rr_conf{distribute_missing=Distribute} = Conf, Acc) ->
+		       right=Right}, #rr_conf{distribute=Distribute, distribute_missing=Missing} = Conf, Acc) ->
     NewAcc = [NodeNr|Acc],
     case rr_example:distribute(F, ExId) of
 	{'?', _} ->
-	    case Distribute(predict, F, ExId, LeftExamples, RightExamples) of
+	    case Missing(predict, F, ExId, LeftExamples, RightExamples) of
 		{left, _} ->
 		    predict(ExId, Left, Conf, NewAcc);
 		{right, _} ->
@@ -95,11 +95,11 @@ build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune
 			      split={both, LeftExamples, RightExamples}}  ->  
 		    NewReduction = Error - (LeftError + RightError),
 		    NewImportance = dict:update_counter(rr_example:feature_id(Feature), NewReduction, Importance),
-
+		    
 		    {LeftNode, LeftImportance, TotalLeft} = 
 			build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError, 
 					    Conf#rr_conf{depth=Depth + 1}, Id + 1),
-
+		    
 		    {RightNode, RightImportance, TotalRight} = 
 			build_decision_node(Features, RightExamples, LeftImportance, TotalLeft, RightError, 
 					    Conf#rr_conf{depth=Depth + 1}, Id + 2),
@@ -202,7 +202,7 @@ info({right, Right}, Total) ->
     
 info_content(Side, Total) ->
     NoSide = rr_example:count(Side),
-    (NoSide / Total) * (Total * entropy(Side)).
+    Total * ((NoSide / Total) * (entropy(Side))).
         
 entropy(Examples) ->
     Counts = [C || {_, C, _} <- Examples],
