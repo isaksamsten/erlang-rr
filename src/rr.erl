@@ -20,8 +20,10 @@
 -define(CMD_SPEC,
 	[{help,           $h,           "help",         undefined,
 	  "Show this usage information."},
-	 {version,        $v,           "version",      undefined,
+	 {version,        undefined,    "version",      undefined,
 	  "Show the program version."},
+	 {examples,       undefined,    "examples",     undefined,
+	  "View example usages"},
 	 {input_file,     $i,           "input",        string, 
 	  "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
 	 {cores,          $c,           "cores",        {integer, erlang:system_info(schedulers)},
@@ -93,7 +95,7 @@
 
 	 {output_predictions, $o,       "output-predictions", {boolean, false},
 	  "Write the predictions to standard out."},
-	 {variable_importance, undefined, "vi",        {integer, 0},
+	 {variable_importance, $v, "variable-importance",        {integer, 0},
 	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
 
 	 {log,            $l,           "log-level",   {atom, info},
@@ -110,15 +112,20 @@ main(Args) ->
     Options = case getopt:parse(?CMD_SPEC, Args) of
 		  {ok, Parsed} -> 
 		      Parsed;
+		  {error, {invalid_option, R}} ->
+		      illegal(io_lib:format("unrecognized option '~s'", [R]));
 		  {error, _} ->
-		      illegal()		      
+		      illegal()
 	      end,
-    case any_opt([help, version], Options) of
+    case any_opt([help, version, examples], Options) of
 	help ->
 	    show_help(),
 	    halt();
 	version ->
 	    io:format(show_information()),
+	    halt();
+	examples ->
+	    io:format(show_examples()),
 	    halt();
 	false ->
 	    ok
@@ -354,8 +361,8 @@ create_distribute(Options) ->
 	    fun rr_example:distribute/2;
 	rulew ->
 	    fun rr_rule:distribute_weighted/2;
-	_ ->
-	    illegal()
+	Other ->
+	    illegal_option("distribute", Other)
     end.
 
 create_logger(Options) ->
@@ -402,8 +409,8 @@ create_missing_values(Options) ->
 	    fun rr_missing:left/5;
 	ignore ->
 	    fun rr_missing:ignore/5;
-	_ ->
-	    illegal()
+	Other ->
+	    illegal_option("missing", Other)
     end.
 
 create_experiment(Options) ->
@@ -417,8 +424,7 @@ create_experiment(Options) ->
 	evaluate ->
 	    ok;
 	false ->		
-	    io:format(standard_error, "Must select --split or --cross-validation \n", []),
-	    illegal()
+	    illegal("No method selected. Please use either 'split', 'cross-validate' or 'build' argument")
     end.
 
 create_progress(Options) ->
@@ -429,8 +435,8 @@ create_progress(Options) ->
 	    fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
 	none ->
 	    fun(_, _) -> ok end;
-	_ ->
-	    illegal()			   
+	Other ->
+	    illegal_option("progress", Other)
     end.
 
 create_score(Options) ->
@@ -438,7 +444,10 @@ create_score(Options) ->
 	info ->
 	    fun rr_tree:info/2;
 	gini ->
-	    fun rr_tree:gini/2
+	    fun rr_tree:gini/2;
+	Other ->
+	    illegal_option("score", Other)
+		
     end.
 
 get_no_features(TotalNoFeatures, Options) ->
@@ -472,6 +481,7 @@ create_brancher(NoFeatures, Features, Examples, Missing, Score, Options) ->
 	    Factor = get_opt(weight_factor, Options),
 	    rr_branch:random_correlation(NoFeatures, Factor);
 	rule ->
+	    %Note: rule score function
 	    rr_branch:rule(NoFeatures);
 	false -> 
 	    rr_branch:subset(NoFeatures)
@@ -484,9 +494,31 @@ illegal() ->
     getopt:usage(?CMD_SPEC, "rr"),
     halt().
 
+illegal(Argument, Error) ->
+    illegal(Argument, Error, []),
+    halt().
+
+illegal(Argument, Error, Args) ->
+    io:format(standard_error, "rr: '~s': ~s. ~n", [Argument, io_lib:format(Error, Args)]),
+    halt().
+
+illegal_option(Argument, Option) ->
+    illegal(io_lib:format("unrecognized option '~s' for '~s'", [Option, Argument])).
+
+illegal(Error) ->
+    io:format(standard_error, "rr: ~s. ~nPlease consult the manual.~n", [Error]),
+    halt().
+
 show_help() ->
     getopt:usage(?CMD_SPEC, "rr"),
-    io:format(standard_error, "EXAMPLES
+    io:format(standard_error, "~s
+
+VERSION
+================================
+~s", [show_examples(), show_information()]).
+
+show_examples() ->
+    "EXAMPLES
 ================================
 Example 1: 10-fold cross validation 'car' dataset:
    ./rr -i data/car.txt -x --folds 10 > result.txt
@@ -505,11 +537,7 @@ values are handled by by weighting examples with missing values
 towards the most dominant branch. Each node in the tree is composed
 of a rule (1..n conjunctions) and the 20 most importante variables
 are listed.
-  ./rr -i data/heart.txt -s --ratio 0.7 --rule --vi=20 > result.txt
-
-VERSION
-================================
-~s", [show_information()]).
+  ./rr -i data/heart.txt -s --ratio 0.7 --rule -v 20 > result.txt~n".
 
 %%
 %% Get command line option Arg, calling Fun1 if not found
@@ -519,11 +547,11 @@ get_opt(Arg, Fun1, {Options, _}) ->
 	{Arg, Ws} ->
 	    Ws;
 	false -> 
-	    Fun1()
+	    Fun1(io_lib:format("unrecognized argument '~s'", [Arg]))
     end.
 
 get_opt(Arg, Options) ->
-    get_opt(Arg, fun illegal/0, Options).
+    get_opt(Arg, fun illegal/1, Options).
 
 any_opt([], _) ->
     false;

@@ -31,10 +31,10 @@ generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score} = Co
     {Class, _, _} = lists:nth(random:uniform(length(Examples)), Examples),
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
-    {Rules, _S, _Cov} = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=fun laplace_error/2}, {[], inf}, rr_example:coverage(Binary)),
+    {Rules, _S, _Cov} = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=fun laplace_error/2}, 
+					     {[], inf}, rr_example:coverage(Binary)),
     Rule = {rule, Rules, length(Rules)},
     {_Threshold, ExSplit} = Split(Rule, Examples, Conf),
-%    io:format("~p ~n", [Total]),
     #rr_candidate{feature=Rule,
 		  score=Score(ExSplit, Total),
 		  split=ExSplit}.
@@ -65,8 +65,8 @@ learn_one_rule(Features, Examples, Total, Conf, _) ->
     case rr_tree:evaluate_split(Features, Examples, Total, Conf) of
 	no_features ->
 	    1;
-	#rr_candidate{split={_, _}} ->
-	    1;
+	#rr_candidate{feature=Feature, split={_, AnyExamples}, score={Score, _, _}} ->
+	    1; %{Feature, Score, AnyExamples};
 	#rr_candidate{feature=Feature,
 		      split={both, LeftExamples, RightExamples},
 		      score={_Score,LeftScore, RightScore}}->
@@ -85,13 +85,18 @@ learn_one_rule(Features, Examples, Total, Conf, _) ->
 laplace_error({both, LeftEx, RightEx}, _Total) ->
     Left = 1-laplace_error(LeftEx),
     Right = 1-laplace_error(RightEx),
-    {Left+Right, Left, Right};
+    Smallest = if Left < Right ->
+		       Left;
+		  true ->
+		       Right
+	       end,
+    {Smallest, Left, Right};
 laplace_error({left, Side}, _) ->
     Left = 1 - laplace_error(Side),
-    {Left, Left, 0.0};
+    {Left, Left, 1.0};
 laplace_error({right, Side}, _) ->
     Right = 1 - laplace_error(Side),
-    {Right, 0.0, Right}.
+    {Right, 1.0, Right}.
 
 laplace_error(Side) ->
     {Pos, Neg} = rr_example:coverage(Side),
