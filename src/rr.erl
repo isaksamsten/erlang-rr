@@ -95,7 +95,7 @@
 
 	 {output_predictions, $o,       "output-predictions", {boolean, false},
 	  "Write the predictions to standard out."},
-	 {variable_importance, $v, "variable-importance",        {integer, 0},
+	 {variable_importance, $v, "variable-importance",     {integer, 0},
 	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
 
 	 {log,            $l,           "log-level",   {atom, info},
@@ -115,7 +115,7 @@ main(Args) ->
 		  {error, {invalid_option, R}} ->
 		      illegal(io_lib:format("unrecognized option '~s'", [R]));
 		  {error, {missing_option_arg, R}} ->
-		      illegal(io_lib:format("missing argument to option '~s'", [R])); %%NOTE: fix
+		      illegal(io_lib:format("missing argument to option '~s'", [get_opt_name(R, ?CMD_SPEC)])); %%NOTE: fix
 		  {error, _} ->
 		      illegal("unknown error")
 	      end,
@@ -511,6 +511,12 @@ illegal(Error) ->
     io:format(standard_error, "rr: ~s. ~nPlease consult the manual.~n", [Error]),
     halt().
 
+default_illegal(Out) ->
+    fun() ->
+	    illegal(Out)
+    end.
+
+
 show_help() ->
     getopt:usage(?CMD_SPEC, "rr"),
     io:format(standard_error, "~s
@@ -549,11 +555,21 @@ get_opt(Arg, Fun1, {Options, _}) ->
 	{Arg, Ws} ->
 	    Ws;
 	false -> 
-	    Fun1(io_lib:format("unrecognized argument '~s'", [Arg]))
+	    Fun1()
     end.
 
 get_opt(Arg, Options) ->
-    get_opt(Arg, fun illegal/1, Options).
+    get_opt(Arg, default_illegal(io_lib:format("unrecognized argument '~s'", [Arg])), Options).
+
+get_opt_name(Name, []) ->
+    Name;
+get_opt_name(Name, [{RealName, _, Long, _Default, _Descr}|Rest]) ->
+    if Name == RealName ->
+	    Long;
+       true ->
+	    get_opt_name(Name, Rest)
+    end.
+    
 
 any_opt([], _) ->
     false;
