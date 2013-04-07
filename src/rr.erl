@@ -8,10 +8,10 @@
 -compile(export_all).
 -author('isak-kar@dsv.su.se').
 
--define(DATE, "2013-04-02").
+-define(DATE, "2013-04-07").
 -define(MAJOR_VERSION, "0").
 -define(MINOR_VERSION, "3").
--define(REVISION, "0.0").
+-define(REVISION, "1.0").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 
@@ -39,7 +39,7 @@
 	  "Number of cross validation folds"},
 	 {build,          $b,           "build",       undefined,
 	  "Build a model using the complete dataset and write the produced model to a file determined by the 'model-file'-argument."},
-	 {model_file,     undefined,    "model-file",  {string, none},
+	 {model_file,     undefined,    "model-file",  string,
 	  "File name when writing a model to file (only applicable when using the 'build' or 'evaluate'-argument')."},
 	 {evaluate,       $e,           "evaluate",    undefined,
 	  "Evaluate the input dataset using a model read from a file described by the 'model-file'-argument."},
@@ -242,36 +242,17 @@ run_split(Features, Examples, Conf, Options) ->
     Split = get_opt(ratio, Options),
     io:format("~n** Split ~p ** ~n", [Split]),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
-
-    Log = Conf#rr_conf.log,
-    case get_opt(missing, Options) of
-	proximity ->
-	    Log(info, "Generating proximity matrix (training) ...", []),
-	    run_proximity(Features, Train, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
-						        distribute_missing = fun rr_missing:weighted/5});
-	_ ->
-	    ok
-    end,
     Model = rr_ensamble:generate_model(Features, Train, Conf),
+
     output_variable_importance(Model, Conf, Options),
-    case get_opt(missing, Options) of
-	proximity ->
-	    Log(info, "Generating proximity matrix (testing)...", []),
-	    run_proximity(Features, Test, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
-						       distribute_missing = fun rr_missing:weighted/5});
-	_ ->
-	    ok
-    end,
-
-
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
     evaluate(Dict, rr_example:count(Test)),
-    io:format("** Predictions ** ~n"), %% NOTE: improve...
+    io:format("** Predictions ** ~n"), %% TODO: fix me
     output_predictions(get_opt(output_predictions, Options), Test).
     
 run_build_process(Features, Examples, Conf, Options) ->
     Model = rr_ensamble:generate_model(Features, Examples, Conf),
-    rr_ensamble:model2file(Model, get_opt(model_file, Options)).
+    rr_ensamble:save_model(Model, get_opt(model_file, Options)).
 
 run_cross_validation(Features, Examples, Conf, Options) ->
     Folds = get_opt(folds, Options),
@@ -279,26 +260,7 @@ run_cross_validation(Features, Examples, Conf, Options) ->
 	    fun(Train0, Test0, Fold) ->
 		    io:format(standard_error, "*** Fold ~p *** ~n", [Fold]),
 		    io:format("~n** Fold: ~p ** ~n", [Fold]),
-		    Log = Conf#rr_conf.log,
-
-		    case get_opt(missing, Options) of
-			proximity ->
-			    Log(info, "Generating proximity matrix (training)...", []),
-			    run_proximity(Features, Train0, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
-									 distribute_missing = fun rr_missing:weighted/5});
-			_ ->
-			    ok
-		    end,
 		    M = rr_ensamble:generate_model(Features, Train0, Conf),
-		    
-		    case get_opt(missing, Options) of
-			proximity ->
-			    Log(info, "Generating proximity matrix (testing)...", []),
-			    run_proximity(Features, Test0, Conf#rr_conf{prune = rr_tree:example_depth_stop(1, 1000),
-									distribute_missing = fun rr_missing:weighted/5});
-			_ ->
-			    ok
-		    end,
 		    D = rr_ensamble:evaluate_model(M, Test0, Conf),
 		    evaluate(D, rr_example:count(Test0))
 	    end, Folds, Examples),
@@ -547,9 +509,6 @@ of a rule (1..n conjunctions) and the 20 most importante variables
 are listed.
   ./rr -i data/heart.txt -s --ratio 0.7 --rule -v 20 > result.txt~n".
 
-%%
-%% Get command line option Arg, calling Fun1 if not found
-%%	     
 get_opt(Arg, Fun1, {Options, _}) ->	
     case lists:keyfind(Arg, 1, Options) of
 	{Arg, Ws} ->
@@ -570,7 +529,6 @@ get_opt_name(Name, [{RealName, _, Long, _Default, _Descr}|Rest]) ->
 	    get_opt_name(Name, Rest)
     end.
     
-
 any_opt([], _) ->
     false;
 any_opt([O|Rest], Options) ->
@@ -581,10 +539,6 @@ any_opt([O|Rest], Options) ->
 	    any_opt(Rest, Options)
     end.
 
-
-%%
-%% Return true if Arg exist
-%%
 has_opt(Arg, {Options, _ }) ->
     lists:any(fun (K) ->
 		      K == Arg
