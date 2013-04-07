@@ -114,8 +114,10 @@ main(Args) ->
 		      Parsed;
 		  {error, {invalid_option, R}} ->
 		      illegal(io_lib:format("unrecognized option '~s'", [R]));
+		  {error, {missing_option_arg, R}} ->
+		      illegal(io_lib:format("missing argument to option '~s'", [R])); %%NOTE: fix
 		  {error, _} ->
-		      illegal()
+		      illegal("unknown error")
 	      end,
     case any_opt([help, version, examples], Options) of
 	help ->
