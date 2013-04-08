@@ -7,6 +7,7 @@
 %%% @end
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_example).
+-include("rr_tree.hrl").
 -compile(export_all).
 -export([init/0,
 	 load/2,
@@ -474,6 +475,28 @@ random_categoric_split(FeatureId, Examples) ->
     ExId = sample_example(Examples),
     feature(ExId, FeatureId).
 
+best_split([], _, _, _, _, _, _) ->
+    no_features;
+best_split([F|Features], Examples, Total, Score, Split, Distribute, Missing) ->
+    {T, ExSplit} = Split(F, Examples, Distribute, Missing),
+    Cand = #rr_candidate{feature={F, T}, score=Score(ExSplit, Total), split=ExSplit},
+    best_split(Features, Examples, Total, Score, Split, Distribute, Missing, Cand).
+
+best_split([], _, _, _, _, _, _, Acc) ->
+    Acc;
+best_split([F|Features], Examples, Total, Score, Split, Distribute, Missing, OldCand) ->
+    Cand = case Split(F, Examples, Distribute, Missing) of
+	       {Threshold, ExSplit} ->
+		   #rr_candidate{feature = {F, Threshold}, 
+				 score = Score(ExSplit, Total), 
+				 split = ExSplit}		       
+	   end,
+    best_split(Features, Examples, Total, Score, Split, Distribute, Missing, 
+		   case Cand#rr_candidate.score < OldCand#rr_candidate.score of
+		       true -> Cand;
+		       false -> OldCand
+		   end).
+
 %%
 %% Take class at id=N and return the the tuple {Class, Classes}
 %%
@@ -597,10 +620,6 @@ feature_name(Rules) when is_list(Rules) ->
     [feature_name(Rule) || Rule <- Rules];
 feature_name(Id) ->
     ets:lookup_element(features, Id, 2).
-
-
-
-
 
 %%
 %% Generate a set of random numbers

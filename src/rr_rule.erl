@@ -6,9 +6,12 @@
 %%% Created : 30 Mar 2013 by Isak Karlsson <isak@Isaks-MacBook-Pro.local>
 
 -module(rr_rule).
--compile(export_all).
-
 -include("rr_tree.hrl").
+-export([best/5,
+	 distribute_weighted/2,
+	 evaluate_rule/2,
+	 laplace/2,
+	 m_estimate/2]).
 
 best(Features, Examples, Total, Conf, NoFeatures) ->
     OneRule = generate_rule(Features, Examples, Total, Conf, NoFeatures),
@@ -26,24 +29,21 @@ best_rule(Features, Examples, Total, Conf, NoFeatures, N, #rr_candidate{score=Sc
 		      Cand
 	      end).
 
-generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score} = Conf, NoFeatures) ->
+generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, distribute = Distribute, distribute_missing=Missing} = Conf, NoFeatures) ->
     NoClasses = length(Examples),
     {Class, _, _} = lists:nth(random:uniform(NoClasses), Examples),
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
     Coverage = rr_example:coverage(Binary),
-    Rules = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=laplace_error(NoClasses)}, 
-					     {[], inf}, rr_example:coverage(Binary)),
+    Rules = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=laplace(Coverage, NoClasses)}, {[], inf}),
     Rule = {rule, Rules, length(Rules)},
-    {_Threshold, ExSplit} = Split(Rule, Examples, Conf),
-    #rr_candidate{feature=Rule,
-		  score=Score(ExSplit, Total),
-		  split=ExSplit}.
+    {_Threshold, ExSplit} = Split(Rule, Examples, Distribute, Missing),
+    #rr_candidate{feature=Rule, score=Score(ExSplit, Total), split=ExSplit}.
 
-separate_and_conquer([], _, _, _, {Rules, _}, _) ->
+separate_and_conquer([], _, _, _, {Rules, _}) ->
     Rules;
-separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}, Coverage) ->
-    case learn_one_rule(Features, Examples, Total, Conf, Coverage) of
+separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}) ->
+    case learn_one_rule(Features, Examples, Total, Conf) of
 	1 ->
 	    Rules;
 	{{Feature, _} = Rule, NewScore, Covered}  ->
@@ -54,16 +54,19 @@ separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}, Coverage) 
 			    [Rule|Rules];
 			{Pos, _} when Pos =< 0 ->
 			    Rules;
-			NewCoverage ->
-			    separate_and_conquer(Features -- [Feature], Covered, Total, Conf, {[Rule|Rules], NewScore}, NewCoverage)
+			_NewCoverage ->
+			    separate_and_conquer(Features -- [Feature], Covered, Total, Conf, {[Rule|Rules], NewScore})
 		    end;
 		false ->
 		    Rules
 	    end
     end.
 
-learn_one_rule(Features, Examples, Total, Conf, _) ->
-    case rr_tree:evaluate_split(Features, Examples, Total, Conf) of
+learn_one_rule(Features, Examples, Total, #rr_conf{score = Score, 
+						   split=Split, 
+						   distribute = Distribute, 
+						   distribute_missing=Missing}) ->
+    case rr_example:best_split(Features, Examples, Total, Score, Split, Distribute, Missing) of
 	no_features ->
 	    1;
 	#rr_candidate{feature=_Feature, split={_, _AnyExamples}, score={_Score, _, _}} ->
@@ -106,14 +109,14 @@ m_estimate(Side, {Pos, Neg}, M) ->
     (P+M*Pi)/(P+N+M).
     
 
-laplace_error(Classes) ->
+laplace(_, Classes) ->
     fun(Examples, _) ->
 	    laplace_error(Examples, Classes)
     end.
 
 laplace_error({both, LeftEx, RightEx}, Classes) ->
-    Left = 1 - laplace(LeftEx, Classes),
-    Right = 1 - laplace(RightEx, Classes),
+    Left = 1 - laplace_estimate(LeftEx, Classes),
+    Right = 1 - laplace_estimate(RightEx, Classes),
     Smallest = if Left < Right ->
 		       Left;
 		  true ->
@@ -121,17 +124,15 @@ laplace_error({both, LeftEx, RightEx}, Classes) ->
 	       end,
     {Smallest, Left, Right};
 laplace_error({left, Side}, Classes) ->
-    Left = 1 - laplace(Side, Classes),
+    Left = 1 - laplace_estimate(Side, Classes),
     {Left, Left, 1.0};
 laplace_error({right, Side}, Classes) ->
-    Right = 1 - laplace(Side, Classes),
+    Right = 1 - laplace_estimate(Side, Classes),
     {Right, 1.0, Right}.
 
-laplace(Side, Classes) ->
+laplace_estimate(Side, Classes) ->
     {Pos, Neg} = rr_example:coverage(Side),
     (Pos + 1) / (Pos + Neg + Classes).
-
-
 
 distribute_weighted({rule, Rule, Length}, ExId) ->
     ExCount = rr_example:count(ExId),

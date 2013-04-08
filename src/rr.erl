@@ -165,7 +165,7 @@ main(Args) ->
 		    branch = Eval,
 		    bagging = Bagging,
 		    progress = Progress,
-		    split = fun rr_tree:random_split/3,
+		    split = fun rr_tree:random_split/4,
 		    distribute = Distribute,
 		    distribute_missing = Missing,
 		    base_learner = {Classifiers, rr_tree},

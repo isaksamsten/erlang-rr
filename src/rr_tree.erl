@@ -6,9 +6,19 @@
 %%% Created : 13 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_tree).
--compile(export_all).
-
 -include("rr_tree.hrl").
+
+-export([generate_model/3,
+	 evaluate_model/3,
+	 predict/4,
+
+	 random_split/4,
+
+	 example_depth_stop/2,
+	 info/2,
+	 entropy/1,
+	 gini/2]).
+
 
 example_depth_stop(MaxExamples, MaxDepth) ->
     fun(Examples, Depth) ->
@@ -39,7 +49,8 @@ predict(ExId, #rr_node{id=NodeNr,
 		       feature=F, 
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
-		       right=Right}, #rr_conf{distribute=Distribute, distribute_missing=Missing} = Conf, Acc) ->
+		       right=Right}, #rr_conf{distribute=Distribute, %% TODO: fix me
+					      distribute_missing=Missing} = Conf, Acc) ->
     NewAcc = [NodeNr|Acc],
     case rr_example:distribute(F, ExId) of
 	{'?', _} ->
@@ -109,12 +120,7 @@ build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune
     end.
 
 make_node(Id, Feature, Dist, Score, Left, Right) ->
-    #rr_node{id = Id,
-	     score=Score, 
-	     feature=Feature, 
-	     distribution=Dist,
-	     left=Left, 
-	     right=Right}.
+    #rr_node{id = Id, score=Score, feature=Feature, distribution=Dist, left=Left, right=Right}.
 
 make_leaf(Id, [], Class) ->
     #rr_leaf{id=Id, score=0, distribution={0, 0}, class=Class};
@@ -123,55 +129,32 @@ make_leaf(Id, Covered, {Class, C}) ->
     #rr_leaf{id=Id, score=laplace(C, N), distribution={C, N-C}, class=Class}.
 
 laplace(C, N) ->
-    (C+1)/(N+2).
+    (C+1)/(N+2). %% NOTE: no classes?
 
 
-random_split(Feature, Examples, #rr_conf{distribute=Distribute, distribute_missing=Missing}) ->
+random_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
-deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score, 
-							       distribute=Distribute, 
-							       distribute_missing=Missing}) ->
-    rr_example:split({Feature, Score}, Examples, Distribute, Missing);
-deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute, 
-						distribute_missing=Missing}) ->
-    rr_example:split(Feature, Examples, Distribute, Missing).
+%% deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score, 
+%% 							       distribute=Distribute, 
+%% 							       distribute_missing=Missing}) ->
+%%     rr_example:split({Feature, Score}, Examples, Distribute, Missing);
+%% deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute, 
+%% 						distribute_missing=Missing}) ->
+%%     rr_example:split(Feature, Examples, Distribute, Missing).
 
-%% 
-%% TODO: consider moving this to rr_example.erl
-%%
-evaluate_split([], _, _, _) ->
-    no_features;
-evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->
-    {T, ExSplit} = Split(F, Examples, Conf),
-    evaluate_split(Features, Examples, Total, Conf, #rr_candidate{feature={F, T},
-								  score=Score(ExSplit, Total),
-								  split=ExSplit}).
 
-evaluate_split([], _, _, _, Acc) ->
-    Acc;
-evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf, 
-	       #rr_candidate{score=OldScore} = OldCand) ->
-    Cand = case Split(F, Examples, Conf) of
-	       {Threshold, ExSplit} ->
-		   #rr_candidate{feature = {F, Threshold}, 
-				 score = Score(ExSplit, Total), 
-				 split = ExSplit}		       
-	   end,
-    evaluate_split(Features, Examples, Total, Conf, case Cand#rr_candidate.score < OldScore of
-							true -> Cand;
-							false -> OldCand
-						    end).
+%% all_split(F, E, T, C) ->
+%%     all_split(F, E, T, C, []).
 
-evaluate_all([], _, _, _, Acc) ->
-    lists:keysort(1, Acc);
-evaluate_all([Feature|Rest], Examples, Total, #rr_conf{score=Score} = Conf, Acc) ->
-    NewAcc = case deterministic_split(Feature, Examples, Conf) of
-		 {_, ExSplit} ->
-		     [{Score(ExSplit, Total), Feature}|Acc]
-	     end,
-    evaluate_all(Rest, Examples, Total, Conf, NewAcc).
-
+%% all_split([], _, _, _, Acc) ->
+%%     lists:keysort(1, Acc);
+%% all_split([Feature|Rest], Examples, Total, #rr_conf{score=Score} = Conf, Acc) ->
+%%     NewAcc = case random_split(Feature, Examples, S) of
+%% 		 {_, ExSplit} ->
+%% 		     [{Score(ExSplit, Total), Feature}|Acc]
+%% 	     end,
+%%     all_split(Rest, Examples, Total, Conf, NewAcc).
 
 %% TODO: fix
 gini({both, Left, Right}, Total) ->

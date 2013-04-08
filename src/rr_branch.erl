@@ -1,5 +1,17 @@
+%%% @author Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
+%%% @copyright (C) 2013, Isak Karlsson
+%%% @doc
+%%%
+%%% @end
+%%% Created :  8 Apr 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 -module(rr_branch).
--compile(export_all).
+-export([resampled/3,
+	 weka/1,
+	 all/0,
+	 subset/1,
+	 correlation/1,
+	 random_correlation/2,
+	 rule/1]).
 
 -include("rr_tree.hrl").
 
@@ -16,15 +28,18 @@ resampled_subset_branch_split(_Features, _Examples, _Total,
 			      #rr_conf{no_features=NoFeatures}, NoResamples, _, _) when NoFeatures =< 0;
 											NoResamples =< 0 ->
     no_information;
-resampled_subset_branch_split(Features, Examples, Total, 
-			      #rr_conf{no_features=NoFeatures} = Conf, NoResamples, Delta, Log) ->
+resampled_subset_branch_split(Features, Examples, Total,  #rr_conf{score = ScoreFun, 
+								   split=Split, 
+								   distribute = Distribute, 
+								   distribute_missing=Missing, 
+								   no_features=NoFeatures} = Conf, NoResamples, Delta, Log) ->
     Features0 = if NoFeatures =< Log ->
 			Features;
 		   true ->
 			rr_example:random_features(Features, Log)
 		end,
 
-    Cand = rr_tree:evaluate_split(Features0, Examples, Total, Conf),
+    Cand = rr_example:best_split(Features0, Examples, Total, ScoreFun, Split, Distribute, Missing),
     {Score, _, _} = Cand#rr_candidate.score,
     Gain = (Total*rr_tree:entropy(Examples)) - Score, 
     if  Gain =< Delta ->
@@ -46,7 +61,7 @@ weighted(NoFeatures, Fraction, NewScores) ->
 
 weighted_branch_split({Good, _Bad}, Examples, Total, Conf, NoFeatures, _Fraction) ->
     Features0 = rr_example:random_features(Good, NoFeatures),
-    rr_tree:evaluate_split(Features0, Examples, Total, Conf).
+    rr_example:best_split(Features0, Examples, Total, Conf).
 
 %%
 %% Uses the same algorithm as Weka for resampling non-informative
@@ -58,13 +73,17 @@ weka(NoFeatures) ->
 
 weka_branch_split(_, _, _, #rr_conf{no_features=NoTotal}, _) when NoTotal =< 0 ->
     no_information;
-weka_branch_split(Features, Examples, Total, #rr_conf{no_features=NoTotal} = Conf, NoFeatures) ->
+weka_branch_split(Features, Examples, Total, #rr_conf{score = ScoreFun, 
+						      split=Split, 
+						      distribute = Distribute, 
+						      distribute_missing=Missing,
+						      no_features=NoTotal} = Conf, NoFeatures) ->
     Features0 = if NoTotal =< NoFeatures ->
 			Features;
 		   true -> 
 			rr_example:random_features(Features, NoFeatures)
 		end,
-    Cand = rr_tree:evaluate_split(Features0, Examples, Total, Conf),
+    Cand = rr_example:best_split(Features0, Examples, Total, ScoreFun, Split, Distribute, Missing),
     {Score, _, _} = Cand#rr_candidate.score,
     Gain = (Total*rr_tree:entropy(Examples)) - Score,
     if Gain =< 0.0 ->
@@ -78,9 +97,12 @@ weka_branch_split(Features, Examples, Total, #rr_conf{no_features=NoTotal} = Con
 %% Branch a subset of "NoFeatures" features
 %%
 subset(NoFeatures) ->
-    fun (Features, Examples, Total, Conf) ->
+    fun (Features, Examples, Total, #rr_conf{score = Score, 
+					     split=Split, 
+					     distribute = Distribute, 
+					     distribute_missing=Missing}) ->
 	    Features0 = rr_example:random_features(Features, NoFeatures),
-	    rr_tree:evaluate_split(Features0, Examples, Total, Conf)
+	    rr_example:best_split(Features0, Examples, Total, Score, Split, Distribute, Missing)
     end.
 
 %%
@@ -88,14 +110,17 @@ subset(NoFeatures) ->
 %% attributes
 %%
 correlation(NoFeatures) ->
-    fun (Features, Examples, Total, Conf) ->
+    fun (Features, Examples, Total, #rr_conf{score = Score, 
+					     split=Split, 
+					     distribute = Distribute, 
+					     distribute_missing=Missing}) ->
 	    FeaturesA = rr_example:random_features(Features, NoFeatures),
 	    FeaturesB = rr_example:random_features(Features, NoFeatures),
 	    
 	    Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB, A =/= B],
 
 	    %%lists:zipwith(fun (A, B) -> {combined, A, B} end, FeaturesA, FeaturesB),
-	    rr_tree:evaluate_split(Combination, Examples, Total, Conf)
+	    rr_example:best_split(Combination, Examples, Total, Score, Split, Distribute, Missing)
     end.
 
 %%
@@ -117,15 +142,24 @@ random_correlation(NoFeatures, Fraction) ->
 %%
 %% Evalate one randomly selected feature (maximum diversity)
 %%
-random(Features, Examples, Total, #rr_conf{no_features=NoFeatures} = Conf) ->
+random(Features, Examples, Total, #rr_conf{score = Score, 
+					   split=Split, 
+					   distribute = Distribute, 
+					   distribute_missing=Missing,
+					   no_features=NoFeatures} = Conf) ->
     Feature = lists:nth(random:uniform(NoFeatures), Features),
-    rr_tree:evaluate_split([Feature], Examples, Total, Conf).
+    rr_example:best_split([Feature], Examples, Total, Score, Split, Distribute, Missing).
 
 %%
 %% Evaluate all features to find the best split point
 %%
-all(Features, Examples, Total, Conf) ->
-    rr_tree:evaluate_split(Features, Examples, Total, Conf).
+all() ->
+    fun(Features, Examples, Total, #rr_conf{score = Score, 
+					    split=Split, 
+					    distribute = Distribute, 
+					    distribute_missing=Missing}) ->
+	    rr_example:best_split(Features, Examples, Total, Score, Split, Distribute, Missing)
+    end.
 
 
 
