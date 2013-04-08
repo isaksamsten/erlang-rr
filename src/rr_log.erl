@@ -51,9 +51,6 @@ do_log(std_err, _Level, _Max, Str) ->
 do_log(Device, _Level, _Max, Str) ->
     file:write(Device, [Str|"\n"]).
 
-
-    
-
 to_number(Level) ->
     case Level of
 	none -> 0;
@@ -62,16 +59,4 @@ to_number(Level) ->
 	debug -> 3;
 	_ -> 0
     end.
-	    
-    
-
-    
-			       
-			       
-       
-
-
-
-
-
 

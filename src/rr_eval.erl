@@ -7,7 +7,6 @@
 
 -module(rr_eval).
 
-
 -export([accuracy/1,
 	 auc/2,
 	 brier/2,

@@ -137,6 +137,9 @@ deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute,
 						distribute_missing=Missing}) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
+%% 
+%% TODO: consider moving this to rr_example.erl
+%%
 evaluate_split([], _, _, _) ->
     no_features;
 evaluate_split([F|Features], Examples, Total, #rr_conf{score=Score, split=Split} = Conf) ->
