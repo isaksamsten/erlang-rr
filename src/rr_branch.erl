@@ -5,7 +5,8 @@
 %%% @end
 %%% Created :  8 Apr 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 -module(rr_branch).
--export([resampled/3,
+-export([random/4,
+	 resampled/3,
 	 weka/1,
 	 all/0,
 	 subset/1,
@@ -54,14 +55,14 @@ resampled_subset_branch_split(Features, Examples, Total,  #rr_conf{score = Score
 %% Definitly need another way of determine what constitutes a good
 %% feature
 %%
-weighted(NoFeatures, Fraction, NewScores) ->
-    fun (_, Examples, Total, Conf) ->
-	    weighted_branch_split(NewScores, Examples, Total, Conf, NoFeatures, Fraction)
-    end.
+%% weighted(NoFeatures, Fraction, NewScores) ->
+%%     fun (_, Examples, Total, Conf) ->
+%% 	    weighted_branch_split(NewScores, Examples, Total, Conf, NoFeatures, Fraction)
+%%     end.
 
-weighted_branch_split({Good, _Bad}, Examples, Total, Conf, NoFeatures, _Fraction) ->
-    Features0 = rr_example:random_features(Good, NoFeatures),
-    rr_example:best_split(Features0, Examples, Total, Conf).
+%% weighted_branch_split({Good, _Bad}, Examples, Total, Conf, NoFeatures, _Fraction) ->
+%%     Features0 = rr_example:random_features(Good, NoFeatures),
+%%     rr_example:best_split(Features0, Examples, Total, Conf).
 
 %%
 %% Uses the same algorithm as Weka for resampling non-informative
@@ -146,7 +147,7 @@ random(Features, Examples, Total, #rr_conf{score = Score,
 					   split=Split, 
 					   distribute = Distribute, 
 					   distribute_missing=Missing,
-					   no_features=NoFeatures} = Conf) ->
+					   no_features=NoFeatures}) ->
     Feature = lists:nth(random:uniform(NoFeatures), Features),
     rr_example:best_split([Feature], Examples, Total, Score, Split, Distribute, Missing).
 
@@ -160,8 +161,6 @@ all() ->
 					    distribute_missing=Missing}) ->
 	    rr_example:best_split(Features, Examples, Total, Score, Split, Distribute, Missing)
     end.
-
-
 
 rule(NoFeatures) ->
     fun (Features, Examples, Total, Conf) ->

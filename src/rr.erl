@@ -427,7 +427,7 @@ get_no_features(TotalNoFeatures, Options) ->
 	    round(math:sqrt(TotalNoFeatures))
     end.
 
-create_brancher(NoFeatures, Features, Examples, Missing, Score, Options) ->
+create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
     case any_opt([weka, resample, weighted, combination, rule], Options) of
 	weka ->
 	    rr_branch:weka(NoFeatures);
@@ -435,12 +435,12 @@ create_brancher(NoFeatures, Features, Examples, Missing, Score, Options) ->
 	    NoResamples = get_opt(no_resamples, Options),
 	    MinGain = get_opt(min_gain, Options),
 	    rr_branch:resampled(NoResamples, NoFeatures, MinGain);
-	weighted ->
-	    Fraction = get_opt(weight_factor, Options), %% NOTE: make this paralell
-	    Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), 
-					  #rr_conf{score=Score, distribute_missing=Missing}, []),
-	    NewScores = lists:split(trunc(length(Scores) * Fraction), lists:map(fun({_, V}) -> V end, Scores)),
-	    rr_branch:weighted(NoFeatures, Fraction, NewScores);
+	%% weighted ->
+	%%     Fraction = get_opt(weight_factor, Options), %% NOTE: make this paralell
+	%%     Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), 
+	%% 				  #rr_conf{score=Score, distribute_missing=Missing}, []),
+	%%     NewScores = lists:split(trunc(length(Scores) * Fraction), lists:map(fun({_, V}) -> V end, Scores)),
+	%%     rr_branch:weighted(NoFeatures, Fraction, NewScores);
 	combination ->
 	    Factor = get_opt(weight_factor, Options),
 	    rr_branch:random_correlation(NoFeatures, Factor);
