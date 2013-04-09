@@ -33,7 +33,6 @@ weighted_partition(predict, _, ExId, NoLeft, NoRight) ->
     {direction(random:uniform() =< LeftFraction), {rr_example:exid(ExId), rr_example:count(ExId)}}.
     
 weighted(_, _, ExId, NoLeft, NoRight) ->
-%    io:format("~p ~n", [NoLeft]),
     LeftFraction = case NoLeft of 0 -> 0; 0.0 -> 0; _-> (NoLeft) / (NoLeft + NoRight) end,
     {direction(LeftFraction >= 0.5), {rr_example:exid(ExId), rr_example:count(ExId)}}.
 		       

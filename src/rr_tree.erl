@@ -50,7 +50,7 @@ predict(ExId, #rr_node{id=NodeNr,
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
 		       right=Right}, #rr_conf{distribute=Distribute, %% TODO: fix me
-					      distribute_missing=Missing} = Conf, Acc) ->
+					      missing_values=Missing} = Conf, Acc) ->
     NewAcc = [NodeNr|Acc],
     case rr_example:distribute(F, ExId) of
 	{'?', _} ->
@@ -137,10 +137,10 @@ random_split(Feature, Examples, Distribute, Missing) ->
 
 %% deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score, 
 %% 							       distribute=Distribute, 
-%% 							       distribute_missing=Missing}) ->
+%% 							       missing_values=Missing}) ->
 %%     rr_example:split({Feature, Score}, Examples, Distribute, Missing);
 %% deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute, 
-%% 						distribute_missing=Missing}) ->
+%% 						missing_values=Missing}) ->
 %%     rr_example:split(Feature, Examples, Distribute, Missing).
 
 

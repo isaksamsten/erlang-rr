@@ -7,6 +7,8 @@
 
 
 %%
+%% @doc
+%%
 %% Configuration and options for building the trees 
 %%
 %% * prune = function for prepruning (2 args)
@@ -16,23 +18,24 @@
 %% * score = score function for scoring split points (2 args)
 %% * split = function for splitting the data set (3 args)
 %% * distribute = function for distributing values (2 args)
-%% * distribute_missing = function for distributing missing values (5 args)
-%% * progress = function called for each 10 precent of trees built
+%% * missing_values = function for distributing missing values (5 args)
+%% * progress = function called for each 10 precent of base_classifers built
 %% * base_learner = tuple() -> {NumClassifiers, base_learner_module}
 %% * cores = number of execution slots
 %% * no_features = total number of features (currently)
 %% * log = function taking two arguments: (debug, error, or info) a string, 
 %%         and optional arguments i.e. fun(.., Str, [])
 %%
+%% @end
 -record(rr_conf, {
 	  prune, 
-	  depth=0,
+	  depth=0 :: number(),
 	  branch,
 	  bagging,
 	  score,
 	  split,
 	  distribute,
-	  distribute_missing,
+	  missing_values,
 	  progress,
 	  base_learner,
 	  cores = 1,
@@ -47,18 +50,56 @@
 %% * left = node leading left
 %% * right = node leadning right
 %%
--record(rr_node, {id, score, feature, distribution, left, right}).
+-record(rr_node, {id, 
+		  score, 
+		  feature, 
+		  distribution, 
+		  left, 
+		  right}).
 
 %%
 %% * score = score of leaf (e.g. laplace-estimated purity)
 %% * distribution = fraction of {Correct, Incorrect}
 %% * class = the class predicted by leaf
 %%
--record(rr_leaf, {id, score, distribution, class}).
+-record(rr_leaf, {id, 
+		  score, 
+		  distribution, 
+		  class}).
 
 %%
 %% * feature = the feature involving the split
 %% * score = the score of this split (less is better)
 %% * split = [Left, Right]
 %%
--record(rr_candidate, {feature, score, split}).
+-record(rr_candidate, {
+	  feature :: feature(), 
+	  score :: score(), 
+	  split :: split()
+	 }).
+
+
+-type exid() :: number() | {number(), number()}.
+-type feature() :: {atom(), number()} | 
+		   {rule, [{feature(), atom()}, ...], number()} |
+		   tuple().
+-type features() :: [feature(),...].
+
+-type example() :: {atom(), number(), [exid(),...]}.
+-type examples() :: [example(),...].
+
+-type split() ::  {left | right, examples()} | {both, examples(), examples()}.
+
+-type distribute() :: fun((feature(), exid()) -> distribute_example()).
+-type missing() :: fun((predict | build, feature(), exid(), number(), number()) -> missing_example()).
+
+-type missing_example() :: {left, exid()} | {right, exid()} | {both, exid(), exid()}.
+-type distribute_example() :: {'?', number()} | {left, number()} | {right, number()} |
+			      {left, exid(), exid()} | {right, exid(), exid()} |
+			      {both, exid(), exid()} | {all, exid(), exid(), exid()}.
+			   
+-type score() :: {number(), number(), number()}.
+-type classifier() :: {number(), atom()}.
+-type prune() :: fun((examples(), number()) -> boolean()).
+-type branch() :: fun((features(), examples(), number(), #rr_conf{}) -> #rr_candidate{}).
+

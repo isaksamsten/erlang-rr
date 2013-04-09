@@ -5,26 +5,27 @@
 %%% @end
 %%% Created :  8 Apr 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 -module(rr_branch).
--export([random/4,
+-export([
+	 random/4,
 	 resampled/3,
 	 weka/1,
 	 all/0,
 	 subset/1,
 	 correlation/1,
 	 random_correlation/2,
-	 rule/1]).
+	 rule/1
+]).
 
 -include("rr_tree.hrl").
 
-%%
-%% Return a functions which resamples log(Features) + 1 k times if arg
-%% max gain(Features) < Delta
-%%
+%% @doc resamples n new features k times if arg max gain(Features)
+-spec resampled(integer(), integer(), float()) -> branch().
 resampled(NoResamples, NoFeatures, Delta) ->
     fun (Features, Examples, Total, Conf) ->
 	    resampled_subset_branch_split(Features, Examples, Total, Conf, NoResamples, Delta, NoFeatures)
     end.
 
+%% @private resample features
 resampled_subset_branch_split(_Features, _Examples, _Total, 
 			      #rr_conf{no_features=NoFeatures}, NoResamples, _, _) when NoFeatures =< 0;
 											NoResamples =< 0 ->
@@ -32,7 +33,7 @@ resampled_subset_branch_split(_Features, _Examples, _Total,
 resampled_subset_branch_split(Features, Examples, Total,  #rr_conf{score = ScoreFun, 
 								   split=Split, 
 								   distribute = Distribute, 
-								   distribute_missing=Missing, 
+								   missing_values=Missing, 
 								   no_features=NoFeatures} = Conf, NoResamples, Delta, Log) ->
     Features0 = if NoFeatures =< Log ->
 			Features;
@@ -51,33 +52,20 @@ resampled_subset_branch_split(Features, Examples, Total,  #rr_conf{score = Score
 	    Cand
     end.
 
-%%
-%% Definitly need another way of determine what constitutes a good
-%% feature
-%%
-%% weighted(NoFeatures, Fraction, NewScores) ->
-%%     fun (_, Examples, Total, Conf) ->
-%% 	    weighted_branch_split(NewScores, Examples, Total, Conf, NoFeatures, Fraction)
-%%     end.
-
-%% weighted_branch_split({Good, _Bad}, Examples, Total, Conf, NoFeatures, _Fraction) ->
-%%     Features0 = rr_example:random_features(Good, NoFeatures),
-%%     rr_example:best_split(Features0, Examples, Total, Conf).
-
-%%
-%% Uses the same algorithm as Weka for resampling non-informative
-%% 
+%% @doc resample features similar to Weka for ignoring non-informative features
+-spec weka(integer()) -> branch().
 weka(NoFeatures) ->
     fun(Features, Examples, Total, Conf) ->
 	    weka_branch_split(Features, Examples, Total, Conf, NoFeatures)
     end.
 
+%% @private
 weka_branch_split(_, _, _, #rr_conf{no_features=NoTotal}, _) when NoTotal =< 0 ->
     no_information;
 weka_branch_split(Features, Examples, Total, #rr_conf{score = ScoreFun, 
 						      split=Split, 
 						      distribute = Distribute, 
-						      distribute_missing=Missing,
+						      missing_values=Missing,
 						      no_features=NoTotal} = Conf, NoFeatures) ->
     Features0 = if NoTotal =< NoFeatures ->
 			Features;
@@ -94,27 +82,24 @@ weka_branch_split(Features, Examples, Total, #rr_conf{score = ScoreFun,
 	    Cand
     end.
 
-%% 
-%% Branch a subset of "NoFeatures" features
-%%
+%% @doc evaluate a subset of n random features
+-spec subset(integer()) -> branch().
 subset(NoFeatures) ->
     fun (Features, Examples, Total, #rr_conf{score = Score, 
 					     split=Split, 
 					     distribute = Distribute, 
-					     distribute_missing=Missing}) ->
+					     missing_values=Missing}) ->
 	    Features0 = rr_example:random_features(Features, NoFeatures),
 	    rr_example:best_split(Features0, Examples, Total, Score, Split, Distribute, Missing)
     end.
 
-%%
-%% Evaluate the cartesian product of NoFeatures randomly selected
-%% attributes
-%%
+%% @doc evaluate the combination of (n*n)-1 features
+-spec correlation(integer()) -> branch().
 correlation(NoFeatures) ->
     fun (Features, Examples, Total, #rr_conf{score = Score, 
 					     split=Split, 
 					     distribute = Distribute, 
-					     distribute_missing=Missing}) ->
+					     missing_values=Missing}) ->
 	    FeaturesA = rr_example:random_features(Features, NoFeatures),
 	    FeaturesB = rr_example:random_features(Features, NoFeatures),
 	    
@@ -146,7 +131,7 @@ random_correlation(NoFeatures, Fraction) ->
 random(Features, Examples, Total, #rr_conf{score = Score, 
 					   split=Split, 
 					   distribute = Distribute, 
-					   distribute_missing=Missing,
+					   missing_values=Missing,
 					   no_features=NoFeatures}) ->
     Feature = lists:nth(random:uniform(NoFeatures), Features),
     rr_example:best_split([Feature], Examples, Total, Score, Split, Distribute, Missing).
@@ -155,10 +140,10 @@ random(Features, Examples, Total, #rr_conf{score = Score,
 %% Evaluate all features to find the best split point
 %%
 all() ->
-    fun(Features, Examples, Total, #rr_conf{score = Score, 
+    fun(Features, Examples, Total, #rr_conf{score=Score, 
 					    split=Split, 
-					    distribute = Distribute, 
-					    distribute_missing=Missing}) ->
+					    distribute=Distribute, 
+					    missing_values=Missing}) ->
 	    rr_example:best_split(Features, Examples, Total, Score, Split, Distribute, Missing)
     end.
 

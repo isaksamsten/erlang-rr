@@ -167,7 +167,7 @@ main(Args) ->
 		    progress = Progress,
 		    split = fun rr_tree:random_split/4,
 		    distribute = Distribute,
-		    distribute_missing = Missing,
+		    missing_values = Missing,
 		    base_learner = {Classifiers, rr_tree},
 		    no_features = TotalNoFeatures,
 		    log = Logger},
@@ -435,18 +435,11 @@ create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
 	    NoResamples = get_opt(no_resamples, Options),
 	    MinGain = get_opt(min_gain, Options),
 	    rr_branch:resampled(NoResamples, NoFeatures, MinGain);
-	%% weighted ->
-	%%     Fraction = get_opt(weight_factor, Options), %% NOTE: make this paralell
-	%%     Scores = rr_tree:evaluate_all(Features, Examples, rr_example:count(Examples), 
-	%% 				  #rr_conf{score=Score, distribute_missing=Missing}, []),
-	%%     NewScores = lists:split(trunc(length(Scores) * Fraction), lists:map(fun({_, V}) -> V end, Scores)),
-	%%     rr_branch:weighted(NoFeatures, Fraction, NewScores);
 	combination ->
 	    Factor = get_opt(weight_factor, Options),
 	    rr_branch:random_correlation(NoFeatures, Factor);
 	rule ->
-	    %Note: rule score function
-	    rr_branch:rule(NoFeatures);
+	    rr_branch:rule(NoFeatures); %% TODO: user selected rule score function
 	false -> 
 	    rr_branch:subset(NoFeatures)
     end.

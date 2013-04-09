@@ -9,27 +9,33 @@
 -module(rr_example).
 -include("rr_tree.hrl").
 -compile(export_all).
--export([init/0,
+
+-export([
+	 init/0,
 	 load/2,
-	 insert_prediction/2]).
+	 insert_prediction/2,
+
+	 split/4,
+	 distribute/2,
+	 exid/1,
+	 feature/2
+	]).
 
 
+
+%% @doc insert a prediction into the global table of all predictions
+-spec insert_prediction(exid(), any()) -> ok.
 insert_prediction(ExId, Pred) ->
     ets:insert(predictions, {exid(ExId), Pred}).
 
-%%
-%% Init an ets table that stores all examples in memory. The examples
-%% are described with their features as a tuple. That is, {Id,
-%% {x1,...,xn}}.
-%%
+%% @doc init ets-tables storing features, examples and predictions
+-spec init() -> ok.
 init() ->
     ets:new(examples, [named_table, public, {read_concurrency, true}]),
     ets:new(features, [named_table, public]),
     ets:new(predictions, [named_table, public]).
 
-%%
-%% Load "File" using "Cores"
-%%
+-spec load(string(), number()) -> {features(), examples()}.
 load(File, Cores) ->
     {ClassId, Types} = case csv:next_line(File) of
 			   {ok, Types0, _} ->
@@ -46,9 +52,7 @@ load(File, Cores) ->
     {Features, parse_examples(File, Cores, ClassId, Types)}.
 
     
-%%
-%% Spawns "Cores" 'parse_example_process' and collects their results
-%%
+%% @private spawns "Cores" 'parse_example_process' and collects their results
 parse_examples(File, Cores, ClassId, Types) ->
     Self = self(),
     lists:foreach(fun (_) ->
@@ -56,14 +60,11 @@ parse_examples(File, Cores, ClassId, Types) ->
 		  end, lists:seq(1, Cores)),
     collect_parse_example_processes(Self, Cores, dict:new()).
 
-%%
-%% Process that gets a line from the "File" and process each example
-%%
+%% @private process that gets a line from the "File" and process each example
 parse_example_process(Parent, File, ClassId, Types, Acc) ->
     case csv:next_line(File) of
 	{ok, Example, Id0} ->
 	    {Class, Attributes} = take_feature(Example, ClassId),
-%	    {Id1, Attributes0} = take_feature(Attributes, IdId),
 	    Id = Id0 - 2, %% NOTE: subtracting headers 
 	    ets:insert(examples, format_features(Attributes, Types, 1, [Id])),
 	    parse_example_process(Parent, File, ClassId, Types, update_class_distribution(Class, Id, Acc));
@@ -71,9 +72,7 @@ parse_example_process(Parent, File, ClassId, Types, Acc) ->
 	    Parent ! {done, Parent, Acc}
     end.
 
-%%
-%% Collect the results from process parsing the examples
-%%
+%% @private collect the results from process parsing the examples
 collect_parse_example_processes(_, 0, Examples) ->
     format_class_distribution(Examples);
 collect_parse_example_processes(Self, Cores, Examples) ->
@@ -85,9 +84,7 @@ collect_parse_example_processes(Self, Cores, Examples) ->
 						       end, Examples, Part))
     end.
 
-%%
-%% Format example values according to their correct type
-%%
+%% @private format example values according to their correct type
 format_features([], [], _, Acc) ->
     list_to_tuple(lists:reverse(Acc));
 format_features([Value|Values], [categoric|Types], Column, Acc) ->
@@ -102,8 +99,7 @@ format_features([Value|Values], [numeric|Types], Column, Acc) ->
 							throw({error, {invalid_number_format, Column, Value}})
 						end|Acc]).
 
-%% Determine if a string is a number, or missing (?)
-%% returns {true, int()|float()} or missing or false
+%% @private determine if a string is a number or missing (?)
 format_number("?") ->
     '?';
 format_number(L) ->
@@ -121,23 +117,19 @@ format_number(L) ->
 	    end
     end.
 
+%% @private format a class distribution by sorting the list formed by a dict()
 format_class_distribution(Examples) ->
     lists:keysort(1, lists:map(fun ({Class, {Count, Ids}}) ->
 				       {Class, Count, Ids}
 			       end, dict:to_list(Examples))).
 
-%%
-%% Merge two dictionaries with class distributions
-%%
+%% @private merge two dict() with class distributions
 update_class_distribution(Class, Id, Acc) ->
     dict:update(Class, fun({Count, Ids}) ->
 			       {Count + 1, [Id|Ids]}
 		       end, {1, [Id]}, Acc).
     
-%%
-%% Parses a type declaration: ["class", "categoric"+, "numeric"+] in
-%% any order. Returns {ClassId, [features...]}
-%%
+%% @private parse type declaration and return {ClassId, [types(),...]}
 parse_type_declaration(Types) ->
     parse_type_declaration(Types, missing, missing, 1, []).
 
@@ -158,9 +150,7 @@ parse_type_declaration([Type0|Rest], ClassId, IdId, Id, Acc) ->
 	    throw({error, {invalid_type_declaration, Id}})
     end.
 
-%%
-%% Parse feature declaration
-%%
+%% @private parse a feature declaration
 parse_feature_declaration(Features0, ClassId, Types) ->
     {_, Features} = take_feature(Features0, ClassId),
     if length(Features) =/= length(Types) ->
@@ -168,27 +158,14 @@ parse_feature_declaration(Features0, ClassId, Types) ->
        true ->
 	    parse_feature_declaration(Features, Types, 1, [])
     end.
-
 parse_feature_declaration([], [], _, Acc) ->
     lists:reverse(Acc);
 parse_feature_declaration([Feature|Features], [Type|Types], Id, Acc) ->
     ets:insert(features, {Id, Feature}),
     parse_feature_declaration(Features, Types, Id + 1, [{Type, Id}|Acc]).
 
-format_split_distribution(Acc) ->
-    lists:reverse(lists:foldl(fun({Value, Examples}, Result) ->
-				      case dict:size(Examples) of
-					  0 ->
-					      Acc;
-					  _ ->
-					      [{Value, format_class_distribution(Examples)}|Result]
-				      end
-			      end, [], dict:to_list(Acc))).
-
-%%
-%% Format the Left and Right branch
-%% TODO: rewrite to allow for sending a tuple instead...
-%%
+%% @private format the left and right distribution
+-spec format_left_right_split([examples()], [examples()]) -> split().
 format_left_right_split([], Right) ->
     {right, Right};
 format_left_right_split(Left, []) ->
@@ -196,10 +173,7 @@ format_left_right_split(Left, []) ->
 format_left_right_split(Left, Right) ->
     {both, Left, Right}.
 
-%%
-%% Distribute missing values over the left and right branch using
-%% "Distribute"
-%%
+%% @private distribute missing values either right or left depending on Distribute
 distribute_missing_values(_, _, _, _, [], [], [], Left, Right, _) ->
     format_left_right_split(Left, Right);
 distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, [Left|LeftRest], [Right|RightRest], 
@@ -221,9 +195,6 @@ distribute_missing_values_for_class(_, _, _, _, [], Left, Right, _) ->
 distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, [MissingEx|RestMissing], 
 				   {Class, NoLeft, Left} = LeftExamples, 
 				   {Class, NoRight, Right} = RightExamples, Distribute) ->
-
-    %% If distribute return true, missing values are distribute to the
-    %% left, otherwise they are distributed to the right
     case Distribute(build, Feature, MissingEx, TotalNoLeft, TotalNoRight) of
 	{right, {_, NewCount}=NewEx} ->
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, LeftExamples,
@@ -240,21 +211,15 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 						LeftExamples, RightExamples, Distribute)
     end.
 
-%%
-%% Split "Examples" into two disjoint subsets according to "Feature".
-%%  Left Branch: Less than and equal to, or, equal to
-%%  Right branch: Greater than, or, not equal to
-%%
+%% @doc Split Examples into two disjoint subsets according to Feature.
+-spec split(feature(), examples(), distribute(), missing()) -> {none | atom(), split()}.
 split(Feature, Examples, Distribute, DistributeMissing) ->
     {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples, Distribute),
     {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 
 				      Left, Right, Missing, [], [], DistributeMissing)}.
 
 
-%%
-%% Split into three disjoint subsets, Left, Right and those examples
-%% having a missing value for "Feature"
-%%
+%% @private Split into three disjoint subsets, Left, Right and Missing
 split_with_value(Feature, Examples, Distribute) when element(1, Feature) == numeric;
 						     element(1, Feature) == categoric;
 						     element(1, Feature) == combined->
@@ -265,10 +230,7 @@ split_with_value(Feature, Examples, Distribute) ->
 
 
 
-%%
-%% Split the class distribution:
-%%  NOTE: LEFT is >= or == and RIGHT is < or /= 
-%%
+%% @private split the class distribution (i.e. one example())
 split_class_distribution(_, [], _, _, Left, Right, Missing) ->
     {Left, Right, Missing};
 split_class_distribution(Feature, [ExampleId|Examples], Distribute, Class, 
@@ -298,6 +260,8 @@ split_class_distribution(Feature, [ExampleId|Examples], Distribute, Class,
 	end,
     split_class_distribution(Feature, Examples, Distribute, Class, NewLeftExamples, NewRightExamples, NewMissingExamples).
 
+%% @doc default function for distributing examples left or right
+-spec distribute(Feature::feature(), exid()) -> distribute_example().
 distribute({{categoric, FeatureId}, SplitValue}, ExId) ->
     {case feature(ExId, FeatureId) of
 	'?' -> '?';
@@ -331,26 +295,9 @@ distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}
 	    end
      end, C};
 distribute({rule, Rule, _Lenght}, ExId) ->
-    %% Distribute all examples for which the rules hold to the left
-    %% RuleConjunction = [rule()...] where rule() = {feature(), Value}
-    %% if [] -> all is true
-    %% NOTE: could we do this by sending a fraction (the number of
-    %% rules that apply) to the left and the rest to the right?
     {rr_rule:evaluate_rule(Rule, ExId), count(ExId)}.
 
-evaluate_rule([], _) ->
-    left;
-evaluate_rule([Rule|Rest], ExId) ->
-    case distribute(Rule, ExId) of
-	{left, _} ->
-	    evaluate_rule(Rest, ExId);
-	{right, _} ->
-	    right;
-	{'?', _} ->
-	    '?'
-    end.
-
-
+%% @private split data set using Feature
 split_feature(_Feature, [], _, Left, Right, Missing) ->
     {Left, Right, Missing};
 split_feature(Feature, [{Class, _, ExampleIds}|Examples], Distribute, Left, Right, Missing) ->
@@ -359,14 +306,15 @@ split_feature(Feature, [{Class, _, ExampleIds}|Examples], Distribute, Left, Righ
 	    split_feature(Feature, Examples, Distribute, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
     end.
 
-%%
-%% Find the best numeric split point. TODO: handle missing values
-%%
+%% @private find the best numeric split point
 deterministic_numeric_split(FeatureId, Examples, Gain) ->
     [{Value, Class}|ClassIds] = lists:keysort(1, lists:foldl(
 					  fun ({Class, _, ExIds}, NewIds) ->
 						  lists:foldl(fun(ExId, Acc) ->
-								      [{feature(ExId, FeatureId), Class}|Acc]
+								      case feature(ExId, FeatureId) of
+									  '?' -> Acc;
+									  Feature -> [{Feature, Class}|Acc]
+								      end
 							      end, NewIds, ExIds)
 					  end, [], Examples)),
     
@@ -406,22 +354,22 @@ deterministic_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, Feature
 					Gain, Total, NewThreshold, NewDist)
     end.
 
+%% @private sample a split value for Feature randomly
 sample_split_value(Feature, Examples) ->
     case Feature of
 	{categoric, FeatureId} ->
 	    resample_random_split(FeatureId, Examples, 5);
 	{numeric, FeatureId} ->
-	    random_numeric_split(FeatureId, Examples);
+	    sample_numeric_split(FeatureId, Examples);
 	{combined, A, B} ->
 	    sample_combined(A, B, Examples)
     end.
-
 sample_split_value(Feature, Examples, Ex1, Ex2) ->
     case Feature of
 	{categoric, FeatureId} ->
 	    feature(Ex1, FeatureId);
 	{numeric, FeatureId} ->
-	    case random_numeric_split(FeatureId, Ex1, Ex2) of
+	    case sample_numeric_split(FeatureId, Ex1, Ex2) of
 		{'?', '?'} ->
 		    0;
 		X ->
@@ -431,23 +379,21 @@ sample_split_value(Feature, Examples, Ex1, Ex2) ->
 	    sample_combined(A, B, Examples)
     end.
 
-%%
-%% Sample these from ONE example
-%%
+%% @private sample two features from the same example
 sample_combined(FeatureA, FeatureB, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
     {combined, sample_split_value(FeatureA, Examples, Ex1, Ex2), sample_split_value(FeatureB, Examples, Ex1, Ex2)}.
 
-random_numeric_split(FeatureId, Examples) ->
+%% @private sample a numeric split point
+sample_numeric_split(FeatureId, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
-    case random_numeric_split(FeatureId, Ex1, Ex2) of
+    case sample_numeric_split(FeatureId, Ex1, Ex2) of
 	'?' ->
 	   '?';
 	X ->
 	    X
     end.
-
-random_numeric_split(FeatureId, Ex1, Ex2) ->
+sample_numeric_split(FeatureId, Ex1, Ex2) ->
     Value1 = feature(Ex1, FeatureId),
     Value2 = feature(Ex2, FeatureId),
     case {Value1, Value2} of
@@ -461,20 +407,23 @@ random_numeric_split(FeatureId, Ex1, Ex2) ->
 	    '?'
     end.
 
+%% @private resample a random categoric split if a missing value is found
 resample_random_split(_, _, 0) ->
     '?';
 resample_random_split(FeatureId, Examples, N) ->
-    case random_categoric_split(FeatureId, Examples) of	
+    case sample_categoric_split(FeatureId, Examples) of	
 	'?' ->
 	    resample_random_split(FeatureId, Examples, N - 1);
 	X ->  
 	    X
     end.
 
-random_categoric_split(FeatureId, Examples) ->
+%% @private sample a categoric split
+sample_categoric_split(FeatureId, Examples) ->
     ExId = sample_example(Examples),
     feature(ExId, FeatureId).
 
+%% @doc find the best split from features
 best_split([], _, _, _, _, _, _) ->
     no_features;
 best_split([F|Features], Examples, Total, Score, Split, Distribute, Missing) ->
@@ -598,7 +547,7 @@ remove_covered(Examples, Covered) ->
 coverage(Examples) ->
     {rr_example:count('+', Examples), rr_example:count('-', Examples)}.
 
-
+-spec feature(feature(), number()) -> ok.
 feature(ExId, At) ->
     ets:lookup_element(examples, exid(ExId), At + 1).
 

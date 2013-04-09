@@ -29,7 +29,7 @@ best_rule(Features, Examples, Total, Conf, NoFeatures, N, #rr_candidate{score=Sc
 		      Cand
 	      end).
 
-generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, distribute = Distribute, distribute_missing=Missing} = Conf, NoFeatures) ->
+generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, distribute = Distribute, missing_values=Missing} = Conf, NoFeatures) ->
     NoClasses = length(Examples),
     {Class, _, _} = lists:nth(random:uniform(NoClasses), Examples),
     Subset = rr_example:random_features(Features, NoFeatures),
@@ -65,7 +65,7 @@ separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}) ->
 learn_one_rule(Features, Examples, Total, #rr_conf{score = Score, 
 						   split=Split, 
 						   distribute = Distribute, 
-						   distribute_missing=Missing}) ->
+						   missing_values=Missing}) ->
     case rr_example:best_split(Features, Examples, Total, Score, Split, Distribute, Missing) of
 	no_features ->
 	    1;
