@@ -102,4 +102,4 @@
 -type classifier() :: {number(), atom()}.
 -type prune() :: fun((examples(), number()) -> boolean()).
 -type branch() :: fun((features(), examples(), number(), #rr_conf{}) -> #rr_candidate{}).
-
+ 
