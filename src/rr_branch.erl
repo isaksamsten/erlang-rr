@@ -1,12 +1,12 @@
 %%% @author Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
-%%%
+%%% 
 %%% @end
 %%% Created :  8 Apr 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 -module(rr_branch).
 -export([
-	 random/4,
+	 random/0,
 	 resampled/3,
 	 weka/1,
 	 all/0,
@@ -19,7 +19,7 @@
 -include("rr_tree.hrl").
 
 %% @doc resamples n new features k times if arg max gain(Features)
--spec resampled(integer(), integer(), float()) -> branch().
+-spec resampled(integer(), integer(), float()) -> branch_fun().
 resampled(NoResamples, NoFeatures, Delta) ->
     fun (Features, Examples, Total, Conf) ->
 	    resampled_subset_branch_split(Features, Examples, Total, Conf, NoResamples, Delta, NoFeatures)
@@ -53,7 +53,7 @@ resampled_subset_branch_split(Features, Examples, Total,  #rr_conf{score = Score
     end.
 
 %% @doc resample features similar to Weka for ignoring non-informative features
--spec weka(integer()) -> branch().
+-spec weka(integer()) -> branch_fun().
 weka(NoFeatures) ->
     fun(Features, Examples, Total, Conf) ->
 	    weka_branch_split(Features, Examples, Total, Conf, NoFeatures)
@@ -83,7 +83,7 @@ weka_branch_split(Features, Examples, Total, #rr_conf{score = ScoreFun,
     end.
 
 %% @doc evaluate a subset of n random features
--spec subset(integer()) -> branch().
+-spec subset(integer()) -> branch_fun().
 subset(NoFeatures) ->
     fun (Features, Examples, Total, #rr_conf{score = Score, 
 					     split=Split, 
@@ -94,7 +94,7 @@ subset(NoFeatures) ->
     end.
 
 %% @doc evaluate the combination of (n*n)-1 features
--spec correlation(integer()) -> branch().
+-spec correlation(integer()) -> branch_fun().
 correlation(NoFeatures) ->
     fun (Features, Examples, Total, #rr_conf{score = Score, 
 					     split=Split, 
@@ -109,10 +109,8 @@ correlation(NoFeatures) ->
 	    rr_example:best_split(Combination, Examples, Total, Score, Split, Distribute, Missing)
     end.
 
-%%
-%% Randomly pick either a subset brancher or a correlation brancher
-%% according to "Fraction"
-%%
+%% @doc tandomly pick either a subset brancher or a correlation brancher
+-spec random_correlation(integer(), float()) -> branch_fun().
 random_correlation(NoFeatures, Fraction) ->
     Corr = correlation(NoFeatures),
     Sub = subset(NoFeatures),
@@ -125,20 +123,20 @@ random_correlation(NoFeatures, Fraction) ->
 	    end
     end.
 
-%%
-%% Evalate one randomly selected feature (maximum diversity)
-%%
-random(Features, Examples, Total, #rr_conf{score = Score, 
-					   split=Split, 
-					   distribute = Distribute, 
-					   missing_values=Missing,
-					   no_features=NoFeatures}) ->
-    Feature = lists:nth(random:uniform(NoFeatures), Features),
-    rr_example:best_split([Feature], Examples, Total, Score, Split, Distribute, Missing).
+%% @doc evalate one randomly selected feature (maximum diversity)
+-spec random() -> branch_fun().
+random() ->
+    fun (Features, Examples, Total, #rr_conf{score = Score, 
+					     split=Split, 
+					     distribute = Distribute, 
+					     missing_values=Missing,
+					     no_features=NoFeatures}) ->
+	    Feature = lists:nth(random:uniform(NoFeatures), Features),
+	    rr_example:best_split([Feature], Examples, Total, Score, Split, Distribute, Missing)
+    end.
 
-%%
-%% Evaluate all features to find the best split point
-%%
+%% @doc evaluate all features to find the best split point
+-spec all() -> branch_fun().
 all() ->
     fun(Features, Examples, Total, #rr_conf{score=Score, 
 					    split=Split, 
@@ -147,6 +145,8 @@ all() ->
 	    rr_example:best_split(Features, Examples, Total, Score, Split, Distribute, Missing)
     end.
 
+%% @doc generate a rule at each branch
+-spec rule(integer()) -> branch_fun().
 rule(NoFeatures) ->
     fun (Features, Examples, Total, Conf) ->
 	    rr_rule:best(Features, Examples, Total, Conf, NoFeatures)

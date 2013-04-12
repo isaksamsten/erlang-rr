@@ -28,8 +28,8 @@
 %%
 %% @end
 -record(rr_conf, {
-	  prune, 
-	  depth=0 :: number(),
+	  prune  :: prune_fun(), 
+	  depth=0 :: integer(),
 	  branch,
 	  bagging,
 	  score,
@@ -83,16 +83,14 @@
 -type feature() :: {atom(), number()} | 
 		   {rule, [{feature(), atom()}, ...], number()} |
 		   tuple().
--type features() :: [feature(),...].
+-type features() :: [feature()].
 
 -type example() :: {atom(), number(), [exid(),...]}.
--type examples() :: [example(),...].
+-type examples() :: [example()].
+
+-type prediction() :: {{atom(), number()}, [number(),...]}.
 
 -type split() ::  {left | right, examples()} | {both, examples(), examples()}.
-
--type distribute() :: fun((feature(), exid()) -> distribute_example()).
--type missing() :: fun((predict | build, feature(), exid(), number(), number()) -> missing_example()).
-
 -type missing_example() :: {left, exid()} | {right, exid()} | {both, exid(), exid()}.
 -type distribute_example() :: {'?', number()} | {left, number()} | {right, number()} |
 			      {left, exid(), exid()} | {right, exid(), exid()} |
@@ -100,6 +98,11 @@
 			   
 -type score() :: {number(), number(), number()}.
 -type classifier() :: {number(), atom()}.
--type prune() :: fun((examples(), number()) -> boolean()).
--type branch() :: fun((features(), examples(), number(), #rr_conf{}) -> #rr_candidate{}).
- 
+-type tree() :: #rr_node{} | #rr_leaf{}.
+
+-type prune_fun() :: fun((examples(), number()) -> boolean()).
+-type branch_fun() :: fun((features(), examples(), number(), #rr_conf{}) -> #rr_candidate{}). 
+-type score_fun() :: fun((split(), number()) -> score()).
+-type distribute_fun() :: fun((feature(), exid()) -> distribute_example()).
+-type missing_fun() :: fun((predict | build, feature(), exid(), number(), number()) -> missing_example()).
+

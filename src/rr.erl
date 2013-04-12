@@ -406,9 +406,9 @@ create_progress(Options) ->
 create_score(Options) ->
     case get_opt(score, Options) of
 	info ->
-	    fun rr_tree:info/2;
+	    rr_tree:info();
 	gini ->
-	    fun rr_tree:gini/2;
+	    rr_tree:gini();
 	Other ->
 	    illegal_option("score", Other)
 		

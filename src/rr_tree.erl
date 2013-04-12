@@ -8,32 +8,37 @@
 -module(rr_tree).
 -include("rr_tree.hrl").
 
--export([generate_model/3,
+-export([
+	 generate_model/3,
 	 evaluate_model/3,
 	 predict/4,
-
 	 random_split/4,
-
 	 example_depth_stop/2,
-	 info/2,
-	 entropy/1,
-	 gini/2]).
+	 info/0,
+	 gini/0,
+	 entropy/1
+]).
 
-
+%% @doc prune if to few examples or to deep tree
+-spec example_depth_stop(integer(), integer()) -> prune_fun().
 example_depth_stop(MaxExamples, MaxDepth) ->
     fun(Examples, Depth) ->
 	    (Examples =< MaxExamples) or (Depth > MaxDepth)
     end.
 
+%% @doc generate a decision tree
+-spec generate_model(features(), examples(), #rr_conf{}) -> #rr_node{}.
 generate_model(Features, Examples, Conf) ->
     Info = info_content(Examples, rr_example:count(Examples)),
     build_decision_node(Features, Examples, dict:new(), 0, Info, Conf, 1).
 
+-spec evaluate_model(#rr_node{}, examples(), #rr_conf{}) -> dict().
 evaluate_model(Model, Examples, Conf) ->
     lists:foldl(fun({Class, _, ExampleIds}, Acc) ->
 			predict_all(Class, ExampleIds, Model, Conf, Acc)
 		end, dict:new(), Examples).
 
+%% @private
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
@@ -43,6 +48,8 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
 					    [Prediction|Predictions]
 				    end, [Prediction], Dict)).
 
+%% @doc predict an example according to a decision tree
+-spec predict(ExId::exid(), tree(), #rr_conf{}, []) -> prediction().
 predict(_, #rr_leaf{id=NodeNr, class=Class, score=Score}, _Conf, Acc) ->
     {{Class, Score}, [NodeNr|Acc]};
 predict(ExId, #rr_node{id=NodeNr, 
@@ -68,20 +75,8 @@ predict(ExId, #rr_node{id=NodeNr,
 	    predict(ExId, Right, Conf, NewAcc)
     end.
 	    
-%% 
-%% Build a decision tree node from "Features" and "Examples"
-%%  if |Feature| == 0 and |Examples| == 0: make_error_node  
-%%  if |Feature| == 0: make_leaf majority(Examples)
-%%  if |Classes| == 1: make_leaf Class
-%%  else:
-%%     if Prune(Examples, Depth): make_leaf majority(Examples)
-%%     Split = select_split(Features, Examples)
-%%     for S in Split: build_node(Features, S)
-%%
-%% TODO: count total number of nodes in the tree
-%% 
-%% Return: {Node, Importance, TotalReduction}
-%%
+%% @private induce a decision tree
+-spec build_decision_node(Features::features(), Examples::examples(), Importance::dict(), Total::number(), Error::number(), #rr_conf{}, []) -> {tree(), dict(), number()}.
 build_decision_node([], [], Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, [], error), Importance, Total};
 build_decision_node([], Examples, Importance, Total, _Error, _, Id) ->
@@ -119,19 +114,25 @@ build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune
 	    end	   
     end.
 
+%% @private create a node
+-spec make_node([number(),...], feature(), {number(), number()}, number(), tree(), tree()) -> #rr_node{}.
 make_node(Id, Feature, Dist, Score, Left, Right) ->
     #rr_node{id = Id, score=Score, feature=Feature, distribution=Dist, left=Left, right=Right}.
 
+%% @private create a leaf
+-spec make_leaf([number(),...], examples(), atom()) -> #rr_leaf{}.
 make_leaf(Id, [], Class) ->
     #rr_leaf{id=Id, score=0, distribution={0, 0}, class=Class};
 make_leaf(Id, Covered, {Class, C}) ->
     N = rr_example:count(Covered),
     #rr_leaf{id=Id, score=laplace(C, N), distribution={C, N-C}, class=Class}.
 
+%% @private
 laplace(C, N) ->
     (C+1)/(N+2). %% NOTE: no classes?
 
-
+%% @doc randomly split data set
+-spec random_split(features(), examples(), distribute_fun(), missing_fun()) -> split().
 random_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
@@ -156,7 +157,12 @@ random_split(Feature, Examples, Distribute, Missing) ->
 %% 	     end,
 %%     all_split(Rest, Examples, Total, Conf, NewAcc).
 
-%% TODO: fix
+%% @doc return a scoring function for the gini-importance
+-spec gini() -> score_fun().
+gini() ->
+    fun gini/2.
+    
+%% @private TODO: fix
 gini({both, Left, Right}, Total) ->
     LeftGini = gini_content(Left, Total),
     RightGini = gini_content(Right, Total),
@@ -173,7 +179,12 @@ gini_content(Examples, Total) ->
     Fi = rr_example:count(Examples) / Total,
     math:pow(Fi, 2).
 	
+%% @doc return score function for information gain
+-spec info() -> score_fun().
+info() ->
+    fun info/2.
 
+%% @private
 info({both, Left, Right}, Total) ->
     LeftInfo = info_content(Left, Total),
     RightInfo = info_content(Right, Total),
@@ -190,6 +201,8 @@ info_content(Side, Total) ->
     NoSide = rr_example:count(Side),
     Total * (NoSide / Total) * entropy(Side).
         
+%% @doc calculate the entropy
+-spec entropy(examples()) -> number().
 entropy(Examples) ->
     Counts = [C || {_, C, _} <- Examples],
     entropy(Counts, lists:sum(Counts)).

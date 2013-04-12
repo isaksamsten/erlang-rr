@@ -212,7 +212,7 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
     end.
 
 %% @doc Split Examples into two disjoint subsets according to Feature.
--spec split(feature(), examples(), distribute(), missing()) -> {none | atom(), split()}.
+-spec split(feature(), examples(), distribute_fun(), missing_fun()) -> {none | atom(), split()}.
 split(Feature, Examples, Distribute, DistributeMissing) ->
     {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples, Distribute),
     {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 

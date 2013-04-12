@@ -11,7 +11,8 @@
 	 distribute_weighted/2,
 	 evaluate_rule/2,
 	 laplace/2,
-	 m_estimate/2]).
+	 m_estimate/2
+ ]).
 
 best(Features, Examples, Total, Conf, NoFeatures) ->
     OneRule = generate_rule(Features, Examples, Total, Conf, NoFeatures),

@@ -12,7 +12,10 @@
 %%% Created : 13 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_missing).
 -compile(export_all).
+-include("rr_tree.hrl").
 
+
+-spec partition(exid(), float()) -> missing_example().
 partition(ExId, Fraction) ->
     Count = rr_example:count(ExId),
     LeftCount = Count * Fraction,
