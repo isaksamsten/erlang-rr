@@ -16,6 +16,7 @@
 	 rule/1
 ]).
 
+%% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
 
 %% @doc resamples n new features k times if arg max gain(Features)

@@ -6,8 +6,6 @@
 %%% Created : 13 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_tree).
--include("rr_tree.hrl").
-
 -export([
 	 generate_model/3,
 	 evaluate_model/3,
@@ -18,6 +16,9 @@
 	 gini/0,
 	 entropy/1
 ]).
+
+%% @headerfile "rr_tree.hrl"
+-include("rr_tree.hrl").
 
 %% @doc prune if to few examples or to deep tree
 -spec example_depth_stop(integer(), integer()) -> prune_fun().

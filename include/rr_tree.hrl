@@ -1,13 +1,5 @@
-%%% @author  Isak Karlsson <isak-kar@dsv.su.se>
-%%% @copyright (C) 2013, 
-%%% @doc
-%%%
-%%% @end
-%%% Created : 15 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
-
-
 %%
-%% @doc
+%% 
 %%
 %% Configuration and options for building the trees 
 %%
@@ -26,7 +18,7 @@
 %% * log = function taking two arguments: (debug, error, or info) a string, 
 %%         and optional arguments i.e. fun(.., Str, [])
 %%
-%% @end
+%% 
 -record(rr_conf, {
 	  prune  :: prune_fun(), 
 	  depth=0 :: integer(),
@@ -85,7 +77,7 @@
 		   tuple().
 -type features() :: [feature()].
 
--type example() :: {atom(), number(), [exid(),...]}.
+-type example() :: {Class::atom(), Count::number(), Examples::[exid(),...]}.
 -type examples() :: [example()].
 
 -type prediction() :: {{atom(), number()}, [number(),...]}.
@@ -105,4 +97,3 @@
 -type score_fun() :: fun((split(), number()) -> score()).
 -type distribute_fun() :: fun((feature(), exid()) -> distribute_example()).
 -type missing_fun() :: fun((predict | build, feature(), exid(), number(), number()) -> missing_example()).
-

@@ -6,7 +6,6 @@
 %%% Created : 30 Mar 2013 by Isak Karlsson <isak@Isaks-MacBook-Pro.local>
 
 -module(rr_rule).
--include("rr_tree.hrl").
 -export([best/5,
 	 distribute_weighted/2,
 	 evaluate_rule/2,
@@ -14,6 +13,11 @@
 	 m_estimate/2
  ]).
 
+%% @headerfile "rr_tree.hrl"
+-include("rr_tree.hrl").
+
+%% @doc generate one best rule
+-spec best(features(), examples(), number(), #rr_conf{}, integer()) -> #rr_candidate{}.
 best(Features, Examples, Total, Conf, NoFeatures) ->
     OneRule = generate_rule(Features, Examples, Total, Conf, NoFeatures),
     best_rule(Features, Examples, Total, Conf, NoFeatures, NoFeatures, OneRule).

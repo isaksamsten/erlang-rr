@@ -15,6 +15,7 @@
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 
+%% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
 
 -define(CMD_SPEC,

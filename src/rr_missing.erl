@@ -12,6 +12,12 @@
 %%% Created : 13 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_missing).
 -compile(export_all).
+-export([
+	 random_partition/0
+
+]).
+
+%% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
 
 
@@ -23,6 +29,13 @@ partition(ExId, Fraction) ->
     Id = rr_example:exid(ExId),
     {both, {{Id, LeftCount}, {Id, RightCount}}}.
 
+%% @doc random partitions
+-spec random_partition() -> missing_fun().
+random_partition() ->
+    fun random_partition/5.
+			      
+
+%% @private
 random_partition(build, _, ExId, _, _) ->
     partition(ExId, 0.5);
 random_partition(predict, _, ExId, _, _) ->

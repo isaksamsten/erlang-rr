@@ -7,9 +7,7 @@
 %%% @end
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_example).
--include("rr_tree.hrl").
 -compile(export_all).
-
 -export([
 	 init/0,
 	 load/2,
@@ -21,7 +19,8 @@
 	 feature/2
 	]).
 
-
+%% @headerfile "rr_tree.hrl"
+-include("rr_tree.hrl").
 
 %% @doc insert a prediction into the global table of all predictions
 -spec insert_prediction(exid(), any()) -> ok.
