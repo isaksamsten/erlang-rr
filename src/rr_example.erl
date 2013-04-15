@@ -445,9 +445,6 @@ best_split([F|Features], Examples, Total, Score, Split, Distribute, Missing, Old
 		       false -> OldCand
 		   end).
 
-%%
-%% Take class at id=N and return the the tuple {Class, Classes}
-%%
 take_feature(A, missing) ->
     {'?', A};
 take_feature([A|R], 1) ->
@@ -594,14 +591,6 @@ generate_featurestrap(N, Length, Set) ->
 random_features(Features, Subset) ->
     {Top, _} = lists:split(Subset, shuffle_list(Features)),
     Top.
-    %% Strap = generate_featurestrap(Features, Subset),
-    %% {_, F} = lists:foldl(fun({Type, Id}, {Index, Acc}) ->
-    %% 				 case sets:is_element(Index, Strap) of
-    %% 				     true -> {Index + 1, [{Type, Id}|Acc]};
-    %% 				     false -> {Index + 1, Acc}
-    %% 				 end
-    %% 			 end, {1, []}, Features),
-    %% F.
 
 %%
 %% Return the dataset splitted into {Train, Test} with "Ratio"

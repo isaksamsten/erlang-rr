@@ -22,9 +22,10 @@
 
 %% @doc TODO: generate one rule for each class
 generate_model(Features, Examples, Conf) ->
-    Branch = Conf#rr_conf.branch,
-    Candidate = Branch(Features, Examples, rr_example:count(Examples), Conf),
-    {element(2, Candidate#rr_candidate.feature), dict:new(), 0}.
+    NoFeatures = round(math:log(Conf#rr_conf.no_features)/math:log(2)) + 1,
+    RuleSet = learn_ruleset(Features, Examples, NoFeatures, Conf),
+    io:format("~p ~n", [RuleSet]),
+    {RuleSet, dict:new(), 0}.
 
 %% @doc TODO: make correct implementation
 evaluate_model(_Rule, _Examples, _Conf) ->
@@ -38,7 +39,6 @@ predict(ExId, {_, Class} = Rule, _Conf, Acc) ->
 	_ ->
 	    {{'?', 1.0}, []}	
     end.
-
 
 %% @doc generate one best rule
 -spec best(features(), examples(), number(), Conf::#rr_conf{}, integer()) -> #rr_candidate{}.
@@ -58,7 +58,7 @@ best_rule(Features, Examples, Total, Conf, NoFeatures, N, #rr_candidate{score=Sc
 		      Cand
 	      end).
 
-%% @private 
+%% @private generate a rule predicting a random class
 -spec generate_rule(features(), examples(), number(), Conf::#rr_conf{}, number()) -> #rr_candidate{}.
 generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, 
 						  distribute = Distribute, 
@@ -68,36 +68,38 @@ generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score,
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
     Coverage = rr_example:coverage(Binary),
-    Rules = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=laplace(Coverage, NoClasses)}, {[], inf}),
+    {Rules, _} = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=laplace(Coverage, NoClasses)}, {[], inf}),
     Rule = {rule, {Rules, Class}, length(Rules)},
     {_Threshold, ExSplit} = Split(Rule, Examples, Distribute, Missing),
     #rr_candidate{feature=Rule, score=Score(ExSplit, Total), split=ExSplit}.
 
--spec separate_and_conquer(Features::features(), Examples::examples(), Total::number(), Conf::#rr_conf{}, {[feature()], number()}) -> [feature()].
-separate_and_conquer([], _, _, _, {Rules, _}) ->
-    Rules;
+%% @doc learn a rule
+-spec separate_and_conquer(Features::features(), Examples::examples(), Total::number(), 
+			   Conf::#rr_conf{}, {[feature()], number()}) -> [feature()].
+separate_and_conquer([], Covered, _, _, {Rules, _}) ->
+    {Rules, Covered};
 separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}) ->
     case learn_one_rule(Features, Examples, Total, Conf) of
 	1 ->
-	    Rules;
+	    {Rules, Examples};
 	{{Feature, _} = Rule, NewScore, Covered}  ->
 	    case NewScore < Score of
 		true ->
 		    case rr_example:coverage(Covered) of
 			{Pos, Neg} when Neg =< 0, Pos > 0 ->
-			    [Rule|Rules];
+			    {[Rule|Rules], Covered};
 			{Pos, _} when Pos =< 0 ->
-			    Rules;
-			_NewCoverage ->
+			    {Rules, Covered};
+			NewCoverage ->
 			    separate_and_conquer(Features -- [Feature], Covered, Total, Conf, {[Rule|Rules], NewScore})
 		    end;
 		false ->
-		    Rules
+		    {Rules, Covered}
 	    end
     end.
 
-
--spec learn_one_rule(features(), examples(), number(), Conf::#rr_conf{}) -> {feature(), number(), examples()}.
+%% @doc learn one additional rule
+-spec learn_one_rule(features(), examples(), number(), Conf::#rr_conf{}) -> {feature(), Score::number(), Covered::examples()}.
 learn_one_rule(Features, Examples, Total, #rr_conf{score = Score, 
 						   split=Split, 
 						   distribute = Distribute, 
@@ -117,6 +119,35 @@ learn_one_rule(Features, Examples, Total, #rr_conf{score = Score,
 	    end
     end.
 
+%% @private
+learn_ruleset(Features, Examples, NoFeatures, Conf) ->
+    [Default|Rest] = lists:map(fun ({Class, _, _}) -> Class end, lists:reverse(lists:keysort(2, Examples))),
+    Rules = learn_ruleset(Features, Examples, Rest, NoFeatures, length(Examples), Conf, []),
+    Rules ++ [{[], Default}].
+
+%% @private
+learn_ruleset(_Features, _Examples, [], _,  _, _Conf, Acc) ->
+    lists:reverse(Acc);
+learn_ruleset(Features, Examples, [Class|Rest], NoFeatures, NoClasses, Conf, Acc) ->
+    Subset = rr_example:random_features(Features, NoFeatures),
+    Binary = rr_example:to_binary(Class, Examples),
+    Coverage = rr_example:coverage(Binary),
+    NewAcc = learn_ruleset_for_class(Subset, Binary, Class, Conf#rr_conf{score=laplace(Coverage, NoClasses)}, Acc),
+    learn_ruleset(Features, Examples, Rest, NoFeatures, NoClasses, Conf, NewAcc).
+
+%% @private
+learn_ruleset_for_class(Features, Examples, Class, Conf, Acc) ->
+    {Rules, Coverage} = separate_and_conquer(Features, Examples, 0, Conf, {[], inf}),
+    case rr_example:coverage(Coverage) of
+	{Pos, Neg} when Neg =< 0, Pos > 0 ->
+	    [{Rules, Class}|Acc];
+	{Pos, _} when Pos =< 0 ->
+	    Acc;
+	C -> 
+	    NotCovered = rr_example:remove_covered(Examples, Coverage),
+	    learn_ruleset_for_class(Features, NotCovered, Class, Conf, [{Rules, Class}|Acc])
+    end.
+    
 %% @doc return a score function for the m-estimate
 -spec m_estimate({Pos::number(), Pos::number()}, Total::number()) -> score_fun().
 m_estimate(Apriori, M) ->

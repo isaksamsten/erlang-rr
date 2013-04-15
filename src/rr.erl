@@ -94,10 +94,12 @@
 	 {no_features,    undefined,    "no-features", {integer, -1},
 	  "Number of features to inspect at each split. If set to -1 log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
 
-	 {output_predictions, $o,       "output-predictions", {boolean, false},
+	 {output_predictions, $l,       "output-predictions", {boolean, false},
 	  "Write the predictions to standard out."},
 	 {variable_importance, $v, "variable-importance",     {integer, 0},
 	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
+	 {output,         $o,           "output",      {atom, default},
+	  "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"},
 
 	 {log,            $l,           "log-level",   {atom, info},
 	  "Log level. Available options include: 'debug', 'info', 'error' and 'none', where 'debug' output everything and 'none' output nothing.)"},
@@ -171,110 +173,89 @@ main(Args) ->
 		    missing_values = Missing,
 		    base_learner = {Classifiers, rr_tree},
 		    no_features = TotalNoFeatures,
+		    output = rr_result:csv(),
 		    log = Logger},
 
     Logger(info, "Building model using ~p trees and ~p features", [Classifiers, NoFeatures]),
-
+    Output = Conf#rr_conf.output,
+    Output(start, now()),
     Then = now(),
-    io:format("*** Start ***"),
     RunExperiment(Features, Examples, Conf, Options),
     Time = timer:now_diff(now(), Then) / 1000000,
     
-    io:format("~n** Parameters ** ~n"), 
-    io:format("File: ~p ~n", [InputFile]),
-    io:format("Trees: ~p ~n", [Classifiers]),
-    io:format("Features: ~p ~n", [NoFeatures]),
-    io:format("Total No Features: ~p ~n", [TotalNoFeatures]), 
-    io:format("Examples: ~p ~n", [rr_example:count(Examples)]),
-    io:format("Time: ~p seconds ~n", [Time]),
-    io:format("*** End ***~n"),
-
-
+    Output(parameters, [
+			{file, InputFile},
+			{classifiers, Classifiers},
+			{no_features, NoFeatures},
+			{total_no_features, TotalNoFeatures},
+			{examples, rr_example:count(Examples)},
+			{time, Time}			 
+		       ]),
+    Output('end', now()),
     Logger(debug, "Input parameters ~p", [Options]),
     Logger(info, "Model built in ~p second(s)", [Time]),
     rr_log:stop(Log).
 
-output_variable_importance([], _, _) ->
-    ok;
-output_variable_importance([{FeatureId, Score}|Rest], N, No) ->
-    if N >= No ->
-	    ok;
-       true ->
-	    io:format("~p: ~p ~n", [rr_example:feature_name(FeatureId), Score]),
-	    output_variable_importance(Rest, N + 1, No)
-    end;
-output_variable_importance(Model, Conf, Options) ->
+output_variable_importance(Model, #rr_conf{output=Output} = Conf, Options) ->
     case get_opt(variable_importance, Options) of
 	No when No > 1 ->
 	    VariableImportance = rr_ensamble:variable_importance(Model, Conf),
-	    io:format("** Variable Importance ** ~n"),
 	    Sorted = lists:reverse(lists:keysort(2, dict:to_list(VariableImportance))),
-	    output_variable_importance(Sorted, 1, No);	    
+	    Output(vi, {Sorted, 1, No});	    
 	_No ->
 	    ok
     end.
 
+output_predictions(Data, #rr_conf{output=Output}, Options) ->
+    case get_opt(output_predictions, Options) of
+	true -> Output(predictions, Data);
+	false -> ok
+    end.
 
-
-output_predictions(false, _) ->
-    ok;
-output_predictions(true, []) ->
-    ok;
-output_predictions(true, [{Class, _, ExIds}|Examples]) ->
-    output_predictions_for_class(Class, ExIds),
-    output_predictions(true, Examples).
-
-output_predictions_for_class(_, []) ->
-    ok;
-output_predictions_for_class(Class, [ExId|Rest]) ->
-    io:format("~p \t ~p \t", [ExId, Class]),
-    Predictions = ets:lookup_element(predictions, ExId, 2),
-    %%lists:foreach(fun (P) -> io:format("~p \t", [P]) end, Predictions),
-    {Pred, Prob} = hd(Predictions),
-    io:format("~p (~p) ~n", [Pred, Prob]),
-    output_predictions_for_class(Class, Rest).
-
+output_evaluation(Data, #rr_conf{output=Output}, Options) ->
+    Output(evaluation, [{file, get_opt(input_file, Options)}] ++ Data).
+	     
+	
 run_proximity(Features, Examples, Conf) ->
     rr_proximity:init(),
     Model = rr_ensamble:generate_model(Features, Examples, Conf),
     rr_proximity:generate_proximity(Model, Examples, Conf).
 
-run_split(Features, Examples, Conf, Options) ->
+run_split(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
     Split = get_opt(ratio, Options),
-    io:format("~n** Split ~p ** ~n", [Split]),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
     Model = rr_ensamble:generate_model(Features, Train, Conf),
 
-    output_variable_importance(Model, Conf, Options),
+    
     Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
-    evaluate(Dict, rr_example:count(Test)),
-    io:format("** Predictions ** ~n"), %% TODO: fix me
-    output_predictions(get_opt(output_predictions, Options), Test).
+    Evaluation = evaluate(Dict, rr_example:count(Test)),
+    
+    Output(method, {"Split", Split}),
+    output_variable_importance(Model, Conf, Options),
+    output_predictions(Test, Conf, Options),
+    output_evaluation(Evaluation, Conf, Options).
+
+    
     
 run_build_process(Features, Examples, Conf, Options) ->
     Model = rr_ensamble:generate_model(Features, Examples, Conf),
     rr_ensamble:save_model(Model, get_opt(model_file, Options)).
 
-run_cross_validation(Features, Examples, Conf, Options) ->
+run_cross_validation(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
     Folds = get_opt(folds, Options),
     Avg = rr_example:cross_validation(
 	    fun(Train0, Test0, Fold) ->
 		    io:format(standard_error, "*** Fold ~p *** ~n", [Fold]),
-		    io:format("~n** Fold: ~p ** ~n", [Fold]),
+		    Output(method, {"Fold", Fold}),
 		    M = rr_ensamble:generate_model(Features, Train0, Conf),
 		    D = rr_ensamble:evaluate_model(M, Test0, Conf),
-		    evaluate(D, rr_example:count(Test0))
+		    Evaluate = evaluate(D, rr_example:count(Test0)),
+		    output_evaluation(Evaluate, Conf, Options),
+		    Evaluate			
 	    end, Folds, Examples),
-    io:format("~n** Fold average ** ~n"),
-    lists:foreach(fun({accuracy, A}) ->
-			  io:format("Accuracy: ~p ~n", [A]);
-		     ({auc, A}) ->
-			  io:format("Auc: ~p ~n", [A]);
-		     ({brier, A}) ->
-			  io:format("Brier: ~p ~n", [A])
-		  end, average_cross_validation(Avg, Folds, [accuracy, auc, brier], [])),
-    io:format("** Predictions ** ~n"), %% NOTE: improve...
-    output_predictions(get_opt(output_predictions, Options), Examples).
+    Output(method, {"Fold", average}),
+    output_evaluation(average_cross_validation(Avg, Folds, [accuracy, auc, brier], []), Conf, Options),
+    output_predictions(Examples, Conf, Options).
 
 average_cross_validation(_, _, [], Acc) ->
     lists:reverse(Acc);
@@ -290,26 +271,11 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
 		    
 evaluate(Dict, NoTestExamples) ->
-    io:format("** Evaluation ** ~n"),
     Accuracy = rr_eval:accuracy(Dict),
-    io:format("Accuracy: ~p ~n", [Accuracy]),
-
     Auc = rr_eval:auc(Dict, NoTestExamples),
-    io:format("Area under ROC~n"),
-    lists:foreach(fun({Class, A}) ->
-			  io:format("  ~s: ~p ~n", [Class, A])
-		  end, Auc),
     AvgAuc = lists:foldl(fun({_, P}, A) -> A + P / length(Auc) end, 0, Auc),
-    io:format(" average: ~p ~n", [AvgAuc]),
-    
-    io:format("Precision~n"),
     Precision = rr_eval:precision(Dict),
-    lists:foreach(fun({Class, P}) ->
-			  io:format("  ~s: ~p ~n", [Class, P])
-		  end, Precision),
-
     Brier = rr_eval:brier(Dict, NoTestExamples),
-    io:format("Brier: ~p ~n", [Brier]),
     [{accuracy, Accuracy}, {auc, Auc, AvgAuc}, {precision, Precision}, {brier, Brier}].
 
 create_bagger(Options) ->
@@ -485,23 +451,27 @@ show_examples() ->
     "EXAMPLES
 ================================
 Example 1: 10-fold cross validation 'car' dataset:
-   ./rr -i data/car.txt -x --folds 10 > result.txt
+  > ./rr -i data/car.txt -x --folds 10 > result.txt
 
 Example 2: 0.66 percent training examples, 'heart' dataset. Missing
 values are handled by weighting a random selection towards the most
 dominant branch.
-   ./rr -i data/heart.txt -s -r 0.66 --missing weighted > result.txt
+  > ./rr -i data/heart.txt -s -r 0.66 --missing weighted > result.txt
 
 Example 3: 10-fold cross validation on a sparse dataset using re-sampled
 feature selection
-  ./rr -i data/sparse.txt -x --resample > result.txt
+  > ./rr -i data/sparse.txt -x --resample > result.txt
 
 Example 4: 0.7 percent training examples, 'heart' dataset. Missing
 values are handled by by weighting examples with missing values
 towards the most dominant branch. Each node in the tree is composed
 of a rule (1..n conjunctions) and the 20 most importante variables
 are listed.
-  ./rr -i data/heart.txt -s --ratio 0.7 --rule -v 20 > result.txt~n".
+  > ./rr -i data/heart.txt -s --ratio 0.7 --rule -v 20 > result.txt
+
+Example 5: 0.7 percent training examples, for multiple dataset and output
+evaluations csv-formated. This could be achieved using a bash-script:
+  > for f in data/*.txt; do ./rr -i \"$f\" -s -r 0.7 -o csv >> result.csv; done~n".
 
 get_opt(Arg, Fun1, {Options, _}) ->	
     case lists:keyfind(Arg, 1, Options) of

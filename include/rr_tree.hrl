@@ -30,6 +30,7 @@
 	  missing_values :: missing_fun(),
 	  progress,
 	  base_learner,
+	  output,
 	  cores = 1 :: integer(),
 	  no_features :: integer(),
 	  log
