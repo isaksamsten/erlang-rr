@@ -71,29 +71,29 @@
 	 }).
 
 
--type exid() :: number() | {number(), number()}.
--type feature() :: {atom(), number()} | 
-		   {rule, [{feature(), atom()}, ...], number()} |
+-type exid() :: Id::number() | {Id::number(), Id::number()}.
+-type feature() :: {Type::atom(), Id::number()} | 
+		   {rule, [{feature(), Value::atom()}, ...], Lengt::number()} |
 		   tuple().
 -type features() :: [feature()].
 
 -type example() :: {Class::atom(), Count::number(), Examples::[exid(),...]}.
 -type examples() :: [example()].
 
--type prediction() :: {{atom(), number()}, [number(),...]}.
+-type prediction() :: {{Class::atom(), Score::number()}, NodeId::[number(),...]}.
 
 -type split() ::  {left | right, examples()} | {both, examples(), examples()}.
 -type missing_example() :: {left, exid()} | {right, exid()} | {both, exid(), exid()}.
--type distribute_example() :: {'?', number()} | {left, number()} | {right, number()} |
+-type distribute_example() :: {'?', Count::number()} | {left, Count::number()} | {right, Count::number()} |
 			      {left, exid(), exid()} | {right, exid(), exid()} |
 			      {both, exid(), exid()} | {all, exid(), exid(), exid()}.
 			   
--type score() :: {number(), number(), number()}.
--type classifier() :: {number(), atom()}.
+-type score() :: {Total::number(), Left::number(), Right::number()}.
+-type classifier() :: {No::number(), Base::atom()}.
 -type tree() :: #rr_node{} | #rr_leaf{}.
 
--type prune_fun() :: fun((examples(), number()) -> boolean()).
+-type prune_fun() :: fun((examples(), Depth::number()) -> boolean()).
 -type branch_fun() :: fun((features(), examples(), number(), #rr_conf{}) -> #rr_candidate{}). 
--type score_fun() :: fun((split(), number()) -> score()).
+-type score_fun() :: fun((split(), Total::number()) -> score()).
 -type distribute_fun() :: fun((feature(), exid()) -> distribute_example()).
--type missing_fun() :: fun((predict | build, feature(), exid(), number(), number()) -> missing_example()).
+-type missing_fun() :: fun((predict | build, feature(), exid(), Left::number(), Right::number()) -> missing_example()).

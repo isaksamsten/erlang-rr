@@ -1,7 +1,7 @@
 %%% @author Isak Karlsson <isak@Isaks-MacBook-Pro.local>
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
-%%%
+%%% Module for learning rules
 %%% @end
 %%% Created : 30 Mar 2013 by Isak Karlsson <isak@Isaks-MacBook-Pro.local>
 
@@ -10,14 +10,33 @@
 	 distribute_weighted/2,
 	 evaluate_rule/2,
 	 laplace/2,
-	 m_estimate/2
+	 m_estimate/2,
+
+	 generate_model/3,
+	 evaluate_model/3,
+	 predict/4
  ]).
 
 %% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
 
+%% @todo make correct implementation
+generate_model(Features, Examples, Conf) ->
+    Branch = Conf#rr_conf.branch,
+    Candidate = Branch(Features, Examples, rr_example:count(Examples), Conf),
+    {Candidate#rr_candidate.feature, dict:new(), 0}.
+
+%% @todo make correct implementation
+evaluate_model(_Rule, _Examples, _Conf) ->
+    ok.
+
+%% @todo make correct implementation
+predict(ExId, Rule, _Conf, Acc) ->    
+    {{ok, 0.0}, [1,2,3]}.
+
+
 %% @doc generate one best rule
--spec best(features(), examples(), number(), #rr_conf{}, integer()) -> #rr_candidate{}.
+-spec best(features(), examples(), number(), Conf::#rr_conf{}, integer()) -> #rr_candidate{}.
 best(Features, Examples, Total, Conf, NoFeatures) ->
     OneRule = generate_rule(Features, Examples, Total, Conf, NoFeatures),
     best_rule(Features, Examples, Total, Conf, NoFeatures, NoFeatures, OneRule).
@@ -34,6 +53,8 @@ best_rule(Features, Examples, Total, Conf, NoFeatures, N, #rr_candidate{score=Sc
 		      Cand
 	      end).
 
+%% @private 
+-spec generate_rule(features(), examples(), number(), Conf::#rr_conf{}, number()) -> #rr_candidate{}.
 generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, distribute = Distribute, missing_values=Missing} = Conf, NoFeatures) ->
     NoClasses = length(Examples),
     {Class, _, _} = lists:nth(random:uniform(NoClasses), Examples),
@@ -45,6 +66,7 @@ generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, dist
     {_Threshold, ExSplit} = Split(Rule, Examples, Distribute, Missing),
     #rr_candidate{feature=Rule, score=Score(ExSplit, Total), split=ExSplit}.
 
+-spec separate_and_conquer(Features::features(), Examples::examples(), Total::number(), Conf::#rr_conf{}, {[feature()], number()}) -> [feature()].
 separate_and_conquer([], _, _, _, {Rules, _}) ->
     Rules;
 separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}) ->
@@ -67,6 +89,8 @@ separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}) ->
 	    end
     end.
 
+
+-spec learn_one_rule(features(), examples(), number(), Conf::#rr_conf{}) -> {feature(), number(), examples()}.
 learn_one_rule(Features, Examples, Total, #rr_conf{score = Score, 
 						   split=Split, 
 						   distribute = Distribute, 
@@ -86,7 +110,8 @@ learn_one_rule(Features, Examples, Total, #rr_conf{score = Score,
 	    end
     end.
 
-
+%% @doc return a score function for the m-estimate
+-spec m_estimate({Pos::number(), Pos::number()}, Total::number()) -> score_fun().
 m_estimate(Apriori, M) ->
     fun (Examples, _) ->
 	    m_estimated_error(Examples, Apriori, M)
@@ -113,7 +138,8 @@ m_estimate(Side, {Pos, Neg}, M) ->
     Pi = if Pos > 0 -> Pos / (Pos + Neg); true -> 0.0 end,
     (P+M*Pi)/(P+N+M).
     
-
+%% @doc return a score function for laplace-corrected purity
+-spec laplace({Pos::number(), Pos::number()}, Total::number()) -> score_fun().
 laplace(_, Classes) ->
     fun(Examples, _) ->
 	    laplace_error(Examples, Classes)
@@ -139,6 +165,7 @@ laplace_estimate(Side, Classes) ->
     {Pos, Neg} = rr_example:coverage(Side),
     (Pos + 1) / (Pos + Neg + Classes).
 
+%% @doc distribute examples according to the number of rules fireing for each direction
 distribute_weighted({rule, Rule, Length}, ExId) ->
     ExCount = rr_example:count(ExId),
     Id = rr_example:exid(ExId),
@@ -168,8 +195,7 @@ distribute_weighted({rule, Rule, Length}, ExId) ->
 distribute_weighted(Feature, ExId) ->
     rr_example:distribute(Feature, ExId).
 
-
-
+%% @private evaluate a rule weighted
 evaluate_weighted_rule([], _, Left, Right, Missing) ->
     {Left, Right, Missing};
 evaluate_weighted_rule([Rule|Rest], ExId, NoLeft, NoRight, NoMissing) ->
@@ -182,7 +208,8 @@ evaluate_weighted_rule([Rule|Rest], ExId, NoLeft, NoRight, NoMissing) ->
 	    evaluate_weighted_rule(Rest, ExId, NoLeft, NoRight, NoMissing + 1)
     end.
 
-%% NOTE: if RULE c AND c == true THEN left o/w right
+%% @doc NOTE: if RULE c AND c == true THEN left o/w right
+-spec evaluate_rule(Rule::[{feature(), atom()}], ExId::exid()) -> left | right | '?'.
 evaluate_rule([], _) ->
     left;
 evaluate_rule([Rule|Rest], ExId) ->
