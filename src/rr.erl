@@ -8,9 +8,9 @@
 -compile(export_all).
 -author('isak-kar@dsv.su.se').
 
--define(DATE, "2013-04-07").
+-define(DATE, "2013-04-15").
 -define(MAJOR_VERSION, "0").
--define(MINOR_VERSION, "3").
+-define(MINOR_VERSION, "4").
 -define(REVISION, "1.0").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").

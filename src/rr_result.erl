@@ -3,9 +3,10 @@
 %%% @doc
 %%% Module for writing results
 %%% @end
-%%% Created : 15 Apr 2013 by Isak Karlsson <isak@Macintosh.local>
+%%% Created : 15 Apr 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_result).
+-author('isak-kar@dsv.su.se').
 -export([
 	 csv/0,
 	 default/0

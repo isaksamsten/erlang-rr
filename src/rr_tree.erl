@@ -6,6 +6,7 @@
 %%% Created : 13 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_tree).
+-author('isak-kar@dsv.su.se').
 -export([
 	 generate_model/3,
 	 evaluate_model/3,

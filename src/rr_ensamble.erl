@@ -6,7 +6,10 @@
 %%% Created : 14 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_ensamble).
--compile(export_all).
+-author('isak-kar@dsv.su.se').
+-compile(export_all). %% TODO: export
+
+%% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
 
 init() ->

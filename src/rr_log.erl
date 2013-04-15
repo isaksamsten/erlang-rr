@@ -6,6 +6,7 @@
 %%% Created :  5 Mar 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_log).
+-author('isak-kar@dsv.su.se').
 -export([log/4,
 	 log/3,
 	 new/2,
