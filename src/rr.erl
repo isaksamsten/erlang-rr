@@ -94,7 +94,7 @@
 	 {no_features,    undefined,    "no-features", {integer, -1},
 	  "Number of features to inspect at each split. If set to -1 log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
 
-	 {output_predictions, $l,       "output-predictions", {boolean, false},
+	 {output_predictions, $y,       "output-predictions", {boolean, false},
 	  "Write the predictions to standard out."},
 	 {variable_importance, $v, "variable-importance",     {integer, 0},
 	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
@@ -139,8 +139,10 @@ main(Args) ->
     %% Initialize the Logger
     {Log, Logger} = create_logger(Options), 
     
+
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
+    Output = create_output(Options),
     Missing = create_missing_values(Options),
     RunExperiment = create_experiment(Options),
     Progress = create_progress(Options),
@@ -343,6 +345,17 @@ create_missing_values(Options) ->
 	Other ->
 	    illegal_option("missing", Other)
     end.
+
+create_output(Options) ->
+    case get_opt(output, Options) of
+	default ->
+	    rr_result:default();
+	csv ->
+	    rr_result:csv();
+	Other ->
+	    illegal_option("output", Other)
+    end.
+	    
 
 create_experiment(Options) ->
     case any_opt([cv, split, build, evaluate, proximity], Options) of

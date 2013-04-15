@@ -10,9 +10,11 @@
 	 csv/0,
 	 default/0
 ]).
--type result() :: vi | predictions | evaluation | fold.
+
+-type result() :: vi | predictions | evaluation | method | start | 'end'.
 -type result_fun() :: fun((result(), any()) -> ok).
 
+%% @doc return a csv result generator
 -spec csv() -> result_fun().
 csv() ->
     fun(Type, Data) ->
@@ -39,6 +41,8 @@ csv_writer(evaluation, Data) ->
 csv_writer(_, _) ->
     ok.
 
+%% @doc return a default result generator (human-readable)
+-spec default() -> result_fun().
 default() ->
     fun(Type, Data) ->
 	    default_writer(Type, Data)
