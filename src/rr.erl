@@ -169,7 +169,7 @@ main(Args) ->
 		    split = fun rr_tree:random_split/4,
 		    distribute = Distribute,
 		    missing_values = Missing,
-		    base_learner = {Classifiers, rr_rule},
+		    base_learner = {Classifiers, rr_tree},
 		    no_features = TotalNoFeatures,
 		    log = Logger},
 

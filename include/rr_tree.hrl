@@ -22,16 +22,16 @@
 -record(rr_conf, {
 	  prune  :: prune_fun(), 
 	  depth=0 :: integer(),
-	  branch,
+	  branch :: branch_fun(),
 	  bagging,
-	  score,
+	  score :: score_fun(),
 	  split,
-	  distribute,
-	  missing_values,
+	  distribute :: distribute_fun(),
+	  missing_values :: missing_fun(),
 	  progress,
 	  base_learner,
-	  cores = 1,
-	  no_features,
+	  cores = 1 :: integer(),
+	  no_features :: integer(),
 	  log
 	 }).
 
@@ -73,7 +73,7 @@
 
 -type exid() :: Id::number() | {Id::number(), Id::number()}.
 -type feature() :: {Type::atom(), Id::number()} | 
-		   {rule, [{feature(), Value::atom()}, ...], Lengt::number()} |
+		   {rule, rule(), Lengt::number()} |
 		   tuple().
 -type features() :: [feature()].
 
@@ -91,6 +91,7 @@
 -type score() :: {Total::number(), Left::number(), Right::number()}.
 -type classifier() :: {No::number(), Base::atom()}.
 -type tree() :: #rr_node{} | #rr_leaf{}.
+-type rule() :: {[{Feature::feature(), Value::atom()}, ...], Class::atom()}.
 
 -type prune_fun() :: fun((examples(), Depth::number()) -> boolean()).
 -type branch_fun() :: fun((features(), examples(), number(), #rr_conf{}) -> #rr_candidate{}). 

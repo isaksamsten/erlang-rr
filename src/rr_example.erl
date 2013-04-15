@@ -555,7 +555,7 @@ feature_id({{combined, IdA, IdB}, _}) ->
     list_to_tuple(lists:sort([feature_id(IdA), feature_id(IdB)]));
 feature_id({{_, Id}, _}) ->
     Id;
-feature_id({rule, Rules, _Length}) ->
+feature_id({rule, {Rules, _}, _Length}) ->
     Ids = [feature_id(Rule) || Rule <- Rules],
     lists:sort(Ids);
 feature_id({_, Id}) ->

@@ -20,19 +20,24 @@
 %% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
 
-%% @todo make correct implementation
+%% @doc TODO: generate one rule for each class
 generate_model(Features, Examples, Conf) ->
     Branch = Conf#rr_conf.branch,
     Candidate = Branch(Features, Examples, rr_example:count(Examples), Conf),
-    {Candidate#rr_candidate.feature, dict:new(), 0}.
+    {element(2, Candidate#rr_candidate.feature), dict:new(), 0}.
 
-%% @todo make correct implementation
+%% @doc TODO: make correct implementation
 evaluate_model(_Rule, _Examples, _Conf) ->
     ok.
 
-%% @todo make correct implementation
-predict(ExId, Rule, _Conf, Acc) ->    
-    {{ok, 0.0}, [1,2,3]}.
+%% @doc TODO: make correct implementation
+predict(ExId, {_, Class} = Rule, _Conf, Acc) ->
+    case evaluate_rule(Rule, ExId) of
+	left ->
+	    {{Class, 1.0}, []};
+	_ ->
+	    {{'?', 1.0}, []}	
+    end.
 
 
 %% @doc generate one best rule
@@ -55,14 +60,16 @@ best_rule(Features, Examples, Total, Conf, NoFeatures, N, #rr_candidate{score=Sc
 
 %% @private 
 -spec generate_rule(features(), examples(), number(), Conf::#rr_conf{}, number()) -> #rr_candidate{}.
-generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, distribute = Distribute, missing_values=Missing} = Conf, NoFeatures) ->
+generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, 
+						  distribute = Distribute, 
+						  missing_values=Missing} = Conf, NoFeatures) ->
     NoClasses = length(Examples),
     {Class, _, _} = lists:nth(random:uniform(NoClasses), Examples),
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
     Coverage = rr_example:coverage(Binary),
     Rules = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=laplace(Coverage, NoClasses)}, {[], inf}),
-    Rule = {rule, Rules, length(Rules)},
+    Rule = {rule, {Rules, Class}, length(Rules)},
     {_Threshold, ExSplit} = Split(Rule, Examples, Distribute, Missing),
     #rr_candidate{feature=Rule, score=Score(ExSplit, Total), split=ExSplit}.
 
@@ -196,6 +203,8 @@ distribute_weighted(Feature, ExId) ->
     rr_example:distribute(Feature, ExId).
 
 %% @private evaluate a rule weighted
+evaluate_weighted_rule({Rule, _}, ExId, Left, Right, Missing) ->
+    evaluate_weighted_rule(Rule, ExId, Left, Right, Missing);
 evaluate_weighted_rule([], _, Left, Right, Missing) ->
     {Left, Right, Missing};
 evaluate_weighted_rule([Rule|Rest], ExId, NoLeft, NoRight, NoMissing) ->
@@ -209,7 +218,9 @@ evaluate_weighted_rule([Rule|Rest], ExId, NoLeft, NoRight, NoMissing) ->
     end.
 
 %% @doc NOTE: if RULE c AND c == true THEN left o/w right
--spec evaluate_rule(Rule::[{feature(), atom()}], ExId::exid()) -> left | right | '?'.
+-spec evaluate_rule(Rule::rule(), ExId::exid()) -> left | right | '?'.
+evaluate_rule({Rule, _}, ExId) ->
+    evaluate_rule(Rule, ExId);
 evaluate_rule([], _) ->
     left;
 evaluate_rule([Rule|Rest], ExId) ->
