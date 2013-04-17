@@ -135,10 +135,10 @@ main(Args) ->
 	false ->
 	    ok
     end,
-    
+
     %% Initialize the Logger
     {Log, Logger} = create_logger(Options), 
-    
+
 
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
@@ -164,27 +164,29 @@ main(Args) ->
     Bagging = create_bagger(Options),
     Distribute = create_distribute(Options),
 
-    Conf = #rr_conf{cores = Cores,
-		    score = Score,
-		    prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
-		    branch = Eval,
-		    bagging = Bagging,
-		    progress = Progress,
-		    split = fun rr_tree:random_split/4,
-		    distribute = Distribute,
-		    missing_values = Missing,
-		    base_learner = {Classifiers, rr_tree},
-		    no_features = TotalNoFeatures,
-		    output = rr_result:csv(),
-		    log = Logger},
+    Conf = #rr_conf{
+	      cores = Cores,
+	      score = Score,
+	      prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
+	      branch = Eval,
+	      bagging = Bagging,
+	      progress = Progress,
+	      split = fun rr_tree:random_split/4,
+	      distribute = Distribute,
+	      missing_values = Missing,
+	      base_learner = {Classifiers, rr_tree},
+	      no_features = TotalNoFeatures,
+	      output = Output,
+	      log = Logger,
+	      payload = undefined
+	     },
 
     Logger(info, "Building model using ~p trees and ~p features", [Classifiers, NoFeatures]),
-    Output = Conf#rr_conf.output,
     Output(start, now()),
     Then = now(),
     RunExperiment(Features, Examples, Conf, Options),
     Time = timer:now_diff(now(), Then) / 1000000,
-    
+
     Output(parameters, [
 			{file, InputFile},
 			{classifiers, Classifiers},
@@ -201,7 +203,7 @@ main(Args) ->
 output_variable_importance(Model, #rr_conf{output=Output} = Conf, Options) ->
     case get_opt(variable_importance, Options) of
 	No when No > 1 ->
-	    VariableImportance = rr_ensamble:variable_importance(Model, Conf),
+	    VariableImportance = rr_ensemble:variable_importance(Model, Conf),
 	    Sorted = lists:reverse(lists:keysort(2, dict:to_list(VariableImportance))),
 	    Output(vi, {Sorted, 1, No});	    
 	_No ->
@@ -220,16 +222,16 @@ output_evaluation(Data, #rr_conf{output=Output}, Options) ->
 	
 run_proximity(Features, Examples, Conf) ->
     rr_proximity:init(),
-    Model = rr_ensamble:generate_model(Features, Examples, Conf),
+    Model = rr_ensemble:generate_model(Features, Examples, Conf),
     rr_proximity:generate_proximity(Model, Examples, Conf).
 
 run_split(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
     Split = get_opt(ratio, Options),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
-    Model = rr_ensamble:generate_model(Features, Train, Conf),
+    Model = rr_ensemble:generate_model(Features, Train, Conf),
 
     
-    Dict = rr_ensamble:evaluate_model(Model, Test, Conf),
+    Dict = rr_ensemble:evaluate_model(Model, Test, Conf),
     Evaluation = evaluate(Dict, rr_example:count(Test)),
     
     Output(method, {"Split", Split}),
@@ -240,8 +242,8 @@ run_split(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
     
     
 run_build_process(Features, Examples, Conf, Options) ->
-    Model = rr_ensamble:generate_model(Features, Examples, Conf),
-    rr_ensamble:save_model(Model, get_opt(model_file, Options)).
+    Model = rr_ensemble:generate_model(Features, Examples, Conf),
+    rr_ensemble:save_model(Model, get_opt(model_file, Options)).
 
 run_cross_validation(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
     Folds = get_opt(folds, Options),
@@ -249,8 +251,8 @@ run_cross_validation(Features, Examples, #rr_conf{output=Output} = Conf, Options
 	    fun(Train0, Test0, Fold) ->
 		    io:format(standard_error, "*** Fold ~p *** ~n", [Fold]),
 		    Output(method, {"Fold", Fold}),
-		    M = rr_ensamble:generate_model(Features, Train0, Conf),
-		    D = rr_ensamble:evaluate_model(M, Test0, Conf),
+		    M = rr_ensemble:generate_model(Features, Train0, Conf),
+		    D = rr_ensemble:evaluate_model(M, Test0, Conf),
 		    Evaluate = evaluate(D, rr_example:count(Test0)),
 		    output_evaluation(Evaluate, Conf, Options),
 		    Evaluate			
@@ -424,9 +426,6 @@ create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
 	    rr_branch:subset(NoFeatures)
     end.
 
-%%
-%% Halts the program if illegal arguments are supplied
-%%
 illegal() ->
     getopt:usage(?CMD_SPEC, "rr"),
     halt().
@@ -450,7 +449,6 @@ default_illegal(Out) ->
     fun() ->
 	    illegal(Out)
     end.
-
 
 show_help() ->
     getopt:usage(?CMD_SPEC, "rr"),

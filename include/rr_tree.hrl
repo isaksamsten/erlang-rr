@@ -33,7 +33,8 @@
 	  output,
 	  cores = 1 :: integer(),
 	  no_features :: integer(),
-	  log
+	  log,
+	  payload :: any()
 	 }).
 
 %%
