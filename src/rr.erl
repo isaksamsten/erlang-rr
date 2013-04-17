@@ -60,6 +60,8 @@
 	 {min_example,    undefined,    "min-examples",{integer, 1},
 	  "Min number of examples allowed for splitting a node"},
 	 
+	 {random_rule,    undefined,    "random-rule", undefined,
+	  "Rule or subset. The random weight is determined by the 'weight-factor'. If set to 1, 'rule' is always selected, if set to 0 a subset is always selected"},
 	 {rule,           undefined,    "rule",        undefined,
 	  "Build, at each node, k (determined by 'no-features') rules from m (determined by 'no-features') features. Thus including a decision based on [1, m] features at each branch."},
 	 {combination,    undefined,    "combination", undefined,
@@ -109,7 +111,7 @@
 
 main(Args) ->
     rr_example:init(),
-    rr_ensamble:init(),
+    rr_ensemble:init(),
     random:seed(now()),
 
     Options = case getopt:parse(?CMD_SPEC, Args) of
@@ -410,7 +412,7 @@ get_no_features(TotalNoFeatures, Options) ->
     end.
 
 create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
-    case any_opt([weka, resample, weighted, combination, rule], Options) of
+    case any_opt([weka, resample, weighted, combination, rule, random_rule], Options) of
 	weka ->
 	    rr_branch:weka(NoFeatures);
 	resample ->
@@ -422,6 +424,9 @@ create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
 	    rr_branch:random_correlation(NoFeatures, Factor);
 	rule ->
 	    rr_branch:rule(NoFeatures); %% TODO: user selected rule score function
+	random_rule ->
+	    Factor = get_opt(weight_factor, Options),
+	    rr_branch:random_rule(NoFeatures, Factor);
 	false -> 
 	    rr_branch:subset(NoFeatures)
     end.

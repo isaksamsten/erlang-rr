@@ -12,6 +12,7 @@
 	 evaluate_rule/2,
 	 laplace/2,
 	 m_estimate/2,
+	 purity/2,
 
 	 generate_model/3,
 	 evaluate_model/3,
@@ -153,56 +154,55 @@ learn_ruleset_for_class(Features, Examples, Class, Conf, Acc) ->
 -spec m_estimate({Pos::number(), Pos::number()}, Total::number()) -> score_fun().
 m_estimate(Apriori, M) ->
     fun (Examples, _) ->
-	    m_estimated_error(Examples, Apriori, M)
+	    error(Examples, fun m_estimate2/2, {Apriori, M})
     end.
-
-m_estimated_error({both, LeftEx, RightEx}, A, M) ->
-    Left = 1 - m_estimate(LeftEx, A, M),
-    Right = 1 - m_estimate(RightEx, A, M),
-    Smallest = if Left < Right ->
-		       Left;
-		  true ->
-		       Right
-	       end,
-    {Smallest, Left, Right};
-m_estimated_error({left, LeftEx}, A, M) ->
-    Left = 1 - m_estimate(LeftEx, A, M),
-    {Left, Left, 1.0};
-m_estimated_error({right, RightEx}, A, M) ->
-    Right = 1 - m_estimate(RightEx, A, M),
-    {Right, 1.0, Right}.
-
-m_estimate(Side, {Pos, Neg}, M) ->
-    {P, N} = rr_example:coverage(Side),
-    Pi = if Pos > 0 -> Pos / (Pos + Neg); true -> 0.0 end,
-    (P+M*Pi)/(P+N+M).
     
 %% @doc return a score function for laplace-corrected purity
 -spec laplace({Pos::number(), Pos::number()}, Total::number()) -> score_fun().
 laplace(_, Classes) ->
     fun(Examples, _) ->
-	    laplace_error(Examples, Classes)
+	    error(Examples, fun laplace_estimate/2, Classes)
     end.
 
-laplace_error({both, LeftEx, RightEx}, Classes) ->
-    Left = 1 - laplace_estimate(LeftEx, Classes),
-    Right = 1 - laplace_estimate(RightEx, Classes),
+%% @doc return score function for purity measure
+-spec purity(None::any(), None::any()) -> score_fun().
+purity(_, _) ->
+    fun (Examples, _) ->
+	    error(Examples, fun purity_estimate/2, 0)
+    end.
+
+%% @private calculate the purity
+purity_estimate(Side, 0) ->
+    {P, N} = rr_example:coverage(Side),
+    if P > 0 -> P / (P+N); true -> 0.0 end.
+
+%% @private calculate m estimated 
+m_estimate2(Side, {{Pos, Neg}, M}) ->
+    {P, N} = rr_example:coverage(Side),
+    Pi = if Pos > 0 -> Pos / (Pos + Neg); true -> 0.0 end,
+    (P+M*Pi)/(P+N+M).
+
+%% @private calculate laplace corrected purity
+laplace_estimate(Side, Classes) ->
+    {Pos, Neg} = rr_example:coverage(Side),
+    (Pos + 1) / (Pos + Neg + Classes).
+
+-spec error(Split::split(), fun((examples(), any()) -> number()), any()) -> score().
+error({both, LeftEx, RightEx}, Fun, Payload) ->
+    Left = 1 - Fun(LeftEx, Payload),
+    Right = 1 - Fun(RightEx, Payload),
     Smallest = if Left < Right ->
 		       Left;
 		  true ->
 		       Right
 	       end,
     {Smallest, Left, Right};
-laplace_error({left, Side}, Classes) ->
-    Left = 1 - laplace_estimate(Side, Classes),
+error({left, Side}, Fun, Payload) ->
+    Left = 1 - Fun(Side, Payload),
     {Left, Left, 1.0};
-laplace_error({right, Side}, Classes) ->
-    Right = 1 - laplace_estimate(Side, Classes),
+error({right, Side}, Fun, Payload) ->
+    Right = 1 - Fun(Side, Payload),
     {Right, 1.0, Right}.
-
-laplace_estimate(Side, Classes) ->
-    {Pos, Neg} = rr_example:coverage(Side),
-    (Pos + 1) / (Pos + Neg + Classes).
 
 %% @doc distribute examples according to the number of rules fireing for each direction
 distribute_weighted({rule, Rule, Length}, ExId) ->
