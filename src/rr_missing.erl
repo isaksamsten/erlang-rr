@@ -3,8 +3,8 @@
 %%% @doc
 %%%
 %%% Functions for handling missing values. Each function should return
-%%% either: {true, {ExId, ExIdCount}} for an example to be distributed
-%%% to the left or: {false, {ExId, ExIdCount}} for an example to be
+%%% either: {left, {ExId, ExIdCount}} for an example to be distributed
+%%% to the left or: {right, {ExId, ExIdCount}} for an example to be
 %%% distributed to the right or: ignore to ignore an example with
 %%% missing values
 %%%
@@ -14,8 +14,7 @@
 -compile(export_all).
 -export([
 	 random_partition/0
-
-]).
+	]).
 
 %% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
