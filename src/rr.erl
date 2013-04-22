@@ -154,6 +154,11 @@ main(Args) ->
     Csv = csv:reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
     Examples = rr_example:shuffle_dataset(Examples0),
+    %% Dict = rr_example:generate_folds(Examples, 10),
+    %% {Test, Train} = rr_example:merge_folds(Dict, 1),
+    %% io:format("~p ~n ~p ~n ~p ~n", [Dict, Test, Train]),
+    %% halt(),
+
 
 
     TotalNoFeatures = length(Features),
