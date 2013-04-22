@@ -61,9 +61,15 @@ calculate_auc_for_classes([Pos|Rest], Predictions, NoExamples, Auc) ->
 				 end
 			 end, [], Predictions)),
     NoPosEx = length(PosEx),
-    calculate_auc_for_classes(Rest, Predictions, NoExamples, 
-			      [{Pos, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
-						   NoPosEx, NoExamples - NoPosEx, 0)}|Auc]).
+    if NoPosEx > 0 ->
+	    calculate_auc_for_classes(Rest, Predictions, NoExamples, 
+				      [{Pos, NoPosEx, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
+								    NoPosEx, NoExamples - NoPosEx, 0)}|Auc]);
+       true ->
+	    calculate_auc_for_classes(Rest, Predictions, NoExamples,
+				      [{Pos, NoPosEx, 'n/a'}|Auc])
+    end.
+	    
 
 calculate_auc([], _Tp, _Fp, Tp_prev, Fp_prev, _Prob_prev, NoPos, NoNeg, Auc) ->
     (Auc + abs(NoNeg - Fp_prev) * (NoPos + Tp_prev)/2)/(NoPos * NoNeg);

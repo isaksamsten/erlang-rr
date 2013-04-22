@@ -284,7 +284,12 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
 evaluate(Dict, NoTestExamples) ->
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
-    AvgAuc = lists:foldl(fun({_, P}, A) -> A + P / length(Auc) end, 0, Auc),
+    AvgAuc = lists:foldl(fun
+			     ({_, No, A}, Sum) -> 
+				 Sum + No/NoTestExamples*A;
+			     ({_, 'n/a', _}, Sum) -> 
+				 Sum
+			 end, 0, Auc),
     Precision = rr_eval:precision(Dict),
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy}, {auc, Auc, AvgAuc}, {precision, Precision}, {brier, Brier}].
