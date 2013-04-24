@@ -614,44 +614,69 @@ shuffle_list(Ids0) ->
     [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> 
 							 {random:uniform(), Id} 
 						 end, Ids0))].
-								 
-%%
-%% TODO: make it stratified
-%%
-cross_validation(Fun, Folds, Examples) ->
-    NoExamples = count(Examples),
-    ExampleIds = [Id || {_, Id} <- lists:keysort(1, lists:map(fun(Id) -> {random:uniform(), Id} end, 
-							      lists:seq(1, NoExamples)))],
-    cross_validation(Fun, ExampleIds, Examples, Folds, Folds, NoExamples, []).
 
-cross_validation(_, _, _, _, 0, _, Acc) -> 
+%% @doc generate a dictionary of Folds folds.
+-spec generate_folds(examples(), integer()) -> dict().
+generate_folds(Examples, Folds) ->
+    generate_folds(Examples, Folds, 1, dict:new()).
+
+%% @private
+generate_folds([], _, _, Acc) ->
+    Acc;
+generate_folds([{Class, _, ExIds}|Rest], Folds, CurrentFold, Acc) ->
+    {ClassFolds, NewCurrentFold} = generate_folds_for_class(Class, ExIds, Folds, CurrentFold, 
+							    make_default_folds(Folds, Class, dict:new())),
+    NewAcc = dict:merge(fun (_, A, B) -> A ++ B end, ClassFolds, Acc),
+    generate_folds(Rest, Folds, NewCurrentFold, NewAcc).
+
+make_default_folds(0, _, Acc) ->
+    Acc;
+make_default_folds(Fold, Class, Acc) ->
+    make_default_folds(Fold - 1, Class, dict:store(Fold, [{Class, 0, []}], Acc)).
+
+%% @private
+generate_folds_for_class(_, [], _, Current, Acc ) ->
+    {Acc, Current};
+generate_folds_for_class(Class, [Id|ExIds], Folds, CurrentFold, Acc) ->
+    Current = if Folds < CurrentFold -> 1; true -> CurrentFold end,
+    generate_folds_for_class(Class, ExIds, Folds, Current + 1,
+			     dict:update(Current, fun ([{C, N, Ids}]) ->
+							  [{C, N+1, [Id|Ids]}]
+						  end, Acc)).
+init_folds(Folds, Init, Test) ->
+    Init0 = dict:fetch(Init, Folds),
+    TestSet0 = dict:fetch(Test, Folds),
+    Rest0 = dict:erase(Init, Folds),
+    {Init0, TestSet0, dict:erase(Test, Rest0)}.
+
+%% @doc merge all folds in Folds expect for test
+-spec merge_folds(dict(), integer()) -> {Test::examples(), Train::examples()}.
+merge_folds(Folds, Test) ->
+    {Init, TestSet, Rest} = case Test of
+				1 -> 
+				    init_folds(Folds, 2, Test);
+				_Other ->
+				    init_folds(Folds, 1, Test)
+			    end,
+    Train = dict:fold(fun (_, Fold, Acc) ->
+			      lists:zipwith(fun ({Class, Ca, Ia}, {Class, Cb, Ib}) ->
+						    {Class, Ca+Cb, Ia++Ib}
+					    end, Fold, Acc)
+		      end, Init, Rest),
+    {TestSet, Train}.
+
+%% @doc stratified cross validation
+-spec cross_validation(fun((Train::examples(), Test::examples(), Fold::integer()) -> []), integer(), examples()) -> [].
+cross_validation(Fun, NoFolds, Examples) ->
+    Folds = generate_folds(Examples, NoFolds),
+    cross_validation(Fun, Folds, NoFolds, NoFolds, []).
+
+cross_validation(_Fun, _Folds, _NoFolds, 0, Acc) -> 
     lists:reverse(Acc);
-cross_validation(Fun, ExampleIds, Examples, Folds, CurrentFold, NoExamples, Acc) -> 
-    {Test, Train} = lists:split(round(NoExamples * 1/Folds), ExampleIds),
-    
-    Test0 = get_examples_with(Test, Examples),
-    Train0 = get_examples_with(Train, Examples),
-
-    Result = Fun(Train0, Test0, Folds - CurrentFold + 1),
-    cross_validation(Fun, Train ++ Test, Examples, Folds, CurrentFold - 1, NoExamples, [Result|Acc]). 
-
-get_examples_with(Ids, Examples) ->
-    get_examples_with(gb_sets:from_list(Ids), Examples, []).
-
-get_examples_with(_, [], Acc) ->
-    Acc;    
-get_examples_with(Ids, [{Class, _Count, ExIds}|Rest], Acc) ->
-    get_examples_with(Ids, Rest, [get_examples_with_for_class(Ids, Class, ExIds, [])|Acc]).
-
-get_examples_with_for_class(_, Class, [], Acc) ->
-    {Class, length(Acc), Acc};
-get_examples_with_for_class(Ids, Class, [ExId|Rest], Acc) ->
-    case gb_sets:is_element(ExId, Ids) of
-	true ->
-	    get_examples_with_for_class(Ids, Class, Rest, [ExId|Acc]);
-	false ->
-	    get_examples_with_for_class(Ids, Class, Rest, Acc)
-    end.
+cross_validation(Fun, Folds, NoFolds, CurrentFold, Acc) -> 
+    {Test, Train} = merge_folds(Folds, CurrentFold),
+    Result = Fun(Train, Test, NoFolds - CurrentFold + 1),
+    cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, [Result|Acc]). 
 
 %%
 %% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}

@@ -82,7 +82,7 @@ default_writer(evaluation, Data) ->
 			  io:format("Accuracy: ~p ~n", [Accuracy]);
 		      ({auc, Auc, Avg}) ->
 			  io:format("Area under ROC~n"),
-			  lists:foreach(fun({Class, A}) ->
+			  lists:foreach(fun({Class, _, A}) ->
 						io:format("  ~s: ~p ~n", [Class, A])
 					end, Auc),
 			  io:format(" average: ~p ~n", [Avg]);

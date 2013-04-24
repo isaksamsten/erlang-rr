@@ -12,20 +12,17 @@
 	 brier/2,
 	 precision/1]).
 
-%%
-%% Calculate the accuracy (i.e. the percentage of correctly classified
-%% examples)
-%%
-%% Output: float() -> [0, 1]
-%%
+%% @doc 
+%% Calculate the accuracy (i.e. the percentage of correctly
+%% classified examples) 
+%% @end
+-spec accuracy(dict()) -> Accuracy::float().
 accuracy(Predictions) ->
     {Correct, Incorrect} = correct(Predictions),
     Correct / (Correct + Incorrect).
 
-%%
-%% Return a tuple() containing number of {Correct, Incorrect}
-%% predictions
-%%
+
+%% @private containing number of {Correct, Incorrect} predictions
 correct(Predictions) ->
     dict:fold(fun (Actual, Values, Acc) ->
 		      lists:foldl(fun({{Predict, _}, _Probs},  {C, I}) ->
@@ -36,12 +33,11 @@ correct(Predictions) ->
 				  end, Acc, Values)
 	      end, {0, 0}, Predictions).
 
-%%
+%% @doc
 %% Calculate the area under ROC for predictions (i.e. the ability of
 %% the model to rank true positives ahead of false positives)
-%%
-%% Output: [{c1, a1}, ..., {ci, ai}]
-%%
+%% @end
+-spec auc(dict(), integer()) -> [{Class::atom(), NoExamples::integer(), Auc::float()}].
 auc(Predictions, NoExamples) ->
     calculate_auc_for_classes(dict:fetch_keys(Predictions), Predictions, NoExamples, []).
 
@@ -61,9 +57,15 @@ calculate_auc_for_classes([Pos|Rest], Predictions, NoExamples, Auc) ->
 				 end
 			 end, [], Predictions)),
     NoPosEx = length(PosEx),
-    calculate_auc_for_classes(Rest, Predictions, NoExamples, 
-			      [{Pos, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
-						   NoPosEx, NoExamples - NoPosEx, 0)}|Auc]).
+    if NoPosEx > 0 ->
+	    calculate_auc_for_classes(Rest, Predictions, NoExamples, 
+				      [{Pos, NoPosEx, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
+								    NoPosEx, NoExamples - NoPosEx, 0)}|Auc]);
+       true ->
+	    calculate_auc_for_classes(Rest, Predictions, NoExamples,
+				      [{Pos, NoPosEx, 'n/a'}|Auc])
+    end.
+	    
 
 calculate_auc([], _Tp, _Fp, Tp_prev, Fp_prev, _Prob_prev, NoPos, NoNeg, Auc) ->
     (Auc + abs(NoNeg - Fp_prev) * (NoPos + Tp_prev)/2)/(NoPos * NoNeg);
@@ -83,9 +85,7 @@ calculate_auc([{Class, Prob}|Rest], Tp, Fp, Tp_prev, Fp_prev, OldProb, NoPos, No
 sorted_predictions(Pos, Neg) ->
     lists:sort(fun({_, A}, {_, B}) -> A > B end, Pos ++ Neg).
 
-%%
-%% Find probability for predicting "Class" in range [0, 1]
-%%
+%% @private Find probability for predicting "Class" in range [0, 1]
 find_prob(Class, Probs) ->
     case lists:keyfind(Class, 1, Probs) of
 	{Class, Prob} ->
@@ -94,13 +94,12 @@ find_prob(Class, Probs) ->
 	    0
     end.
 
-%%
+%% @doc
 %% Calculate the brier score for predictions (i.e. the mean square
 %% difference between the predicted probability assigned to the
 %% possible outcomes and the actual outcome)
-%%
-%% Output: float() -> [0, 1]
-%%
+%% @end
+-spec brier(dict(), integer()) -> Brier::float().
 brier(Predictions, NoExamples) ->
    calculate_brier_score_for_classes(dict:fetch_keys(Predictions), Predictions, 0) / NoExamples.
 
@@ -121,11 +120,8 @@ calculate_brier_score([{_, Probs}|Rest], Actual, Score) ->
 							    end
 						    end, Score, Probs)).
 
-%%
-%% Calculate the precision when predicting each class
-%%
-%% Output: [{c1, p1}, ..., {ci, pi}]
-%%
+%% @doc Calculate the precision when predicting each class
+-spec precision(dict()) -> [{Class::atom(), Precision::float()}].
 precision(Predictions) ->
     precision_for_classes(dict:fetch_keys(Predictions), Predictions, []).
 
