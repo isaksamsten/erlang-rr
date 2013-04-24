@@ -13,9 +13,9 @@
 	 subset/1,
 	 correlation/1,
 	 random_correlation/2,
-	 rule/1,
-	 random_rule/2
-]).
+	 rule/3,
+	 random_rule/4
+	]).
 
 %% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
@@ -148,16 +148,16 @@ all() ->
     end.
 
 %% @doc generate a rule at each branch
--spec rule(integer()) -> branch_fun().
-rule(NoFeatures) ->
+-spec rule(integer(), integer(), score_fun()) -> branch_fun().
+rule(NoFeatures, NoRules, RuleScore) ->
     fun (Features, Examples, Total, Conf) ->
-	    rr_rule:best(Features, Examples, Total, Conf, NoFeatures)
+	    rr_rule:best(Features, Examples, Total, Conf, NoFeatures, NoRules, RuleScore)
     end.
 
 %% @doc randomly pick a subset-brancher or a rule-bracher at each node
--spec random_rule(integer(), float()) -> branch_fun().
-random_rule(NoFeatures, Prob) ->
-    Rule = rule(NoFeatures),
+-spec random_rule(integer(), integer(), score_fun(), float()) -> branch_fun().
+random_rule(NoFeatures, NoRules, RuleScore, Prob) ->
+    Rule = rule(NoFeatures, NoRules, RuleScore),
     Sub = subset(NoFeatures),
     fun (Features, Examples, Total, Conf) ->
 	    Random = random:uniform(),

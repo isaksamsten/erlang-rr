@@ -52,6 +52,8 @@
 
 	 {score,          undefined,    "score",       {atom, info},
 	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info' and 'gini', where 'info' denotes information entropy and 'gini' the gini-impurity."},
+	 {rule_score,     undefined,    "rule-score",  {atom, laplace},
+	  "Defines the measure, which should be minimized, for evaluating the goodness of a specific rule. Available otpions include: 'm', 'laplace' and 'purity', where 'm' denotes the m-estimate"},
 	 {classifiers,    $n,           "no-trees",    {integer, 10},
 	  "Defines the number of classifiers (trees) to build."},
 
@@ -95,6 +97,8 @@
 	 
 	 {no_features,    undefined,    "no-features", {integer, -1},
 	  "Number of features to inspect at each split. If set to -1 log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
+	 {no_rules,       undefined,    "no-rules",    {integer, -1},
+	  "Number of rules to generate (from n features, determined by 'no-features'). If set to -1, 'no-features' div 2 are used"},
 
 	 {output_predictions, $y,       "output-predictions", {boolean, false},
 	  "Write the predictions to standard out."},
@@ -423,12 +427,30 @@ create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
 	    Factor = get_opt(weight_factor, Options),
 	    rr_branch:random_correlation(NoFeatures, Factor);
 	rule ->
-	    rr_branch:rule(NoFeatures); %% TODO: user selected rule score function
+	    NoRules = case get_opt(no_rules, Options) of
+			  -1 -> NoFeatures;
+			  Other -> Other
+		      end,
+	    RuleScore = create_rule_score(Options),
+	    rr_branch:rule(NoFeatures, NoRules, RuleScore); 
 	random_rule ->
 	    Factor = get_opt(weight_factor, Options),
-	    rr_branch:random_rule(NoFeatures, Factor);
+	    NoRules = case get_opt(no_rules, Options) of
+			  -1 -> NoFeatures;
+			  Other -> Other
+		      end,	    
+	    RuleScore = create_rule_score(Options),
+	    rr_branch:random_rule(NoFeatures, NoRules, RuleScore, Factor);
 	false -> 
 	    rr_branch:subset(NoFeatures)
+    end.
+
+create_rule_score(Options) ->
+    case get_opt(rule_score, Options) of
+	laplace -> fun rr_rule:laplace/2;
+	m -> fun rr_rule:m_estimate/2;
+	purity -> fun rr_rule:purity/2;
+	Other -> illegal_option("rule-score", Other)					  
     end.
 
 illegal() ->
