@@ -72,10 +72,6 @@
 	  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k=inf times."},
 	 {resample,       undefined,    "resample",    undefined,
 	  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k (determined by 'no-resamples') times."},
-	 {sqrt,           undefined,    "sqrt",        undefined,
-	  "Select sqrt(F) features, where F is the total number of features, at each split point and from these select the most promising. It is often a good strategy to use this option if your dataset has many (potentially) irrelevant predictors."},
-	 {weighted,       undefined,    "weighted",    undefined,
-	  "Calculate the most promising attributes before model induction, then bias the selection of features towards those that provide the highest a-priori information"},
 
 	 {missing,        $m,           "missing",     {atom, random},
 	  "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
@@ -95,10 +91,10 @@
 	 {min_gain,       undefined,    "min-gain",    {float, 0},
 	  "Minimum allowed gain for not re-sampling (if the 'resample'-argument is specified)."},
 	 
-	 {no_features,    undefined,    "no-features", {integer, -1},
-	  "Number of features to inspect at each split. If set to -1 log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
-	 {no_rules,       undefined,    "no-rules",    {integer, -1},
-	  "Number of rules to generate (from n features, determined by 'no-features'). If set to -1, 'no-features' div 2 are used"},
+	 {no_features,    undefined,    "no-features", {atom, default},
+	  "Number of features to inspect at each split. If set to log log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
+	 {no_rules,       undefined,    "no-rules",    {atom, default},
+	  "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used other wise n is used."},
 
 	 {output_predictions, $y,       "output-predictions", {boolean, false},
 	  "Write the predictions to standard out."},
@@ -403,16 +399,15 @@ create_score(Options) ->
     end.
 
 get_no_features(TotalNoFeatures, Options) ->
-    case any_opt([sqrt, no_features], Options) of
-	false ->
-	    case get_opt(no_features, Options) of
-		X when X =< 0 ->
-		    round(math:log(TotalNoFeatures)/math:log(2)) + 1;
-		X ->
-		    X
-	    end;
+    case get_opt(no_features, Options) of
+	default ->
+	    round(math:log(TotalNoFeatures)/math:log(2)) + 1;
 	sqrt ->
-	    round(math:sqrt(TotalNoFeatures))
+	    round(math:sqrt(TotalNoFeatures));
+	X when is_number(X), X > 0 ->
+	    X;
+	Other ->
+	    illegal_option("no-features", Other)
     end.
 
 create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
@@ -427,24 +422,27 @@ create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
 	    Factor = get_opt(weight_factor, Options),
 	    rr_branch:random_correlation(NoFeatures, Factor);
 	rule ->
-	    NoRules = case get_opt(no_rules, Options) of
-			  -1 -> NoFeatures;
-			  Other -> Other
-		      end,
+	    NoRules = get_no_rules(Options, NoFeatures),
 	    RuleScore = create_rule_score(Options),
 	    rr_branch:rule(NoFeatures, NoRules, RuleScore); 
 	random_rule ->
 	    Factor = get_opt(weight_factor, Options),
-	    NoRules = case get_opt(no_rules, Options) of
-			  -1 -> NoFeatures;
-			  Other -> Other
-		      end,	    
+	    NoRules = get_no_rules(Options, NoFeatures),
 	    RuleScore = create_rule_score(Options),
 	    rr_branch:random_rule(NoFeatures, NoRules, RuleScore, Factor);
 	false -> 
 	    rr_branch:subset(NoFeatures)
     end.
 
+get_no_rules(Options, NoFeatures) ->
+    case get_opt(no_rules, Options) of
+	default -> NoFeatures div 2;
+	same -> NoFeatures;
+	X when is_number(X), X > 0 -> X;
+	Other ->
+	    illegal_option("no-rules", Other)
+    end.
+    
 create_rule_score(Options) ->
     case get_opt(rule_score, Options) of
 	laplace -> fun rr_rule:laplace/2;
