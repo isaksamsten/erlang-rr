@@ -280,7 +280,7 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
 			    end
 		    end, 0, Avg) / Folds,
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
-		    
+
 evaluate(Dict, NoTestExamples) ->
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
@@ -304,12 +304,9 @@ create_bagger(Options) ->
 
 create_distribute(Options) ->	
     case get_opt(distribute, Options) of
-	default ->
-	    fun rr_example:distribute/2;
-	rulew ->
-	    fun rr_rule:distribute_weighted/2;
-	Other ->
-	    illegal_option("distribute", Other)
+	default -> fun rr_example:distribute/2;
+	rulew -> fun rr_rule:distribute_weighted/2;
+	Other -> illegal_option("distribute", Other)
     end.
 
 create_logger(Options) ->
@@ -338,82 +335,56 @@ create_logger(Options) ->
 
 create_missing_values(Options) ->
     case get_opt(missing, Options) of
-	random ->
-	    fun rr_missing:random/5;
-	randomw ->
-	    fun rr_missing:random_weighted/5;
-	weighted ->
-	    fun rr_missing:weighted/5;
-	partition ->
-	    fun rr_missing:random_partition/5;
-	wpartition ->
-	    fun rr_missing:weighted_partition/5;
-	proximity ->
-	    fun rr_missing:proximity/5;
-	right ->
-	    fun rr_missing:right/5;
-	left ->
-	    fun rr_missing:left/5;
-	ignore ->
-	    fun rr_missing:ignore/5;
+	random -> fun rr_missing:random/5;
+	randomw -> fun rr_missing:random_weighted/5;
+	weighted -> fun rr_missing:weighted/5;
+	partition -> fun rr_missing:random_partition/5;
+	wpartition -> fun rr_missing:weighted_partition/5;
+	proximity -> fun rr_missing:proximity/5;
+	right -> fun rr_missing:right/5;
+	left -> fun rr_missing:left/5;
+	ignore -> fun rr_missing:ignore/5;
 	Other ->
 	    illegal_option("missing", Other)
     end.
 
 create_output(Options) ->
     case get_opt(output, Options) of
-	default ->
-	    rr_result:default();
-	csv ->
-	    rr_result:csv();
-	Other ->
-	    illegal_option("output", Other)
+	default -> rr_result:default();
+	csv -> rr_result:csv();
+	Other -> illegal_option("output", Other)
     end.
 	    
 
 create_experiment(Options) ->
     case any_opt([cv, split, build, evaluate, proximity], Options) of
-	split ->
-	    fun run_split/4;
-	cv ->
-	    fun run_cross_validation/4;
-	build ->
-	    fun run_build_process/4;
-	evaluate ->
-	    ok;
-	false ->		
-	    illegal("No method selected. Please use either 'split', 'cross-validate' or 'build' argument")
+	split -> fun run_split/4;
+	cv -> fun run_cross_validation/4;
+	build -> fun run_build_process/4;
+	evaluate -> ok;
+	false -> illegal("No method selected. Please use either 'split', 'cross-validate' or 'build' argument")
     end.
 
 create_progress(Options) ->
     case get_opt(progress, Options) of
-	dots ->
-	    fun(_, _) -> io:format(standard_error, "..", []) end;
-	numeric ->
-	    fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
-	none ->
-	    fun(_, _) -> ok end;
-	Other ->
-	    illegal_option("progress", Other)
+	dots -> fun(_, _) -> io:format(standard_error, "..", []) end;
+	numeric -> fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
+	none -> fun(_, _) -> ok end;
+	rds -> fun(_, _) -> ok end; %% TODO: implement
+	Other -> illegal_option("progress", Other)
     end.
 
 create_score(Options) ->
     case get_opt(score, Options) of
-	info ->
-	    rr_tree:info();
-	gini ->
-	    rr_tree:gini();
-	Other ->
-	    illegal_option("score", Other)
-		
+	info -> rr_tree:info();
+	gini -> rr_tree:gini();
+	Other -> illegal_option("score", Other)		
     end.
 
 get_no_features(TotalNoFeatures, Options) ->
     case get_opt(no_features, Options) of
-	default ->
-	    round(math:log(TotalNoFeatures)/math:log(2)) + 1;
-	sqrt ->
-	    round(math:sqrt(TotalNoFeatures));
+	default -> round(math:log(TotalNoFeatures)/math:log(2)) + 1;
+	sqrt -> round(math:sqrt(TotalNoFeatures));
 	X when is_number(X), X > 0 ->
 	    X;
 	Other ->

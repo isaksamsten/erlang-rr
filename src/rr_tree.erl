@@ -12,6 +12,7 @@
 	 evaluate_model/3,
 	 predict/4,
 	 random_split/4,
+	 deterministic_split/4,
 	 example_depth_stop/2,
 	 info/0,
 	 gini/0,
@@ -78,7 +79,8 @@ predict(ExId, #rr_node{id=NodeNr,
     end.
 	    
 %% @private induce a decision tree
--spec build_decision_node(Features::features(), Examples::examples(), Importance::dict(), Total::number(), Error::number(), #rr_conf{}, []) -> {tree(), dict(), number()}.
+-spec build_decision_node(Features::features(), Examples::examples(), Importance::dict(), Total::number(), 
+			  Error::number(), #rr_conf{}, []) -> {tree(), dict(), number()}.
 build_decision_node([], [], Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, [], error), Importance, Total};
 build_decision_node([], Examples, Importance, Total, _Error, _, Id) ->
@@ -138,13 +140,10 @@ laplace(C, N) ->
 random_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
-%% deterministic_split({numeric, _} = Feature, Examples, #rr_conf{score=Score, 
-%% 							       distribute=Distribute, 
-%% 							       missing_values=Missing}) ->
-%%     rr_example:split({Feature, Score}, Examples, Distribute, Missing);
-%% deterministic_split(Feature, Examples, #rr_conf{distribute=Distribute, 
-%% 						missing_values=Missing}) ->
-%%     rr_example:split(Feature, Examples, Distribute, Missing).
+deterministic_split({numeric, _} = Feature, Examples, Distribute, Missing) ->
+    rr_example:split({Feature, info()}, Examples, Distribute, Missing);
+deterministic_split(Feature, Examples, Distribute, Missing) ->
+    rr_example:split(Feature, Examples, Distribute, Missing).
 
 
 %% all_split(F, E, T, C) ->
@@ -201,7 +200,11 @@ info({right, Right}, Total) ->
     
 info_content(Side, Total) ->
     NoSide = rr_example:count(Side),
-    Total * (NoSide / Total) * entropy(Side).
+    if NoSide > 0 ->
+	    Total * (NoSide / Total) * entropy(Side);
+       true ->
+	    0.0
+    end.
         
 %% @doc calculate the entropy
 -spec entropy(examples()) -> number().
@@ -211,6 +214,8 @@ entropy(Examples) ->
 
 entropy(Counts, Total) ->
     -1 * lists:foldl(fun (0.0, Count) ->
+			     Count;
+			 (0, Count) ->
 			     Count;
 			 (Class, Count) ->
 			     Fraction = Class / Total,

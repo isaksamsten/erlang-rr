@@ -34,7 +34,7 @@ evaluate_model(_Rule, _Examples, _Conf) ->
     ok.
 
 %% @doc TODO: make correct implementation
-predict(ExId, {_, Class} = Rule, _Conf, Acc) ->
+predict(ExId, {_, Class} = Rule, _Conf, _Acc) ->
     case evaluate_rule(Rule, ExId) of
 	left ->
 	    {{Class, 1.0}, []};
@@ -70,7 +70,10 @@ generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score,
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
     Coverage = rr_example:coverage(Binary),
-    {Rules, _} = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=RuleScore(Coverage, NoClasses)}, {[], inf}),
+    {Rules, _} = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{
+							       score=RuleScore(Coverage, NoClasses),
+							       split=fun rr_tree:deterministic_split/4
+							      }, {[], inf}),
     Rule = {rule, {Rules, Class}, length(Rules)},
     {_Threshold, ExSplit} = Split(Rule, Examples, Distribute, Missing),
     #rr_candidate{feature=Rule, score=Score(ExSplit, Total), split=ExSplit}.
@@ -92,7 +95,7 @@ separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}) ->
 			    {[Rule|Rules], Covered};
 			{Pos, _} when Pos =< 0 ->
 			    {Rules, Covered};
-			NewCoverage ->
+			_NewCoverage ->
 			    separate_and_conquer(Features -- [Feature], Covered, Total, Conf, {[Rule|Rules], NewScore})
 		    end;
 		false ->
@@ -145,7 +148,7 @@ learn_ruleset_for_class(Features, Examples, Class, Conf, Acc) ->
 	    [{Rules, Class}|Acc];
 	{Pos, _} when Pos =< 0 ->
 	    Acc;
-	C -> 
+	_C -> 
 	    NotCovered = rr_example:remove_covered(Examples, Coverage),
 	    learn_ruleset_for_class(Features, NotCovered, Class, Conf, [{Rules, Class}|Acc])
     end.
