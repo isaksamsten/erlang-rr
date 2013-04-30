@@ -285,10 +285,10 @@ evaluate(Dict, NoTestExamples) ->
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
-			     ({_, No, A}, Sum) -> 
-				 Sum + No/NoTestExamples*A;
 			     ({_, 'n/a', _}, Sum) -> 
-				 Sum
+				 Sum;
+			     ({_, No, A}, Sum) -> 
+				 Sum + No/NoTestExamples*A			     
 			 end, 0, Auc),
     Precision = rr_eval:precision(Dict),
     Brier = rr_eval:brier(Dict, NoTestExamples),
