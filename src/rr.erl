@@ -403,23 +403,29 @@ create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
 	    Factor = get_opt(weight_factor, Options),
 	    rr_branch:random_correlation(NoFeatures, Factor);
 	rule ->
-	    NoRules = get_no_rules(Options, NoFeatures),
+	    {NewNoFeatures, NoRules} = get_no_rules(Options, NoFeatures),
 	    RuleScore = create_rule_score(Options),
-	    rr_branch:rule(NoFeatures, NoRules, RuleScore); 
+	    rr_branch:rule(NewNoFeatures, NoRules, RuleScore); 
 	random_rule ->
 	    Factor = get_opt(weight_factor, Options),
-	    NoRules = get_no_rules(Options, NoFeatures),
+	    {NewNoFeatures, NoRules} = get_no_rules(Options, NoFeatures),
 	    RuleScore = create_rule_score(Options),
-	    rr_branch:random_rule(NoFeatures, NoRules, RuleScore, Factor);
+	    rr_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
 	false -> 
 	    rr_branch:subset(NoFeatures)
     end.
 
 get_no_rules(Options, NoFeatures) ->
     case get_opt(no_rules, Options) of
-	default -> NoFeatures div 2;
-	same -> NoFeatures;
-	X when is_number(X), X > 0 -> X;
+	sh -> {NoFeatures, NoFeatures div 2};
+	ss -> {NoFeatures, NoFeatures};
+	sd -> {NoFeatures, NoFeatures * 2};
+	ds -> {NoFeatures * 2, NoFeatures};
+	dd -> {NoFeatures * 2, NoFeatures * 2};
+	dh -> {NoFeatures * 2, NoFeatures div 2};
+	hh -> {NoFeatures div 2, NoFeatures div 2};
+	hs -> {NoFeatures div 2, NoFeatures};
+	hd -> {NoFeatures div 2, NoFeatures * 2};	
 	Other ->
 	    illegal_option("no-rules", Other)
     end.
