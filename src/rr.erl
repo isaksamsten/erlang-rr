@@ -152,9 +152,7 @@ main(Args) ->
     Logger(info, "Loading '~s' on ~p core(s)", [InputFile, Cores]),
 
     Csv = csv:binary_reader(InputFile),
-    {Features, Examples0} = timer:tc(fun() -> rr_example:load(Csv, Cores) end),
-    io:format("~p ~n", [Features]),
-    halt(),
+    {Features, Examples0} = rr_example:load(Csv, Cores),
     Examples = rr_example:shuffle_dataset(Examples0),
     %% Dict = rr_example:generate_folds(Examples, 10),
     %% {Test, Train} = rr_example:merge_folds(Dict, 1),
