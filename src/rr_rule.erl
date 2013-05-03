@@ -7,7 +7,7 @@
 
 -module(rr_rule).
 -author('isak-kar@dsv.su.se').
--export([best/5,
+-export([best/7,
 	 distribute_weighted/2,
 	 evaluate_rule/2,
 	 laplace/2,
@@ -17,7 +17,7 @@
 	 generate_model/3,
 	 evaluate_model/3,
 	 predict/4
- ]).
+	]).
 
 %% @headerfile "rr_tree.hrl"
 -include("rr_tree.hrl").
@@ -34,7 +34,7 @@ evaluate_model(_Rule, _Examples, _Conf) ->
     ok.
 
 %% @doc TODO: make correct implementation
-predict(ExId, {_, Class} = Rule, _Conf, Acc) ->
+predict(ExId, {_, Class} = Rule, _Conf, _Acc) ->
     case evaluate_rule(Rule, ExId) of
 	left ->
 	    {{Class, 1.0}, []};
@@ -43,16 +43,16 @@ predict(ExId, {_, Class} = Rule, _Conf, Acc) ->
     end.
 
 %% @doc generate one best rule
--spec best(features(), examples(), number(), Conf::#rr_conf{}, integer()) -> #rr_candidate{}.
-best(Features, Examples, Total, Conf, NoFeatures) ->
-    OneRule = generate_rule(Features, Examples, Total, Conf, NoFeatures),
-    best_rule(Features, Examples, Total, Conf, NoFeatures, NoFeatures, OneRule).
+-spec best(features(), examples(), number(), Conf::#rr_conf{}, integer(), integer(), score_fun()) -> #rr_candidate{}.
+best(Features, Examples, Total, Conf, NoFeatures, NoRules, RuleScore) ->
+    OneRule = generate_rule(Features, Examples, Total, Conf, NoFeatures, RuleScore),
+    best_rule(Features, Examples, Total, Conf, NoFeatures, NoRules, RuleScore, OneRule).
 
-best_rule(_, _, _, _, _, 0, Best) ->
+best_rule(_, _, _, _, _, 0, _, Best) ->
     Best;
-best_rule(Features, Examples, Total, Conf, NoFeatures, N, #rr_candidate{score=Score} = Cand) ->
-    NewCand = generate_rule(Features, Examples, Total, Conf, NoFeatures),
-    best_rule(Features, Examples, Total, Conf, NoFeatures, N - 1, 
+best_rule(Features, Examples, Total, Conf, NoFeatures, N, RuleScore,  #rr_candidate{score=Score} = Cand) ->
+    NewCand = generate_rule(Features, Examples, Total, Conf, NoFeatures, RuleScore),
+    best_rule(Features, Examples, Total, Conf, NoFeatures, N - 1, RuleScore,
 	      case NewCand#rr_candidate.score < Score of
 		  true ->
 		      NewCand;
@@ -61,16 +61,19 @@ best_rule(Features, Examples, Total, Conf, NoFeatures, N, #rr_candidate{score=Sc
 	      end).
 
 %% @private generate a rule predicting a random class
--spec generate_rule(features(), examples(), number(), Conf::#rr_conf{}, number()) -> #rr_candidate{}.
+-spec generate_rule(features(), examples(), number(), Conf::#rr_conf{}, number(), score_fun()) -> #rr_candidate{}.
 generate_rule(Features, Examples, Total, #rr_conf{split=Split, score=Score, 
 						  distribute = Distribute, 
-						  missing_values=Missing} = Conf, NoFeatures) ->
+						  missing_values=Missing} = Conf, NoFeatures, RuleScore) ->
     NoClasses = length(Examples),
     {Class, _, _} = lists:nth(random:uniform(NoClasses), Examples),
     Subset = rr_example:random_features(Features, NoFeatures),
     Binary = rr_example:to_binary(Class, Examples),
     Coverage = rr_example:coverage(Binary),
-    {Rules, _} = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{score=laplace(Coverage, NoClasses)}, {[], inf}),
+    {Rules, _} = separate_and_conquer(Subset, Binary, Total, Conf#rr_conf{
+							       score=RuleScore(Coverage, NoClasses),
+							       split=fun rr_tree:deterministic_split/4
+							      }, {[], inf}),
     Rule = {rule, {Rules, Class}, length(Rules)},
     {_Threshold, ExSplit} = Split(Rule, Examples, Distribute, Missing),
     #rr_candidate{feature=Rule, score=Score(ExSplit, Total), split=ExSplit}.
@@ -92,7 +95,7 @@ separate_and_conquer(Features, Examples, Total, Conf, {Rules, Score}) ->
 			    {[Rule|Rules], Covered};
 			{Pos, _} when Pos =< 0 ->
 			    {Rules, Covered};
-			NewCoverage ->
+			_NewCoverage ->
 			    separate_and_conquer(Features -- [Feature], Covered, Total, Conf, {[Rule|Rules], NewScore})
 		    end;
 		false ->
@@ -145,7 +148,7 @@ learn_ruleset_for_class(Features, Examples, Class, Conf, Acc) ->
 	    [{Rules, Class}|Acc];
 	{Pos, _} when Pos =< 0 ->
 	    Acc;
-	C -> 
+	_C -> 
 	    NotCovered = rr_example:remove_covered(Examples, Coverage),
 	    learn_ruleset_for_class(Features, NotCovered, Class, Conf, [{Rules, Class}|Acc])
     end.

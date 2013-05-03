@@ -58,8 +58,13 @@ variable_importance(Model, #rr_conf{base_learner={Classifiers, _}}) ->
 	    update_variable_importance(Importance, dict:new(), Classifiers)
     end.
 	    
-	
-
+%% @todo fix this	
+qeury(Model, Conf, {Method, TreeFun, CollectFun}) ->
+    Model ! {Method, TreeFun, self()},
+    receive
+	{Method, Model, Return} ->
+	    CollectFun(Return, Conf)
+    end.
 
 predict_all(_, [], _, _, Dict) ->
     Dict;
@@ -119,6 +124,11 @@ submit_prediction(Processes, Coordinator, ExId) ->
 submit_importance(Processes, Coordinator) ->
     lists:foreach(fun(Process) -> Process ! {importance, Coordinator, Process} end, Processes),
     collect_task(importance, Processes, Coordinator, []).
+
+submit_query(Method, TreeFun, Processes, Coordinator) ->
+    lists:foreach(fun(Process) -> Process ! {Method, TreeFun, Coordinator, Process} end, Processes),
+    collect_task(Method, Processes, Coordinator, []).
+			   
 			  
 
 %%
@@ -136,7 +146,11 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
 	    Parent ! {importance, Coordinator, Importance},
 	    evaluation_coordinator(Parent, Coordinator, Processes);
 	{exit, Parent} ->
-	    Parent ! {done, self()} %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
+	    Parent ! {done, self()}; %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
+	{Method, TreeFun, Parent}  ->
+	    Result = submit_query(Method, TreeFun, Processes, Coordinator),
+	    Parent ! {Method, Coordinator, Result},
+	    evaluation_coordinator(Parent, Coordinator, Processes)		
     end.
 
 %%
@@ -217,7 +231,10 @@ base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models
 	    Coordinator ! {importance, Coordinator, Self, dict:to_list(VariableImportance)},
 	    base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models);
 	{exit, Coordinator, Self} ->
-	    done
+	    done;  
+	{Method, TreeFun, Coordinator, Self} ->
+	    Coordinator ! {Method, Coordinator, Self, TreeFun(Models, Base, Conf)},
+	    base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models)
     end.
 
 %%

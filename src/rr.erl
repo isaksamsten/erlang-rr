@@ -52,6 +52,8 @@
 
 	 {score,          undefined,    "score",       {atom, info},
 	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info' and 'gini', where 'info' denotes information entropy and 'gini' the gini-impurity."},
+	 {rule_score,     undefined,    "rule-score",  {atom, laplace},
+	  "Defines the measure, which should be minimized, for evaluating the goodness of a specific rule. Available otpions include: 'm', 'laplace' and 'purity', where 'm' denotes the m-estimate"},
 	 {classifiers,    $n,           "no-trees",    {integer, 10},
 	  "Defines the number of classifiers (trees) to build."},
 
@@ -70,10 +72,6 @@
 	  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k=inf times."},
 	 {resample,       undefined,    "resample",    undefined,
 	  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k (determined by 'no-resamples') times."},
-	 {sqrt,           undefined,    "sqrt",        undefined,
-	  "Select sqrt(F) features, where F is the total number of features, at each split point and from these select the most promising. It is often a good strategy to use this option if your dataset has many (potentially) irrelevant predictors."},
-	 {weighted,       undefined,    "weighted",    undefined,
-	  "Calculate the most promising attributes before model induction, then bias the selection of features towards those that provide the highest a-priori information"},
 
 	 {missing,        $m,           "missing",     {atom, random},
 	  "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
@@ -93,8 +91,10 @@
 	 {min_gain,       undefined,    "min-gain",    {float, 0},
 	  "Minimum allowed gain for not re-sampling (if the 'resample'-argument is specified)."},
 	 
-	 {no_features,    undefined,    "no-features", {integer, -1},
-	  "Number of features to inspect at each split. If set to -1 log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
+	 {no_features,    undefined,    "no-features", {atom, default},
+	  "Number of features to inspect at each split. If set to log log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
+	 {no_rules,       undefined,    "no-rules",    {atom, default},
+	  "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used other wise n is used."},
 
 	 {output_predictions, $y,       "output-predictions", {boolean, false},
 	  "Write the predictions to standard out."},
@@ -282,15 +282,15 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
 			    end
 		    end, 0, Avg) / Folds,
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
-		    
+
 evaluate(Dict, NoTestExamples) ->
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
-			     ({_, No, A}, Sum) -> 
-				 Sum + No/NoTestExamples*A;
 			     ({_, 'n/a', _}, Sum) -> 
-				 Sum
+				 Sum;
+			     ({_, No, A}, Sum) -> 
+				 Sum + No/NoTestExamples*A			     
 			 end, 0, Auc),
     Precision = rr_eval:precision(Dict),
     Brier = rr_eval:brier(Dict, NoTestExamples),
@@ -306,12 +306,9 @@ create_bagger(Options) ->
 
 create_distribute(Options) ->	
     case get_opt(distribute, Options) of
-	default ->
-	    fun rr_example:distribute/2;
-	rulew ->
-	    fun rr_rule:distribute_weighted/2;
-	Other ->
-	    illegal_option("distribute", Other)
+	default -> fun rr_example:distribute/2;
+	rulew -> fun rr_rule:distribute_weighted/2;
+	Other -> illegal_option("distribute", Other)
     end.
 
 create_logger(Options) ->
@@ -340,87 +337,60 @@ create_logger(Options) ->
 
 create_missing_values(Options) ->
     case get_opt(missing, Options) of
-	random ->
-	    fun rr_missing:random/5;
-	randomw ->
-	    fun rr_missing:random_weighted/5;
-	weighted ->
-	    fun rr_missing:weighted/5;
-	partition ->
-	    fun rr_missing:random_partition/5;
-	wpartition ->
-	    fun rr_missing:weighted_partition/5;
-	proximity ->
-	    fun rr_missing:proximity/5;
-	right ->
-	    fun rr_missing:right/5;
-	left ->
-	    fun rr_missing:left/5;
-	ignore ->
-	    fun rr_missing:ignore/5;
+	random -> fun rr_missing:random/5;
+	randomw -> fun rr_missing:random_weighted/5;
+	weighted -> fun rr_missing:weighted/5;
+	partition -> fun rr_missing:random_partition/5;
+	wpartition -> fun rr_missing:weighted_partition/5;
+	proximity -> fun rr_missing:proximity/5;
+	right -> fun rr_missing:right/5;
+	left -> fun rr_missing:left/5;
+	ignore -> fun rr_missing:ignore/5;
 	Other ->
 	    illegal_option("missing", Other)
     end.
 
 create_output(Options) ->
     case get_opt(output, Options) of
-	default ->
-	    rr_result:default();
-	csv ->
-	    rr_result:csv();
-	Other ->
-	    illegal_option("output", Other)
+	default -> rr_result:default();
+	csv -> rr_result:csv();
+	Other -> illegal_option("output", Other)
     end.
 	    
 
 create_experiment(Options) ->
     case any_opt([cv, split, build, evaluate, proximity], Options) of
-	split ->
-	    fun run_split/4;
-	cv ->
-	    fun run_cross_validation/4;
-	build ->
-	    fun run_build_process/4;
-	evaluate ->
-	    ok;
-	false ->		
-	    illegal("No method selected. Please use either 'split', 'cross-validate' or 'build' argument")
+	split -> fun run_split/4;
+	cv -> fun run_cross_validation/4;
+	build -> fun run_build_process/4;
+	evaluate -> ok;
+	false -> illegal("No method selected. Please use either 'split', 'cross-validate' or 'build' argument")
     end.
 
 create_progress(Options) ->
     case get_opt(progress, Options) of
-	dots ->
-	    fun(_, _) -> io:format(standard_error, "..", []) end;
-	numeric ->
-	    fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
-	none ->
-	    fun(_, _) -> ok end;
-	Other ->
-	    illegal_option("progress", Other)
+	dots -> fun(_, _) -> io:format(standard_error, "..", []) end;
+	numeric -> fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
+	none -> fun(_, _) -> ok end;
+	rds -> fun(_, _) -> ok end; %% TODO: implement
+	Other -> illegal_option("progress", Other)
     end.
 
 create_score(Options) ->
     case get_opt(score, Options) of
-	info ->
-	    rr_tree:info();
-	gini ->
-	    rr_tree:gini();
-	Other ->
-	    illegal_option("score", Other)
-		
+	info -> rr_tree:info();
+	gini -> rr_tree:gini();
+	Other -> illegal_option("score", Other)		
     end.
 
 get_no_features(TotalNoFeatures, Options) ->
-    case any_opt([sqrt, no_features], Options) of
-	false ->
-	    case get_opt(no_features, Options) of
-		X when X =< 0 ->
-		    round(math:log(TotalNoFeatures)/math:log(2)) + 1;
-		X ->
-		    X
-	    end;
-	sqrt ->
-	    round(math:sqrt(TotalNoFeatures))
+    case get_opt(no_features, Options) of
+	default -> round(math:log(TotalNoFeatures)/math:log(2)) + 1;
+	sqrt -> round(math:sqrt(TotalNoFeatures));
+	X when is_number(X), X > 0 ->
+	    X;
+	Other ->
+	    illegal_option("no-features", Other)
     end.
 
 create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
@@ -435,12 +405,39 @@ create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
 	    Factor = get_opt(weight_factor, Options),
 	    rr_branch:random_correlation(NoFeatures, Factor);
 	rule ->
-	    rr_branch:rule(NoFeatures); %% TODO: user selected rule score function
+	    {NewNoFeatures, NoRules} = get_no_rules(Options, NoFeatures),
+	    RuleScore = create_rule_score(Options),
+	    rr_branch:rule(NewNoFeatures, NoRules, RuleScore); 
 	random_rule ->
 	    Factor = get_opt(weight_factor, Options),
-	    rr_branch:random_rule(NoFeatures, Factor);
+	    {NewNoFeatures, NoRules} = get_no_rules(Options, NoFeatures),
+	    RuleScore = create_rule_score(Options),
+	    rr_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
 	false -> 
 	    rr_branch:subset(NoFeatures)
+    end.
+
+get_no_rules(Options, NoFeatures) ->
+    case get_opt(no_rules, Options) of
+	sh -> {NoFeatures, NoFeatures div 2};
+	ss -> {NoFeatures, NoFeatures};
+	sd -> {NoFeatures, NoFeatures * 2};
+	ds -> {NoFeatures * 2, NoFeatures};
+	dd -> {NoFeatures * 2, NoFeatures * 2};
+	dh -> {NoFeatures * 2, NoFeatures div 2};
+	hh -> {NoFeatures div 2, NoFeatures div 2};
+	hs -> {NoFeatures div 2, NoFeatures};
+	hd -> {NoFeatures div 2, NoFeatures * 2};	
+	Other ->
+	    illegal_option("no-rules", Other)
+    end.
+    
+create_rule_score(Options) ->
+    case get_opt(rule_score, Options) of
+	laplace -> fun rr_rule:laplace/2;
+	m -> fun rr_rule:m_estimate/2;
+	purity -> fun rr_rule:purity/2;
+	Other -> illegal_option("rule-score", Other)					  
     end.
 
 illegal() ->
