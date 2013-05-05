@@ -112,7 +112,7 @@
 main(Args) ->
     rr_example:init(),
     rr_ensemble:init(),
-    random:seed(now()),
+   % random:seed(now()),
 
     Options = case getopt:parse(?CMD_SPEC, Args) of
 		  {ok, Parsed} -> 
@@ -261,7 +261,7 @@ run_cross_validation(Features, Examples, #rr_conf{output=Output} = Conf, Options
 		    Evaluate			
 	    end, Folds, Examples),
     Output(method, {"Fold", average}),
-    output_evaluation(average_cross_validation(Avg, Folds, [accuracy, auc, brier, oob_accuracy], []), Conf, Options),
+    output_evaluation(average_cross_validation(Avg, Folds, [accuracy, auc, oob_accuracy, brier], []), Conf, Options),
     output_predictions(Examples, Conf, Options).
 
 average_cross_validation(_, _, [], Acc) ->
