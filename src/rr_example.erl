@@ -61,9 +61,8 @@ parse_examples(File, Cores, ClassId, Types) ->
 
 %% @private process that gets a line from the "File" and process each example
 parse_example_process(Parent, File, ClassId, Types, Acc) ->
-    case csv:get_next_raw(File) of
-	{ok, Raw, Id0} ->
-	    Example = csv:parse_binary_line(Raw),
+    case csv:next_line(File) of
+	{ok, Example, Id0} ->
 	    {Class, Attributes} = take_feature(Example, ClassId),
 	    Id = Id0 - 2, %% NOTE: subtracting headers 
 	    ets:insert(examples, format_features(Attributes, Types, 1, [Id])),

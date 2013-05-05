@@ -57,12 +57,21 @@ variable_importance(Model, #rr_conf{base_learner={Classifiers, _}}) ->
 	{importance, Model, Importance} ->
 	    update_variable_importance(Importance, dict:new(), Classifiers)
     end.
-	    
-%% @todo fix this	
-qeury(Model, Conf, {Method, TreeFun, CollectFun}) ->
-    Model ! {Method, TreeFun, self()},
+
+oob_accuracy(Model, Conf) ->
+    TreeFun = fun(BaseModels, _, _) ->
+		      lists:foldl(fun ({_, _, A}, Acc) -> [A|Acc] end, [], BaseModels)
+	      end,
+    CollectFun = fun (OOBA, #rr_conf{base_learner={C, _}}) ->
+			 lists:sum(OOBA) / C
+		 end,
+    perform(Model, Conf, {oob_accuracy, TreeFun, CollectFun}).
+
+%% @doc perform an action on each model in the ensemble
+perform(Model, Conf, {Method, TreeFun, CollectFun}) ->
+    Model ! {q, Method, TreeFun, self()},
     receive
-	{Method, Model, Return} ->
+	{q, Method, Model, Return} ->
 	    CollectFun(Return, Conf)
     end.
 
@@ -126,8 +135,8 @@ submit_importance(Processes, Coordinator) ->
     collect_task(importance, Processes, Coordinator, []).
 
 submit_query(Method, TreeFun, Processes, Coordinator) ->
-    lists:foreach(fun(Process) -> Process ! {Method, TreeFun, Coordinator, Process} end, Processes),
-    collect_task(Method, Processes, Coordinator, []).
+    lists:foreach(fun(Process) -> Process ! {q, Method, TreeFun, Coordinator, Process} end, Processes),
+    collect_task({q, Method}, Processes, Coordinator, []).
 			   
 			  
 
@@ -147,9 +156,9 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
 	    evaluation_coordinator(Parent, Coordinator, Processes);
 	{exit, Parent} ->
 	    Parent ! {done, self()}; %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
-	{Method, TreeFun, Parent}  ->
+	{q, Method, TreeFun, Parent}  ->
 	    Result = submit_query(Method, TreeFun, Processes, Coordinator),
-	    Parent ! {Method, Coordinator, Result},
+	    Parent ! {q, Method, Coordinator, Result},
 	    evaluation_coordinator(Parent, Coordinator, Processes)		
     end.
 
@@ -201,11 +210,12 @@ base_build_process(Coordinator, Base, Features, Examples,
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id} ->
-	    {Bag, _OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
+	    {Bag, OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
 	    {Model, TreeVariableImportance, ImportanceSum} = Base:generate_model(Features, Bag, Conf),
 	    
 	    NewVariableImportance = update_variable_importance(TreeVariableImportance, VariableImportance, ImportanceSum),
-	    ets:insert(models, {Id, Model}),
+	    OOBAccuracy = rr_eval:accuracy(Base:evaluate_model(Model, OutBag, Conf)),
+	    %ets:insert(models, {Id, Model}), NOTE: collect these later
 	    Rem = if T > 10 -> round(T/10); true -> 1 end,
 	    case Id rem Rem of
 		0 ->
@@ -213,7 +223,7 @@ base_build_process(Coordinator, Base, Features, Examples,
 		_ ->
 		    ok
 	    end,
-	    base_build_process(Coordinator, Base, Features, Examples, Conf, NewVariableImportance, [{Id, Model}|Models]);
+	    base_build_process(Coordinator, Base, Features, Examples, Conf, NewVariableImportance, [{Id, Model, OOBAccuracy}|Models]);
 	{completed, Coordinator} ->
 	    base_evaluator_process(Coordinator, self(), Base, Conf, VariableImportance, Models)
     end.
@@ -232,20 +242,18 @@ base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models
 	    base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models);
 	{exit, Coordinator, Self} ->
 	    done;  
-	{Method, TreeFun, Coordinator, Self} ->
-	    Coordinator ! {Method, Coordinator, Self, TreeFun(Models, Base, Conf)},
+	{q, Method, TreeFun, Coordinator, Self} ->
+	    Coordinator ! {{q, Method}, Coordinator, Self, TreeFun(Models, Base, Conf)},
 	    base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models)
     end.
 
-%%
-%% Use models built using "Base" to predict the class of "ExId"
-%%
+%% @private use models built using "Base" to predict the class of "ExId"
 make_prediction(Models, Base, ExId, Conf) ->
     make_prediction(Models, Base, ExId, Conf, []).
 
 make_prediction([], _Base, _ExId, _Conf, Acc) ->
     Acc;
-make_prediction([{ModelNr, Model}|Models], Base, ExId, Conf, Acc) ->
+make_prediction([{ModelNr, Model, _}|Models], Base, ExId, Conf, Acc) ->
     {Prediction, NodeNr} = Base:predict(ExId, Model, Conf, []),
     make_prediction(Models, Base, ExId, Conf, [{Prediction, [ModelNr|NodeNr]}|Acc]).
 

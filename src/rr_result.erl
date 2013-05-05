@@ -33,6 +33,8 @@ csv_writer(evaluation, Data) ->
 			  io:format("~p,", [Avg]);
 		      ({auc, Auc}) ->
 			  io:format("~p,", [Auc]);
+		      ({oob_accuracy, OOB}) ->
+			  io:format("~p,", [OOB]);
 		      ({precision, Precision}) ->
 			  ok;
 		      ({brier, Brier}) ->
@@ -93,6 +95,8 @@ default_writer(evaluation, Data) ->
 			  lists:foreach(fun({Class, P}) ->
 						io:format("  ~s: ~p ~n", [Class, P])
 					end, Precision);
+		      ({oob_accuracy, OOB}) ->
+			  io:format("Base OOB accuracy: ~p ~n", [OOB]);
 		      ({brier, Brier}) ->
 			  io:format("Brier: ~p ~n", [Brier]);
 		      (_) ->

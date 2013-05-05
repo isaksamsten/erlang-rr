@@ -48,8 +48,8 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
     {Prediction, _NodeNr} = predict(Example, Model, Conf, []),
     predict_all(Actual, Rest, Model, Conf,
 		dict:update(Actual, fun (Predictions) ->
-					    [Prediction|Predictions]
-				    end, [Prediction], Dict)).
+					    [{Prediction, 0}|Predictions] 
+				    end, [{Prediction, 0}], Dict)). %% note: no other prob (fix?)
 
 %% @doc predict an example according to a decision tree
 -spec predict(ExId::exid(), tree(), #rr_conf{}, []) -> prediction().

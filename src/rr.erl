@@ -237,10 +237,7 @@ run_split(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
     {Train, Test} = rr_example:split_dataset(Examples, Split),
     Model = rr_ensemble:generate_model(Features, Train, Conf),
 
-    
-    Dict = rr_ensemble:evaluate_model(Model, Test, Conf),
-    Evaluation = evaluate(Dict, rr_example:count(Test)),
-    
+    Evaluation = evaluate(Model, Test, Conf),
     Output(method, {"Split", Split}),
     output_variable_importance(Model, Conf, Options),
     output_predictions(Test, Conf, Options),
@@ -259,13 +256,12 @@ run_cross_validation(Features, Examples, #rr_conf{output=Output} = Conf, Options
 		    io:format(standard_error, "*** Fold ~p *** ~n", [Fold]),
 		    Output(method, {"Fold", Fold}),
 		    M = rr_ensemble:generate_model(Features, Train0, Conf),
-		    D = rr_ensemble:evaluate_model(M, Test0, Conf),
-		    Evaluate = evaluate(D, rr_example:count(Test0)),
+		    Evaluate = evaluate(M, Test0, Conf),
 		    output_evaluation(Evaluate, Conf, Options),
 		    Evaluate			
 	    end, Folds, Examples),
     Output(method, {"Fold", average}),
-    output_evaluation(average_cross_validation(Avg, Folds, [accuracy, auc, brier], []), Conf, Options),
+    output_evaluation(average_cross_validation(Avg, Folds, [accuracy, auc, brier, oob_accuracy], []), Conf, Options),
     output_predictions(Examples, Conf, Options).
 
 average_cross_validation(_, _, [], Acc) ->
@@ -281,7 +277,11 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
 		    end, 0, Avg) / Folds,
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
 
-evaluate(Dict, NoTestExamples) ->
+evaluate(Model, Test, Conf) ->
+    NoTestExamples = rr_example:count(Test),
+    Dict = rr_ensemble:evaluate_model(Model, Test, Conf),
+    OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
+
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
@@ -292,7 +292,11 @@ evaluate(Dict, NoTestExamples) ->
 			 end, 0, Auc),
     Precision = rr_eval:precision(Dict),
     Brier = rr_eval:brier(Dict, NoTestExamples),
-    [{accuracy, Accuracy}, {auc, Auc, AvgAuc}, {precision, Precision}, {brier, Brier}].
+    [{accuracy, Accuracy}, 
+     {auc, Auc, AvgAuc}, 
+     {precision, Precision}, 
+     {oob_accuracy, OOBAccuracy},
+     {brier, Brier}].
 
 create_bagger(Options) ->
     case any_opt([subagging, bagging], Options) of
