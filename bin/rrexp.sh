@@ -16,7 +16,7 @@ case $REPLY in
 	for f in $FOLDER/*.txt; do  
 	    for ((i=1; i<=$ITERATIONS; i++)); do
 		echo "info: running $f iteration $i/$ITERATIONS"
-		TMP=`./rr -i "$f" -o csv "$@" 2>$ /dev/null`
+		TMP=`./rr -i "$f" -o csv "$@"`
 		while read -r line; do
 		    echo "Iteration $i, $EX, $line" >> "$OUTPUT"
 		done  <<< "$TMP";
