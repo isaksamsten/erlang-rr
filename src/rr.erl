@@ -10,7 +10,7 @@
 
 -define(DATE, "2013-04-15").
 -define(MAJOR_VERSION, "0").
--define(MINOR_VERSION, "4").
+-define(MINOR_VERSION, "5").
 -define(REVISION, "1.0").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
@@ -93,8 +93,8 @@
 	 
 	 {no_features,    undefined,    "no-features", {atom, default},
 	  "Number of features to inspect at each split. If set to log log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
-	 {no_rules,       undefined,    "no-rules",    {atom, default},
-	  "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used other wise n is used."},
+	 {no_rules,       undefined,    "no-rules",    {atom, ss},
+	  "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used otherwise n is used."},
 
 	 {output_predictions, $y,       "output-predictions", {boolean, false},
 	  "Write the predictions to standard out."},
