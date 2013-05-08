@@ -140,25 +140,14 @@ laplace(C, N) ->
 random_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
+%% @doc make a determinisc split in the numeric data set
 deterministic_split({numeric, _} = Feature, Examples, Distribute, Missing) ->
     rr_example:split({Feature, info()}, Examples, Distribute, Missing);
 deterministic_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
 
-%% all_split(F, E, T, C) ->
-%%     all_split(F, E, T, C, []).
-
-%% all_split([], _, _, _, Acc) ->
-%%     lists:keysort(1, Acc);
-%% all_split([Feature|Rest], Examples, Total, #rr_conf{score=Score} = Conf, Acc) ->
-%%     NewAcc = case random_split(Feature, Examples, S) of
-%% 		 {_, ExSplit} ->
-%% 		     [{Score(ExSplit, Total), Feature}|Acc]
-%% 	     end,
-%%     all_split(Rest, Examples, Total, Conf, NewAcc).
-
-%% @doc return a scoring function for the gini-importance
+%% @doc return a scoring function for the gini-importance (todo: fix)
 -spec gini() -> score_fun().
 gini() ->
     fun gini/2.

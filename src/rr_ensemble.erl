@@ -15,6 +15,7 @@
 init() ->
     ets:new(models, [public, named_table]).
 
+% @todo collect models and then insert em' into a ets table for saving..
 save_model(Model, File) ->
     Model ! {exit, self()},
     receive
@@ -42,15 +43,13 @@ generate_model(Features, Examples, #rr_conf{
     end.
     
 
-%%
-%% Evaluate "Model" on "Examples"
-%%  Models: Pid to 'evaluator_coordinator'
-%%    
+%% @doc evaluate the performance of Model on Examples
 evaluate_model(Models, Examples, Conf) ->
     lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
 			predict_all(Class, ExampleIds, Models, Conf, Acc)
 		end, dict:new(), Examples). %% TODO: Model ! {exit, self()}
 
+%% @doc get the variable importance
 variable_importance(Model, #rr_conf{base_learner={Classifiers, _}}) ->
     Model ! {importance, self()},
     receive
@@ -58,23 +57,35 @@ variable_importance(Model, #rr_conf{base_learner={Classifiers, _}}) ->
 	    update_variable_importance(Importance, dict:new(), Classifiers)
     end.
 
+%% @doc get the out-of-bag base accuracy
 oob_accuracy(Model, Conf) ->
-    TreeFun = fun(BaseModels, _, _) ->
+    TreeFun = fun(BaseModels, _) ->
 		      lists:foldl(fun ({_, _, A}, Acc) -> [A|Acc] end, [], BaseModels)
 	      end,
-    CollectFun = fun (OOBA, #rr_conf{base_learner={C, _}}) ->
-			 lists:sum(OOBA) / C
-		 end,
-    perform(Model, Conf, {oob_accuracy, TreeFun, CollectFun}).
+    A = perform(Model, Conf, {oob_accuracy, TreeFun, fun lists:append/2}),
+    {C, _} = Conf#rr_conf.base_learner,
+    lists:sum(A)/C.
+
+%% @doc calculate the base Test accuracy for each model
+base_accuracy(Model, Test, Conf) ->
+    TreeFun = fun(BaseModels, #rr_conf{base_learner={_, Base}} = NewConf) ->
+		      lists:foldl(fun({BaseModel, _, _}, Acc) ->
+					  [rr_eval:accuracy(Base:evaluate_model(BaseModel, Test, NewConf))|Acc]
+				  end, [], BaseModels)
+	      end,
+    A = perform(Model, Conf, {base_accuracy, TreeFun, fun lists:append/2}),
+    {C, _} = Conf#rr_conf.base_learner,
+    lists:sum(A)/C.
 
 %% @doc perform an action on each model in the ensemble
 perform(Model, Conf, {Method, TreeFun, CollectFun}) ->
-    Model ! {q, Method, TreeFun, self()},
+    Model ! {q, Method, TreeFun, CollectFun, self()},
     receive
 	{q, Method, Model, Return} ->
-	    CollectFun(Return, Conf)
+	    Return
     end.
 
+%% @doc predict the class all examples
 predict_all(_, [], _, _, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
@@ -83,9 +94,7 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
     predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
 								 [{Prediction, Probs}|Predictions]
 							 end, [{Prediction, Probs}], Dict)).
-%%
-%% Predict 
-%%
+%% @doc predict the class for Example
 predict_majority(Model, Example, #rr_conf{base_learner={N, _}}) ->
     Model ! {evaluate, self(), Example},
     receive
@@ -94,10 +103,8 @@ predict_majority(Model, Example, #rr_conf{base_learner={N, _}}) ->
 	    {hd(Probs), Probs}
     end.
 
-%%
-%% Get the predicted probabilites (i.e. the number of votes/total
-%% number of models)
-%%
+
+%% @doc ge the prediction probabilites for an example
 get_prediction_probabilities(Acc, N) ->
     Dict = lists:foldl(fun ({{Item, _Laplace}, _NodeNr}, Dict) ->
 			       dict:update(Item, fun(Count) -> Count + 1  end, 1, Dict)
@@ -107,9 +114,7 @@ get_prediction_probabilities(Acc, N) ->
 				   [{Class, Count/N}|Probs]
 			   end, [], dict:to_list(Dict))).
 
-%%
-%% Spaws classification and evaluator process
-%%
+%% @doc Spaws classification and evaluator process
 spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf) ->
     Self = self(),
     Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores) end),
@@ -118,32 +123,31 @@ spawn_base_classifiers(Sets, Cores, Features, Examples, Base, Conf) ->
     Coordinator.
     
 
-collect_task(_, [], _, Acc) ->
+%% @doc collects a task 
+collect_task(_, _, [], _, Acc) ->
     Acc;    
-collect_task(Task, Processes, Coordinator, Acc) ->
+collect_task(Task, Collect, Processes, Coordinator, Acc) ->
     receive
 	{Task, Coordinator, Pid, Predictions} ->
-	    collect_task(Task, Processes -- [Pid], Coordinator, Acc ++ Predictions)
+	    collect_task(Task, Collect, Processes -- [Pid], Coordinator, Collect(Acc, Predictions))
     end.
 
+%% @doc submit a prediction task all the model evaluation process
 submit_prediction(Processes, Coordinator, ExId) ->
     lists:foreach(fun(Process) -> Process ! {evaluate, Coordinator, Process, ExId} end, Processes),
-    collect_task(prediction, Processes, Coordinator, []).
+    collect_task(prediction, fun lists:append/2, Processes, Coordinator, []).
 
+%% @doc submit a process for collecting the variable importance from each model
 submit_importance(Processes, Coordinator) ->
     lists:foreach(fun(Process) -> Process ! {importance, Coordinator, Process} end, Processes),
-    collect_task(importance, Processes, Coordinator, []).
+    collect_task(importance, fun lists:append/2, Processes, Coordinator, []).
 
-submit_query(Method, TreeFun, Processes, Coordinator) ->
+%% @doc submit a query to every built model
+submit_query(Method, TreeFun, CollectFun, Processes, Coordinator) ->
     lists:foreach(fun(Process) -> Process ! {q, Method, TreeFun, Coordinator, Process} end, Processes),
-    collect_task({q, Method}, Processes, Coordinator, []).
+    collect_task({q, Method}, CollectFun, Processes, Coordinator, []).
 			   
-			  
-
-%%
-%% Coordinate the processes responsible for building the models, and
-%% now let them evaluate examples
-%%
+%% @doc coordinating the model evaluation
 evaluation_coordinator(Parent, Coordinator, Processes) ->
     receive 
 	{evaluate, Parent, ExId} ->
@@ -156,17 +160,15 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
 	    evaluation_coordinator(Parent, Coordinator, Processes);
 	{exit, Parent} ->
 	    Parent ! {done, self()}; %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
-	{q, Method, TreeFun, Parent}  ->
-	    Result = submit_query(Method, TreeFun, Processes, Coordinator),
+	{q, Method, TreeFun, CollectFun, Parent}  ->
+	    Result = submit_query(Method, TreeFun, CollectFun, Processes, Coordinator),
 	    Parent ! {q, Method, Coordinator, Result},
 	    evaluation_coordinator(Parent, Coordinator, Processes)		
     end.
 
-%%
-%% Transition every build process into an evaluator process
-%%
+%% @doc Transition every build process into an evaluator process
 transition_coordinator(Parent, Coordinator, 0, Acc) ->
-    io:format(standard_error, "~n", []), % Note: separate progress (sorry)
+    io:format(standard_error, "~n", []), % NOTE: separate progress (sorry)
     Parent ! {done, Coordinator},
     evaluation_coordinator(Parent, Coordinator, Acc);
 transition_coordinator(Parent, Coordinator, Cores, Acc) ->
@@ -176,10 +178,7 @@ transition_coordinator(Parent, Coordinator, Cores, Acc) ->
 	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid|Acc])
     end.
 
-%%
-%% coordinates the build process by sending them a notification (and
-%% an id) for building the next tree
-%%
+%% @doc coordinating the build process
 build_coordinator(Parent, Sets, Cores) ->
     build_coordinator(Parent, self(), 1, Sets, Cores).
 
@@ -196,10 +195,8 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores) ->
 	    build_coordinator(Parent, Coordinator, Counter + 1, Sets, Cores)
     end.
 
-%%
-%% Process for building bootap replicas and train "Base". Transitions
-%% into 'base_evaluator_process', at {completed, Coordinator}
-%%
+
+%% @doc transision into 'base_evaluator_process', at {completed, Coordinator}
 base_build_process(Coordinator, Base, Features, Examples, Conf) ->
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A,B,C}),
@@ -215,7 +212,7 @@ base_build_process(Coordinator, Base, Features, Examples,
 	    
 	    NewVariableImportance = update_variable_importance(TreeVariableImportance, VariableImportance, ImportanceSum),
 	    OOBAccuracy = rr_eval:accuracy(Base:evaluate_model(Model, OutBag, Conf)),
-	    %ets:insert(models, {Id, Model}), NOTE: collect these later
+
 	    Rem = if T > 10 -> round(T/10); true -> 1 end,
 	    case Id rem Rem of
 		0 ->
@@ -228,10 +225,7 @@ base_build_process(Coordinator, Base, Features, Examples,
 	    base_evaluator_process(Coordinator, self(), Base, Conf, VariableImportance, Models)
     end.
 
-%%
-%% Recives, {evaluate, Coordinator, ExId}, where "ExId" is an
-%% example. The correct class for "ExId" is predicted using "Models"
-%%
+%% @doc enable inspection of generated models
 base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models)->
     receive
 	{evaluate, Coordinator, Self, ExId} ->
@@ -243,7 +237,7 @@ base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models
 	{exit, Coordinator, Self} ->
 	    done;  
 	{q, Method, TreeFun, Coordinator, Self} ->
-	    Coordinator ! {{q, Method}, Coordinator, Self, TreeFun(Models, Base, Conf)},
+	    Coordinator ! {{q, Method}, Coordinator, Self, TreeFun(Models, Conf)},
 	    base_evaluator_process(Coordinator, Self, Base, Conf, VariableImportance, Models)
     end.
 
@@ -257,6 +251,7 @@ make_prediction([{ModelNr, Model, _}|Models], Base, ExId, Conf, Acc) ->
     {Prediction, NodeNr} = Base:predict(ExId, Model, Conf, []),
     make_prediction(Models, Base, ExId, Conf, [{Prediction, [ModelNr|NodeNr]}|Acc]).
 
+% @private update the variable mportance
 update_variable_importance([], Acc, _) ->
     Acc;
 update_variable_importance([{Feature, Importance}|Rest], Acc, Total) ->
@@ -265,4 +260,3 @@ update_variable_importance(TreeVariables, VariableImportance, Total) ->
     dict:fold(fun (Feature, Importance, Acc) ->
 		      dict:update_counter(Feature, Importance/Total, Acc)
 	      end, VariableImportance, TreeVariables).
-    

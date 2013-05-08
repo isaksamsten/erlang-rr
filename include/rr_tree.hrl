@@ -21,7 +21,7 @@
 %% 
 -record(rr_conf, {
 	  prune  :: prune_fun(), 
-	  depth=0 :: integer(),
+	  depth = 0 :: integer(),
 	  branch :: branch_fun(),
 	  bagging,
 	  score :: score_fun(),
@@ -40,14 +40,14 @@
 %%
 %% * score = score of current node
 %% * feature = feature at split
-%% * distribution = {Left, Right} where Left and Right are [{Class, Count}, ..., {Class, Count}]
+%% * distribution = {......}
 %% * left = node leading left
 %% * right = node leadning right
 %%
 -record(rr_node, {id, 
 		  score, 
 		  feature, 
-		  distribution, 
+		  distribution :: {LeftCount::number(), RightCount::number(), Class::atom()},
 		  left, 
 		  right}).
 
@@ -59,7 +59,8 @@
 -record(rr_leaf, {id, 
 		  score, 
 		  distribution, 
-		  class}).
+		  class
+		 }).
 
 %%
 %% * feature = the feature involving the split

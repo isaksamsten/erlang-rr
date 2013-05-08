@@ -112,7 +112,7 @@
 main(Args) ->
     rr_example:init(),
     rr_ensemble:init(),
-   % random:seed(now()),
+    random:seed(now()),
 
     Options = case getopt:parse(?CMD_SPEC, Args) of
 		  {ok, Parsed} -> 
@@ -120,7 +120,7 @@ main(Args) ->
 		  {error, {invalid_option, R}} ->
 		      illegal(io_lib:format("unrecognized option '~s'", [R]));
 		  {error, {missing_option_arg, R}} ->
-		      illegal(io_lib:format("missing argument to option '~s'", [get_opt_name(R, ?CMD_SPEC)])); %%NOTE: fix
+		      illegal(io_lib:format("missing argument to option '~s'", [get_opt_name(R, ?CMD_SPEC)]));
 		  {error, _} ->
 		      illegal("unknown error")
 	      end,
@@ -158,9 +158,7 @@ main(Args) ->
     %% {Test, Train} = rr_example:merge_folds(Dict, 1),
     %% io:format("~p ~n ~p ~n ~p ~n", [Dict, Test, Train]),
     %% halt(),
-
-
-
+    
     TotalNoFeatures = length(Features),
     NoFeatures = get_no_features(TotalNoFeatures, Options),
     Classifiers = get_opt(classifiers, Options),
@@ -236,6 +234,16 @@ run_split(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
     Split = get_opt(ratio, Options),
     {Train, Test} = rr_example:split_dataset(Examples, Split),
     Model = rr_ensemble:generate_model(Features, Train, Conf),
+    %% No = rr_example:count(Train),
+    %% RRR = rr_ensemble:perform(Model, Conf, {rule_extract,
+    %% 					    fun (BaseModels, _) ->
+    %% 						    lists:foldl(fun (BaseModel, Acc) ->
+    %% 									[rr_rex:extract(BaseModel, 0.7, 0.5, No)|Acc]
+    %% 								end, [], BaseModels)
+    %% 					    end,
+    %% 					    fun lists:append/2}),
+    %% io:format("~p ~n", [lists:append(RRR)]),
+    %% halt(),
 
     Evaluation = evaluate(Model, Test, Conf),
     Output(method, {"Split", Split}),
