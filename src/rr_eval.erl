@@ -7,11 +7,82 @@
 
 -module(rr_eval).
 
--export([accuracy/1,
+-export([
+	 cross_validation/3,
+	 split_validation/3,
+
+	 accuracy/1,
 	 auc/2,
 	 brier/2,
 	 precision/1]).
+%% @headerfile "rr_tree.hrl"
+-include("rr_tree.hrl").
 
+
+-type result_list() :: {atom(), any()} | {atom(), any(), any()}.
+-type result() :: {{atom(), atom()}, result_list()}.
+-type result_set() :: [result(),...].
+
+%% @doc
+%% Do cross-validation on examples
+%% @end
+-spec cross_validation(features(), examples(), any()) -> result_set().
+cross_validation(Features, Examples, Props) ->
+    Build = case proplists:get_value(build, Props) of
+		undefined -> throw({badarg, build});
+		Build0 -> Build0
+	    end,
+    Evaluate = case proplists:get_value(evaluate, Props) of
+		   undefined -> throw({badarg, evaluate});
+		   Evaluate0 -> Evaluate0
+	       end,
+    NoFolds = proplists:get_value(folds, Props, 10),
+    Collector = proplists:get_value(collector, Props, fun (_Type, _Data) -> ok end),
+    ToAverage = proplists:get_value(average, Props, [accuracy, auc, oob_accuracy, brier]),
+
+    Total = rr_example:cross_validation(
+	      fun (Train, Test, Fold) ->
+		      Model = Build(Features, Train),
+		      Result = Evaluate(Model, Test),
+		      {{fold, Fold, Model}, Result}
+	      end, NoFolds, Examples),
+    Avg = average_cross_validation(Total, NoFolds, ToAverage, []),
+    Total ++ [Avg].
+
+%% @private average cross-validation
+average_cross_validation(_, _, [], Acc) ->
+    {{fold, average, undefined}, lists:reverse(Acc)};
+average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
+    A = lists:foldl(fun ({_, Measures}, Sum) ->
+			    case lists:keyfind(H, 1, Measures) of
+				{H, _, Auc} ->
+				    Sum + Auc;
+				{H, O} ->
+				    Sum + O
+			    end
+		    end, 0, Avg) / Folds,
+    average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
+
+%% @doc split examples and train and evaluate
+-spec split_validation(features(), examples(), any()) -> result_set().
+split_validation(Features, Examples, Props) ->
+    Build = case proplists:get_value(build, Props) of
+		undefined -> throw({badarg, build});
+		Build0 -> Build0
+	    end,
+    Evaluate = case proplists:get_value(evaluate, Props) of
+		   undefined -> throw({badarg, evaluate});
+		   Evaluate0 -> Evaluate0
+	       end,
+
+    Ratio = proplists:get_value(ratio, Props, 0.66),
+    Importance = proplists:get_value(variable_importance, Props, fun (_Model) -> ok end),
+
+    {Train, Test} = rr_example:split_dataset(Examples, Ratio),
+    Model = Build(Features, Train),
+    Result = Evaluate(Model, Test),
+    {{split, Ratio, Model}, Result}.
+	
 %% @doc 
 %% Calculate the accuracy (i.e. the percentage of correctly
 %% classified examples) 

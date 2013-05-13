@@ -30,12 +30,12 @@ example_depth_stop(MaxExamples, MaxDepth) ->
     end.
 
 %% @doc generate a decision tree
--spec generate_model(features(), examples(), #rr_conf{}) -> #rr_node{}.
+-spec generate_model(features(), examples(), #rf_tree{}) -> #rr_node{}.
 generate_model(Features, Examples, Conf) ->
     Info = info_content(Examples, rr_example:count(Examples)),
     build_decision_node(Features, Examples, dict:new(), 0, Info, Conf, 1).
 
--spec evaluate_model(#rr_node{}, examples(), #rr_conf{}) -> dict().
+-spec evaluate_model(#rr_node{}, examples(), #rf_tree{}) -> dict().
 evaluate_model(Model, Examples, Conf) ->
     lists:foldl(fun({Class, _, ExampleIds}, Acc) ->
 			predict_all(Class, ExampleIds, Model, Conf, Acc)
@@ -52,14 +52,14 @@ predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
 				    end, [{Prediction, 0}], Dict)). %% note: no other prob (fix?)
 
 %% @doc predict an example according to a decision tree
--spec predict(ExId::exid(), tree(), #rr_conf{}, []) -> prediction().
+-spec predict(ExId::exid(), tree(), #rf_tree{}, []) -> prediction().
 predict(_, #rr_leaf{id=NodeNr, class=Class, score=Score}, _Conf, Acc) ->
     {{Class, Score}, [NodeNr|Acc]};
 predict(ExId, #rr_node{id=NodeNr, 
 		       feature=F, 
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
-		       right=Right}, #rr_conf{distribute=Distribute, %% TODO: fix me
+		       right=Right}, #rf_tree{distribute=Distribute, %% TODO: fix me
 					      missing_values=Missing} = Conf, Acc) ->
     NewAcc = [NodeNr|Acc],
     case rr_example:distribute(F, ExId) of
@@ -80,14 +80,14 @@ predict(ExId, #rr_node{id=NodeNr,
 	    
 %% @private induce a decision tree
 -spec build_decision_node(Features::features(), Examples::examples(), Importance::dict(), Total::number(), 
-			  Error::number(), #rr_conf{}, []) -> {tree(), dict(), number()}.
+			  Error::number(), #rf_tree{}, []) -> {tree(), dict(), number()}.
 build_decision_node([], [], Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, [], error), Importance, Total};
 build_decision_node([], Examples, Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, Examples, {Class, Count}), Importance, Total};
-build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune=Prune, 
+build_decision_node(Features, Examples, Importance, Total, Error, #rf_tree{prune=Prune, 
 									   branch=Branch, 
 									   depth=Depth} = Conf, Id) ->
     NoExamples = rr_example:count(Examples),
@@ -108,11 +108,11 @@ build_decision_node(Features, Examples, Importance, Total, Error, #rr_conf{prune
 		    
 		    {LeftNode, LeftImportance, TotalLeft} = 
 			build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError, 
-					    Conf#rr_conf{depth=Depth + 1}, Id + 1),
+					    Conf#rf_tree{depth=Depth + 1}, Id + 1),
 		    
 		    {RightNode, RightImportance, TotalRight} = 
 			build_decision_node(Features, RightExamples, LeftImportance, TotalLeft, RightError, 
-					    Conf#rr_conf{depth=Depth + 1}, Id + 2),
+					    Conf#rf_tree{depth=Depth + 1}, Id + 2),
 		    Distribution = {rr_example:count(LeftExamples), rr_example:count(RightExamples), rr_example:majority(Examples)},
 		    {make_node(Id, Feature, Distribution, Score, LeftNode, RightNode), RightImportance, TotalRight}
 	    end	   

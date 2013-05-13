@@ -37,6 +37,25 @@
 	  payload :: any()
 	 }).
 
+-record(rr_ensemble, {
+	  progress,
+	  bagging :: any(),
+	  base_learner :: {Module::atom(), Conf::any()},
+	  no_classifiers = 100 :: integer(),
+	  cores = 1 :: integer()
+	 }).
+
+-record(rf_tree, {
+	  prune  :: prune_fun(), 
+	  depth = 0 :: integer(),
+	  branch :: branch_fun(),
+	  score :: score_fun(),
+	  split :: any(),
+	  distribute :: distribute_fun(),
+	  missing_values :: missing_fun(),
+	  no_features = 0
+	 }).
+
 %%
 %% * score = score of current node
 %% * feature = feature at split
@@ -97,7 +116,7 @@
 -type rule() :: {[{Feature::feature(), Value::atom()}, ...], Class::atom()}.
 
 -type prune_fun() :: fun((examples(), Depth::number()) -> boolean()).
--type branch_fun() :: fun((features(), examples(), number(), #rr_conf{}) -> #rr_candidate{}). 
+-type branch_fun() :: fun((features(), examples(), number(), #rf_tree{}) -> #rr_candidate{}). 
 -type score_fun() :: fun((split(), Total::number()) -> score()).
 -type distribute_fun() :: fun((feature(), exid()) -> distribute_example()).
 -type missing_fun() :: fun((predict | build, feature(), exid(), Left::number(), Right::number()) -> missing_example()).

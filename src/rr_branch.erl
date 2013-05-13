@@ -14,7 +14,9 @@
 	 correlation/1,
 	 random_correlation/2,
 	 rule/3,
-	 random_rule/4
+	 random_rule/4,
+
+	 random_examples/2
 	]).
 
 %% @headerfile "rr_tree.hrl"
@@ -24,15 +26,16 @@
 -spec resampled(integer(), integer(), float()) -> branch_fun().
 resampled(NoResamples, NoFeatures, Delta) ->
     fun (Features, Examples, Total, Conf) ->
+	    %% todo: calculate total no features (once)
 	    resampled_subset_branch_split(Features, Examples, Total, Conf, NoResamples, Delta, NoFeatures)
     end.
 
 %% @private resample features
 resampled_subset_branch_split(_Features, _Examples, _Total, 
-			      #rr_conf{no_features=NoFeatures}, NoResamples, _, _) when NoFeatures =< 0;
+			      #rf_tree{no_features=NoFeatures}, NoResamples, _, _) when NoFeatures =< 0;
 											NoResamples =< 0 ->
     no_information;
-resampled_subset_branch_split(Features, Examples, Total,  #rr_conf{score = ScoreFun, 
+resampled_subset_branch_split(Features, Examples, Total,  #rf_tree{score = ScoreFun, 
 								   split=Split, 
 								   distribute = Distribute, 
 								   missing_values=Missing, 
@@ -48,7 +51,7 @@ resampled_subset_branch_split(Features, Examples, Total,  #rr_conf{score = Score
     Gain = (Total*rr_tree:entropy(Examples)) - Score, 
     if  Gain =< Delta ->
 	    resampled_subset_branch_split(ordsets:subtract(Features, ordsets:from_list(Features0)), 
-					  Examples, Total, Conf#rr_conf{no_features=NoFeatures - Log}, 
+					  Examples, Total, Conf#rf_tree{no_features=NoFeatures - Log}, 
 					  NoResamples - 1, Delta, Log);
 	true ->
 	    Cand
@@ -62,9 +65,9 @@ weka(NoFeatures) ->
     end.
 
 %% @private
-weka_branch_split(_, _, _, #rr_conf{no_features=NoTotal}, _) when NoTotal =< 0 ->
+weka_branch_split(_, _, _, #rf_tree{no_features=NoTotal}, _) when NoTotal =< 0 ->
     no_information;
-weka_branch_split(Features, Examples, Total, #rr_conf{score = ScoreFun, 
+weka_branch_split(Features, Examples, Total, #rf_tree{score = ScoreFun, 
 						      split=Split, 
 						      distribute = Distribute, 
 						      missing_values=Missing,
@@ -79,7 +82,7 @@ weka_branch_split(Features, Examples, Total, #rr_conf{score = ScoreFun,
     Gain = (Total*rr_tree:entropy(Examples)) - Score,
     if Gain =< 0.0 ->
 	    weka_branch_split(ordsets:subtract(Features, ordsets:from_list(Features0)),
-			      Examples, Total, Conf#rr_conf{no_features=NoTotal - NoFeatures}, NoFeatures);
+			      Examples, Total, Conf#rf_tree{no_features=NoTotal - NoFeatures}, NoFeatures);
        true ->
 	    Cand
     end.
@@ -87,7 +90,7 @@ weka_branch_split(Features, Examples, Total, #rr_conf{score = ScoreFun,
 %% @doc evaluate a subset of n random features
 -spec subset(integer()) -> branch_fun().
 subset(NoFeatures) ->
-    fun (Features, Examples, Total, #rr_conf{score = Score, 
+    fun (Features, Examples, Total, #rf_tree{score = Score, 
 					     split=Split, 
 					     distribute = Distribute, 
 					     missing_values=Missing}) ->
@@ -98,7 +101,7 @@ subset(NoFeatures) ->
 %% @doc evaluate the combination of (n*n)-1 features
 -spec correlation(integer()) -> branch_fun().
 correlation(NoFeatures) ->
-    fun (Features, Examples, Total, #rr_conf{score = Score, 
+    fun (Features, Examples, Total, #rf_tree{score = Score, 
 					     split=Split, 
 					     distribute = Distribute, 
 					     missing_values=Missing}) ->
@@ -128,7 +131,7 @@ random_correlation(NoFeatures, Fraction) ->
 %% @doc evalate one randomly selected feature (maximum diversity)
 -spec random() -> branch_fun().
 random() ->
-    fun (Features, Examples, Total, #rr_conf{score = Score, 
+    fun (Features, Examples, Total, #rf_tree{score = Score, 
 					     split=Split, 
 					     distribute = Distribute, 
 					     missing_values=Missing,
@@ -140,7 +143,7 @@ random() ->
 %% @doc evaluate all features to find the best split point
 -spec all() -> branch_fun().
 all() ->
-    fun(Features, Examples, Total, #rr_conf{score=Score, 
+    fun(Features, Examples, Total, #rf_tree{score=Score, 
 					    split=Split, 
 					    distribute=Distribute, 
 					    missing_values=Missing}) ->
@@ -167,3 +170,20 @@ random_rule(NoFeatures, NoRules, RuleScore, Prob) ->
 		    Sub(Features, Examples, Total, Conf)
 	    end
     end.
+
+random_examples(NoFeatures, NoExamples) ->
+    Log = subset(NoFeatures),
+    fun (Features, Examples, Total, Conf) ->
+	    if Total =< NoExamples ->
+		    Log(Features, Examples, Total, Conf);
+	       true ->
+		    random_examples(Features, Examples, Total, Conf, NoExamples)
+	    end
+    end.
+
+random_examples(Features, Examples, Total, #rf_tree{score = Score, 
+					     split=Split, 
+					     distribute = Distribute, 
+					     missing_values=Missing}, NoExamples) ->
+    Examples0 = rr_examples:random_examples(Examples, NoExamples),
+    rr_example:best_split(Features, Examples0, NoExamples, Score, Split, Distribute, Missing).
