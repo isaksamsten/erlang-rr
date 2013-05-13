@@ -158,7 +158,7 @@ new(Props) ->
 		  progress = Progress,
 		  bagging = ExampleSampling,
 		  no_classifiers = NoTrees,
-		  base_learner = {rr_tree, Tree},
+		  base_learner = {BaseLearner, Tree},
 		  cores = Cores
 		 },
 
@@ -192,8 +192,7 @@ main(Args) ->
     end,
 
     %% Initialize the Logger
-    {Log, Logger} = create_logger(Options), 
-
+    {Log, Logger} = create_logger(Options), %% Note make global..
 
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
@@ -208,10 +207,8 @@ main(Args) ->
     {Features, Examples0} = rr_example:load(Csv, Cores),
     Examples = rr_example:shuffle_dataset(Examples0),
 
-    {Build, Evaluate, _} = rf:new([{no_features, 3}]),
-    Res = rr_eval:cross_validation(Features, Examples, [{build, Build}, {evaluate, Evaluate}, {folds, 10}]),
-    io:format("~p ~n", [Res]),
-    halt(),
+   % {Build, Evaluate, _} = rf:new([{no_features, 3}]),
+
  
     TotalNoFeatures = length(Features),
     NoFeatures = get_no_features(TotalNoFeatures, Options),
@@ -219,44 +216,41 @@ main(Args) ->
     Score = create_score(Options),
     MaxDepth = get_opt(max_depth, Options),
     MinEx = get_opt(min_example, Options),
-    Eval = create_brancher(NoFeatures, ordsets:from_list(Features), 
-			   Examples, Missing, Score, Options),
+    Eval = create_brancher(NoFeatures, ordsets:from_list(Features), Examples, Missing, Score, Options),
     Bagging = create_bagger(Options),
     Distribute = create_distribute(Options),
 
-    Conf = #rr_conf{
-	      cores = Cores,
-	      score = Score,
-	      prune = rr_tree:example_depth_stop(MinEx, MaxDepth),
-	      branch = Eval,
-	      bagging = Bagging,
-	      progress = Progress,
-	      split = fun rr_tree:random_split/4,
-	      distribute = Distribute,
-	      missing_values = Missing,
-	      base_learner = {Classifiers, rr_tree},
-	      no_features = TotalNoFeatures,
-	      output = Output, %% todo: move!
-	      log = Logger
-	     },
+    {Build, Evaluate, Config} = rf:new([{no_features, NoFeatures},
+					{no_cores, Cores},
+					{no_trees, Classifiers},
+					{score, Score},
+					{pre_prune, rr_tree:example_depth_stop(MinEx, MaxDepth)},
+					{feature_sampling, Eval},
+					{example_sampling, Bagging},
+					{distribute, Distribute},
+					{progress, Progress},
+					{base_learner, rr_tree}]),
 
     Logger(info, "Building model using ~p trees and ~p features", [Classifiers, NoFeatures]),
-    Output(start, now()),
-    Then = now(),
-    RunExperiment(Features, Examples, Conf, Options),
-    Time = timer:now_diff(now(), Then) / 1000000,
+    Res = rr_eval:cross_validation(Features, Examples, [{build, Build}, {evaluate, Evaluate}, {folds, 10}]),
+    io:format("~p ~n", [Res]),
+    halt(),
+ %   Output(start, now()),
+  %  Then = now(),
+%    RunExperiment(Features, Examples, Conf, Options),
+   % Time = timer:now_diff(now(), Then) / 1000000,
 
-    Output(parameters, [
-			{file, InputFile},
-			{classifiers, Classifiers},
-			{no_features, NoFeatures},
-			{total_no_features, TotalNoFeatures},
-			{examples, rr_example:count(Examples)},
-			{time, Time}			 
-		       ]),
-    Output('end', now()),
-    Logger(debug, "Input parameters ~p", [Options]),
-    Logger(info, "Model built in ~p second(s)", [Time]),
+    %% Output(parameters, [
+    %% 			{file, InputFile},
+    %% 			{classifiers, Classifiers},
+    %% 			{no_features, NoFeatures},
+    %% 			{total_no_features, TotalNoFeatures},
+    %% 			{examples, rr_example:count(Examples)},
+    %% 			{time, Time}			 
+    %% 		       ]),
+    %% Output('end', now()),
+    %% Logger(debug, "Input parameters ~p", [Options]),
+    %% Logger(info, "Model built in ~p second(s)", [Time]),
     rr_log:stop(Log).
 
 output_variable_importance(Model, #rr_conf{output=Output} = Conf, Options) ->

@@ -153,8 +153,19 @@ all() ->
 %% @doc generate a rule at each branch
 -spec rule(integer(), integer(), score_fun()) -> branch_fun().
 rule(NoFeatures, NoRules, RuleScore) ->
-    fun (Features, Examples, Total, Conf) ->
-	    rr_rule:best(Features, Examples, Total, Conf, NoFeatures, NoRules, RuleScore)
+    fun (Features, Examples, Total, #rf_tree{
+				       branch = Branch,
+				       score = Score,
+				       distribute = Distribute,
+				       missing_values = Missing
+				      }) ->
+	    rr_rule:best(Features, Examples, Total, #rr_rule{
+						       branch = Branch,
+						       score = Score,
+						       distribute = Distribute,
+						       missing_values = Missing,
+						       split = fun rr_tree:deterministic_split/4
+						      }, NoFeatures, NoRules, RuleScore)
     end.
 
 %% @doc randomly pick a subset-brancher or a rule-bracher at each node

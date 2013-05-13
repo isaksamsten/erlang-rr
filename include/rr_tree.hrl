@@ -56,6 +56,14 @@
 	  no_features = 0
 	 }).
 
+-record(rr_rule, {
+	  branch :: branch_fun(),
+	  score :: score_fun(),
+	  split :: any(),
+	  distribute :: distribute_fun(),
+	  missing_values :: missing_fun()
+	 }).
+
 %%
 %% * score = score of current node
 %% * feature = feature at split
