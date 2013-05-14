@@ -15,16 +15,17 @@
 	 auc/2,
 	 brier/2,
 	 precision/1]).
+
 %% @headerfile "rr_tree.hrl"
--include("rr_tree.hrl").
+-include("rr_tree.hrl"). %% note: for specs
 
 
 -type result_list() :: {atom(), any()} | {atom(), any(), any()}.
--type result() :: {{atom(), atom()}, result_list()}.
--type result_set() :: [result(),...].
+-type result() :: {{atom(), atom(), Model::any()}, [result_list(),...]}.
+-type result_set() :: {cv, Folds::integer(), [result(),...]} | {split, result()}.
 
 %% @doc
-%% Do cross-validation on examples
+%% Do cross-validation on Examples
 %% @end
 -spec cross_validation(features(), examples(), any()) -> result_set().
 cross_validation(Features, Examples, Props) ->
@@ -37,7 +38,6 @@ cross_validation(Features, Examples, Props) ->
 		   Evaluate0 -> Evaluate0
 	       end,
     NoFolds = proplists:get_value(folds, Props, 10),
-    Collector = proplists:get_value(collector, Props, fun (_Type, _Data) -> ok end),
     ToAverage = proplists:get_value(average, Props, [accuracy, auc, oob_accuracy, brier]),
 
     Total = rr_example:cross_validation(
@@ -47,7 +47,7 @@ cross_validation(Features, Examples, Props) ->
 		      {{fold, Fold, Model}, Result}
 	      end, NoFolds, Examples),
     Avg = average_cross_validation(Total, NoFolds, ToAverage, []),
-    Total ++ [Avg].
+    {cv, NoFolds, Total ++ [Avg]}.
 
 %% @private average cross-validation
 average_cross_validation(_, _, [], Acc) ->
@@ -76,12 +76,10 @@ split_validation(Features, Examples, Props) ->
 	       end,
 
     Ratio = proplists:get_value(ratio, Props, 0.66),
-    Importance = proplists:get_value(variable_importance, Props, fun (_Model) -> ok end),
-
     {Train, Test} = rr_example:split_dataset(Examples, Ratio),
     Model = Build(Features, Train),
     Result = Evaluate(Model, Test),
-    {{split, Ratio, Model}, Result}.
+    {split, {{split, Ratio, Model}, Result}}.
 	
 %% @doc 
 %% Calculate the accuracy (i.e. the percentage of correctly
@@ -91,7 +89,6 @@ split_validation(Features, Examples, Props) ->
 accuracy(Predictions) ->
     {Correct, Incorrect} = correct(Predictions),
     Correct / (Correct + Incorrect).
-
 
 %% @private containing number of {Correct, Incorrect} predictions
 correct(Predictions) ->
@@ -136,8 +133,8 @@ calculate_auc_for_classes([Pos|Rest], Predictions, NoExamples, Auc) ->
 	    calculate_auc_for_classes(Rest, Predictions, NoExamples,
 				      [{Pos, NoPosEx, 'n/a'}|Auc])
     end.
-	    
 
+%% @private calculate auc
 calculate_auc([], _Tp, _Fp, Tp_prev, Fp_prev, _Prob_prev, NoPos, NoNeg, Auc) ->
     (Auc + abs(NoNeg - Fp_prev) * (NoPos + Tp_prev)/2)/(NoPos * NoNeg);
 calculate_auc([{Class, Prob}|Rest], Tp, Fp, Tp_prev, Fp_prev, OldProb, NoPos, NoNeg, Auc) ->
@@ -180,6 +177,7 @@ calculate_brier_score_for_classes([Actual|Rest], Predictions, Score) ->
     calculate_brier_score_for_classes(Rest, Predictions, 
 				      calculate_brier_score(dict:fetch(Actual, Predictions), Actual, Score)).
 
+%% @private
 calculate_brier_score([], _, Score) ->
     Score;
 calculate_brier_score([{_, Probs}|Rest], Actual, Score) ->

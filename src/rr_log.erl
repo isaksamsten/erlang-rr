@@ -7,34 +7,50 @@
 
 -module(rr_log).
 -author('isak-kar@dsv.su.se').
--export([log/4,
+-export([
+	 info/1,
+	 info/2,
 	 log/3,
+	 log/2,
 	 new/2,
 	 loop/2,
-	 stop/1,
-	 to_number/1]).
+	 stop/0,
+	 to_number/1
+	]).
 
 new(std_err, Max) ->
-    spawn_link(fun() -> loop(std_err, to_number(Max)) end);
+    Pid = spawn_link(fun() -> loop(std_err, to_number(Max)) end),
+    register(log, Pid);
 new(File, Max) ->
     case file:open(File, [write]) of
 	{ok, IoDevice} ->
-	    spawn_link(fun() -> loop(IoDevice, to_number(Max)) end);
+	    Pid = spawn_link(fun() -> loop(IoDevice, to_number(Max)) end),
+	    register(log, Pid);
 	{error, _Reason} ->
 	    new(std_err, to_number(Max))
     end.
 
-stop(Logger) ->
-    Logger ! {stop, self()},
+stop() ->
+    log ! {stop, self()},
     receive
 	ok ->
 	    ok
     end.
 
-log(Logger, Level, Str, Params) ->
-    Logger ! {log, Level, Str, Params}.
-log(Logger, Level, Str) ->
-    log(Logger, Level, Str, []).
+info(Str, Params) ->
+    log(info, Str, Params).
+info(Str) ->
+    log(info, Str).
+
+log(Level, Str, Params) ->
+    try
+	log ! {log, Level, Str, Params}
+    catch 
+	_:_ ->
+	    ok
+    end.
+log(Level, Str) ->
+    log(Level, Str, []).
 
 loop(Device, Max) ->
     receive

@@ -16,7 +16,8 @@
 -export([
 	 main/1,
 
-	 new/1
+	 new/1,
+	 kill/1
 	]).
 
 %% @headerfile "rr_tree.hrl"
@@ -105,12 +106,7 @@
 	 {variable_importance, $v, "variable-importance",     {integer, 0},
 	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
 	 {output,         $o,           "output",      {atom, default},
-	  "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"},
-
-	 {log,            $l,           "log-level",   {atom, info},
-	  "Log level. Available options include: 'debug', 'info', 'error' and 'none', where 'debug' output everything and 'none' output nothing.)"},
-	 {log_target,     undefined,    "log-target",  {string, "stderr"},
-	  "Write debug output to soure. Options include: 'stderr' or any valid file name, where 'stderr' writes output to standard output."}
+	  "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"}
 	]).
 
 parse(Args, Options) ->
@@ -125,6 +121,9 @@ parse(Args, Options) ->
 	    illegal("unknown error")
     end.
 
+%% @doc suspend a random forest model
+kill(Model) ->
+    Model ! {exit, self()}.
 
 %% @doc create a new rf-model and evaluator
 new(Props) ->
@@ -179,7 +178,7 @@ main(Args) ->
     Options = parse(Args, ?CMD_SPEC),
     case any_opt([help, version, examples], Options) of
 	help ->
-	    show_help(),
+	    rr:show_help(options, ?CMD_SPEC, "rf"),
 	    halt();
 	version ->
 	    io:format(show_information()),
@@ -191,9 +190,6 @@ main(Args) ->
 	    ok
     end,
 
-    %% Initialize the Logger
-    {Log, Logger} = create_logger(Options), %% Note make global..
-
     InputFile = get_opt(input_file, Options),
     Cores = get_opt(cores, Options),
     Output = create_output(Options),
@@ -201,8 +197,7 @@ main(Args) ->
     RunExperiment = create_experiment(Options),
     Progress = create_progress(Options),
 
-    Logger(info, "Loading '~s' on ~p core(s)", [InputFile, Cores]),
-
+    rr_log:log(info, "Loading '~s' on ~p core(s)", [InputFile, Cores]),
     Csv = csv:binary_reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
     Examples = rr_example:shuffle_dataset(Examples0),
@@ -231,27 +226,12 @@ main(Args) ->
 					{progress, Progress},
 					{base_learner, rr_tree}]),
 
-    Logger(info, "Building model using ~p trees and ~p features", [Classifiers, NoFeatures]),
-    Res = rr_eval:cross_validation(Features, Examples, [{build, Build}, {evaluate, Evaluate}, {folds, 10}]),
+    rr_log:info("Building model using ~p trees and ~p features", [Classifiers, NoFeatures]),
+    Res = rr_eval:split_validation(Features, Examples, [{build, Build}, {evaluate, Evaluate}, {folds, 10}]),
     io:format("~p ~n", [Res]),
     halt(),
- %   Output(start, now()),
-  %  Then = now(),
-%    RunExperiment(Features, Examples, Conf, Options),
-   % Time = timer:now_diff(now(), Then) / 1000000,
 
-    %% Output(parameters, [
-    %% 			{file, InputFile},
-    %% 			{classifiers, Classifiers},
-    %% 			{no_features, NoFeatures},
-    %% 			{total_no_features, TotalNoFeatures},
-    %% 			{examples, rr_example:count(Examples)},
-    %% 			{time, Time}			 
-    %% 		       ]),
-    %% Output('end', now()),
-    %% Logger(debug, "Input parameters ~p", [Options]),
-    %% Logger(info, "Model built in ~p second(s)", [Time]),
-    rr_log:stop(Log).
+    rr_log:stop().
 
 output_variable_importance(Model, #rr_conf{output=Output} = Conf, Options) ->
     case get_opt(variable_importance, Options) of
@@ -366,30 +346,6 @@ create_distribute(Options) ->
 	default -> fun rr_example:distribute/2;
 	rulew -> fun rr_rule:distribute_weighted/2;
 	Other -> illegal_option("distribute", Other)
-    end.
-
-create_logger(Options) ->
-    case get_opt(log_target, Options) of
-	"stderr" ->
-	    Log0 = rr_log:new(std_err, get_opt(log, Options)),
-	    MaxLevel = rr_log:to_number(get_opt(log, Options)),
-	    {Log0, fun (Level, Message, Params) ->
-			   Level0 = rr_log:to_number(Level),
-			   if Level0 > MaxLevel ->
-				   ok;
-			      true -> rr_log:log(Log0, Level, Message, Params)
-			   end
-		   end};
-	Target ->
-	    Log0 = rr_log:new(Target, get_opt(log, Options)),
-	    MaxLevel = rr_log:to_number(get_opt(log, Options)),
-	    {Log0, fun (Level, Message, Params) ->
-			   Level0 = rr_log:to_number(Level),
-			   if Level0 > MaxLevel ->
-				   ok;
-			      true -> rr_log:log(Log0, Level, Message, Params)
-			   end
-		   end}
     end.
 
 create_missing_values(Options) ->
@@ -518,18 +474,8 @@ default_illegal(Out) ->
 	    illegal(Out)
     end.
 
-show_help() ->
-    getopt:usage(?CMD_SPEC, "rr"),
-    io:format(standard_error, "~s
-
-VERSION
-================================
-~s", [show_examples(), show_information()]).
-
 show_examples() ->
-    "EXAMPLES
-================================
-Example 1: 10-fold cross validation 'car' dataset:
+    "Example 1: 10-fold cross validation 'car' dataset:
   > ./rr -i data/car.txt -x --folds 10 > result.txt
 
 Example 2: 0.66 percent training examples, 'heart' dataset. Missing
@@ -551,6 +497,13 @@ are listed.
 Example 5: 0.7 percent training examples, for multiple dataset and output
 evaluations csv-formated. This could be achieved using a bash-script:
   > for f in data/*.txt; do ./rr -i \"$f\" -s -r 0.7 -o csv >> result.csv; done~n".
+
+show_information() -> 
+    io_lib:format("rf (Random Forest Learner) ~s.~s.~s (build date: ~s)
+Copyright (C) 2013+ ~s
+
+Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
+
 
 get_opt(Arg, Fun1, {Options, _}) ->	
     case lists:keyfind(Arg, 1, Options) of
@@ -588,10 +541,5 @@ has_opt(Arg, {Options, _ }) ->
 	      end, Options).
     
 
-show_information() -> 
-    io_lib:format("rr (Random Rule Learner) ~s.~s.~s (build date: ~s)
-Copyright (C) 2013+ ~s
-
-Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
 
 
