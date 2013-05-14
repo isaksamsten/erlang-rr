@@ -16,8 +16,8 @@
 	 random_partition/0
 	]).
 
-%% @headerfile "rr_tree.hrl"
--include("rr_tree.hrl").
+%% @headerfile "rf_tree.hrl"
+-include("rf_tree.hrl").
 
 
 -spec partition(exid(), float()) -> missing_example().

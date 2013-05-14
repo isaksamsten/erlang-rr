@@ -19,8 +19,11 @@
 	 random_examples/2
 	]).
 
+%% @headerfile "rf_tree.hrl"
+-include("rf_tree.hrl").
+
 %% @headerfile "rr_tree.hrl"
--include("rr_tree.hrl").
+%-include("rr.hrl").
 
 %% @doc resamples n new features k times if arg max gain(Features)
 -spec resampled(integer(), integer(), float()) -> branch_fun().
@@ -153,19 +156,9 @@ all() ->
 %% @doc generate a rule at each branch
 -spec rule(integer(), integer(), score_fun()) -> branch_fun().
 rule(NoFeatures, NoRules, RuleScore) ->
-    fun (Features, Examples, Total, #rf_tree{
-				       branch = Branch,
-				       score = Score,
-				       distribute = Distribute,
-				       missing_values = Missing
-				      }) ->
-	    rr_rule:best(Features, Examples, Total, #rr_rule{
-						       branch = Branch,
-						       score = Score,
-						       distribute = Distribute,
-						       missing_values = Missing,
-						       split = fun rr_tree:deterministic_split/4
-						      }, NoFeatures, NoRules, RuleScore)
+    fun (Features, Examples, Total, Conf) ->
+	    rr_rule:best(Features, Examples, Total, Conf#rf_tree{split = fun rr_tree:deterministic_split/4}, 
+			 NoFeatures, NoRules, RuleScore)
     end.
 
 %% @doc randomly pick a subset-brancher or a rule-bracher at each node

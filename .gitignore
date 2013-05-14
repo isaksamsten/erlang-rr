@@ -8,3 +8,5 @@ src/*nonode*
 ebin/
 doc/
 *.DS_STORE
+erl_crash.dump
+rr

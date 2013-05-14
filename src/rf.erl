@@ -20,8 +20,11 @@
 	 kill/1
 	]).
 
-%% @headerfile "rr_tree.hrl"
--include("rr_tree.hrl").
+%% @headerfile "rr.hrl"
+%-include("rr.hrl").
+
+%% @headerfile "rf_tree.hrl"
+-include("rf_tree.hrl").
 
 -define(CMD_SPEC,
 	[{help,           $h,           "help",         undefined,
@@ -233,85 +236,6 @@ main(Args) ->
 
     rr_log:stop().
 
-output_variable_importance(Model, #rr_conf{output=Output} = Conf, Options) ->
-    case get_opt(variable_importance, Options) of
-	No when No > 1 ->
-	    VariableImportance = rr_ensemble:variable_importance(Model, Conf),
-	    Sorted = lists:reverse(lists:keysort(2, dict:to_list(VariableImportance))),
-	    Output(vi, {Sorted, 1, No});	    
-	_No ->
-	    ok
-    end.
-
-output_predictions(Data, #rr_conf{output=Output}, Options) ->
-    case get_opt(output_predictions, Options) of
-	true -> Output(predictions, Data);
-	false -> ok
-    end.
-
-output_evaluation(Data, #rr_conf{output=Output}, Options) ->
-    Output(evaluation, [{file, get_opt(input_file, Options)}] ++ Data).
-	     
-	
-run_proximity(Features, Examples, Conf) ->
-    rr_proximity:init(),
-    Model = rr_ensemble:generate_model(Features, Examples, Conf),
-    rr_proximity:generate_proximity(Model, Examples, Conf).
-
-run_split(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
-    Split = get_opt(ratio, Options),
-    {Train, Test} = rr_example:split_dataset(Examples, Split),
-    Model = rr_ensemble:generate_model(Features, Train, Conf),
-    %% No = rr_example:count(Train),
-    %% RRR = rr_ensemble:perform(Model, Conf, {rule_extract,
-    %% 					    fun (BaseModels, _) ->
-    %% 						    lists:foldl(fun (BaseModel, Acc) ->
-    %% 									[rr_rex:extract(BaseModel, 0.7, 0.5, No)|Acc]
-    %% 								end, [], BaseModels)
-    %% 					    end,
-    %% 					    fun lists:append/2}),
-    %% io:format("~p ~n", [lists:append(RRR)]),
-    %% halt(),
-
-    Evaluation = evaluate(Model, Test, Conf),
-    Output(method, {"Split", Split}),
-    output_variable_importance(Model, Conf, Options),
-    output_predictions(Test, Conf, Options),
-    output_evaluation(Evaluation, Conf, Options).
-
-run_build_process(Features, Examples, Conf, Options) ->
-    Model = rr_ensemble:generate_model(Features, Examples, Conf),
-    rr_ensemble:save_model(Model, get_opt(model_file, Options)).
-
-
-run_cross_validation(Features, Examples, #rr_conf{output=Output} = Conf, Options) ->
-    Folds = get_opt(folds, Options),
-    Avg = rr_example:cross_validation(
-	    fun(Train0, Test0, Fold) ->
-		    io:format(standard_error, "*** Fold ~p *** ~n", [Fold]),
-		    Output(method, {"Fold", Fold}),
-		    M = rr_ensemble:generate_model(Features, Train0, Conf),
-		    Evaluate = evaluate(M, Test0, Conf),
-		    output_evaluation(Evaluate, Conf, Options),
-		    Evaluate			
-	    end, Folds, Examples),
-    Output(method, {"Fold", average}),
-    output_evaluation(average_cross_validation(Avg, Folds, [accuracy, auc, oob_accuracy, brier], []), Conf, Options),
-    output_predictions(Examples, Conf, Options).
-
-average_cross_validation(_, _, [], Acc) ->
-    lists:reverse(Acc);
-average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
-    A = lists:foldl(fun (Measures, Sum) ->
-			    case lists:keyfind(H, 1, Measures) of
-				{H, _, Auc} ->
-				    Sum + Auc;
-				{H, O} ->
-				    Sum + O
-			    end
-		    end, 0, Avg) / Folds,
-    average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
-
 evaluate(Model, Test, Conf) ->
     NoTestExamples = rr_example:count(Test),
     Dict = rr_ensemble:evaluate_model(Model, Test, Conf),
@@ -371,9 +295,9 @@ create_output(Options) ->
 
 create_experiment(Options) ->
     case any_opt([cv, split, build, evaluate, proximity], Options) of
-	split -> fun run_split/4;
-	cv -> fun run_cross_validation/4;
-	build -> fun run_build_process/4;
+	split -> ok;
+	cv -> ok;
+	build -> ok;
 	evaluate -> ok;
 	false -> illegal("No method selected. Please use either 'split', 'cross-validate' or 'build' argument")
     end.

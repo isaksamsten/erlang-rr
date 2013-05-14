@@ -19,8 +19,8 @@
 	 feature/2
 	]).
 
-%% @headerfile "rr_tree.hrl"
--include("rr_tree.hrl").
+%% @headerfile "rr.hrl"
+-include("rr.hrl").
 
 %% @doc insert a prediction into the global table of all predictions
 -spec insert_prediction(exid(), any()) -> ok.

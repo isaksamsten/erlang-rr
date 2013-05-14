@@ -20,7 +20,7 @@ examples(ExId0) ->
     ets:lookup_element(proximity, ExId, 2).
     
 
-generate_proximity(Model, Examples, #rr_conf{base_learner={Trees, _}} = Conf) ->
+generate_proximity(Model, Examples, #rr_ensemble{no_classifiers=Trees} = Conf) ->
     Dict = generate_proximity(Model, Examples, Conf, dict:new()),
     Prox = generate_promixity(Dict, Trees),
     dict:fold(fun (I, V, _) ->

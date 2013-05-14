@@ -4,9 +4,9 @@
 %%% Module for learning rules
 %%% @end
 %%% Created : 30 Mar 2013 by Isak Karlsson <isak@Isaks-MacBook-Pro.local>
-
 -module(rr_rule).
 -author('isak-kar@dsv.su.se').
+
 -export([best/7,
 	 distribute_weighted/2,
 	 evaluate_rule/2,
@@ -15,11 +15,11 @@
 	 purity/2
 	]).
 
-%% @headerfile "rr_tree.hrl"
--include("rr_tree.hrl").
+%% @headerfile "rf_tree.hrl"
+-include("rf_tree.hrl").
 
 %% @doc generate one best rule
--spec best(features(), examples(), number(), Conf::#rr_rule{}, integer(), integer(), score_fun()) -> #rr_candidate{}.
+-spec best(features(), examples(), number(), Conf::#rf_tree{}, integer(), integer(), score_fun()) -> #rr_candidate{}.
 best(Features, Examples, Total, Conf, NoFeatures, NoRules, RuleScore) ->
     OneRule = generate_rule(Features, Examples, Total, Conf, NoFeatures, RuleScore),
     best_rule(Features, Examples, Total, Conf, NoFeatures, NoRules, RuleScore, OneRule).
@@ -37,8 +37,8 @@ best_rule(Features, Examples, Total, Conf, NoFeatures, N, RuleScore,  #rr_candid
 	      end).
 
 %% @private generate a rule predicting a random class
--spec generate_rule(features(), examples(), number(), Conf::#rr_rule{}, number(), score_fun()) -> #rr_candidate{}.
-generate_rule(Features, Examples, Total, #rr_rule{split=Split, score=Score, 
+-spec generate_rule(features(), examples(), number(), Conf::#rf_tree{}, number(), score_fun()) -> #rr_candidate{}.
+generate_rule(Features, Examples, Total, #rf_tree{split=Split, score=Score, 
 						  distribute = Distribute, 
 						  missing_values=Missing} = Conf, NoFeatures, RuleScore) ->
     NoClasses = length(Examples),
@@ -53,7 +53,7 @@ generate_rule(Features, Examples, Total, #rr_rule{split=Split, score=Score,
 
 %% @doc learn a rule
 -spec separate_and_conquer(Features::features(), Examples::examples(), Total::number(),
-			   Conf::#rr_rule{}, score_fun(), {[feature()], number()}) -> [feature()].
+			   Conf::#rf_tree{}, score_fun(), {[feature()], number()}) -> [feature()].
 separate_and_conquer([], Covered, _, _, _, {Rules, _}) ->
     {Rules, Covered};
 separate_and_conquer(Features, Examples, Total, Conf, RuleScore, {Rules, Score}) ->
@@ -77,8 +77,8 @@ separate_and_conquer(Features, Examples, Total, Conf, RuleScore, {Rules, Score})
     end.
 
 %% @doc learn one additional rule
--spec learn_one_rule(features(), examples(), number(), score_fun(), Conf::#rr_rule{}) -> {feature(), Score::number(), Covered::examples()}.
-learn_one_rule(Features, Examples, Total, Score, #rr_rule{split = Split, distribute = Distribute, missing_values=Missing}) ->
+-spec learn_one_rule(features(), examples(), number(), score_fun(), Conf::#rf_tree{}) -> {feature(), Score::number(), Covered::examples()}.
+learn_one_rule(Features, Examples, Total, Score, #rf_tree{split = Split, distribute = Distribute, missing_values=Missing}) ->
     case rr_example:best_split(Features, Examples, Total, Score, Split, Distribute, Missing) of
 	no_features ->
 	    1;
@@ -208,4 +208,3 @@ evaluate_rule([Rule|Rest], ExId) ->
 	{'?', _} ->
 	    '?'
     end.
-

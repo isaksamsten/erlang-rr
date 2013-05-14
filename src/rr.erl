@@ -18,32 +18,41 @@
 main([Hd|Args]) ->
     Props = read_config(),
     initialize(Props),
-    Cmd = list_to_atom(Hd),
-    case Cmd of
-	rf ->
+    case Hd of
+	"rf" ->
 	    rf:main(Args);
-	help ->
-	    show_help()	    
+	"config" ->
+	    case Args of
+		["get"|Var] ->
+		    io:format("~s ~n", [proplists:get_value(list_to_atom(hd(Var)), Props)]);
+		["set"|_Var] ->
+		    io:format("unimplemented ~n");
+		_Other ->
+		    io:format("invalid argument~n")
+	    end;		
+	_ ->
+	    show_help()
     end;
 main([]) ->
-    ok.
+    io:format("no command specified~n"),
+    show_help().
 
 read_config() ->
     Default = [{log_level, info}, {log_target, std_err}],
     case file:consult("rr.config") of
 	{ok, Prop} ->
 	    Prop;
-	{error, Reason} ->
-	    io:format("Could not read rr.config: '~p'. ~n", [Reason]),
+	{error, {Line, _, Term}} ->
+	    io:format("malformed configuration file: \"~s\" (line: ~p). ~n", [Term, Line]),
 	    Default;
-	{error, {Line, Mod, Term}} ->
-	    io:format("Malformed config file. Error at: ~p. ~n", [{Line, Mod, Term}]),
+	{error, Reason} ->
+	    io:format("could not read 'rr.config': '~p'. ~n", [Reason]),
 	    Default
     end.
 
 initialize(Props) ->
-    rr_log:new(proplists:get_value(log_target, Props, std_err),
-	       proplists:get_value(log_level, Props, info)),
+    rr_log:new(proplists:get_value('log.target', Props, std_err),
+	       proplists:get_value('log.level', Props, info)),
     ok.
 
 show_help(options, CmdSpec, Application) ->
@@ -53,8 +62,9 @@ show_help(options, CmdSpec, Application) ->
 show_help() ->
     io:format("~s~n", [show_information()]),
     io:format("Commands:
-   rf
-   help
+   rf             generate a random forest
+   config         set and get global configuration options
+   help           show program options
 ").
 
 show_information() -> 

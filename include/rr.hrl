@@ -45,3 +45,6 @@
 -type score() :: {Total::number(), Left::number(), Right::number()}.
 -type classifier() :: {No::number(), Base::atom()}.
 -type rule() :: {[{Feature::feature(), Value::atom()}, ...], Class::atom()}.
+
+-type distribute_fun() :: fun((feature(), exid()) -> distribute_example()).
+-type missing_fun() :: fun((predict | build, feature(), exid(), Left::number(), Right::number()) -> missing_example()).

@@ -6,7 +6,10 @@
 %%% Created :  7 May 2013 by Isak Karlsson <isak@Isaks-MacBook-Pro.local>
 
 -module(rr_rex).
--include("rr_tree.hrl").
+
+%% @headerfile "rf_tree.hrl"
+-include("rf_tree.hrl").
+
 -export([
 	 extract/4
 	]).
@@ -14,7 +17,7 @@
 extract({_, Model, _}, Confidence, Coverage, Total) ->
     extract(Model, Confidence, Coverage, Total, [], []).
 
-extract(#rr_leaf{distribution={True, False}, class=Class}, MinConfidence, MinCoverage, Total, Rule, Acc) ->
+extract(#rf_leaf{distribution={True, False}, class=Class}, MinConfidence, MinCoverage, Total, Rule, Acc) ->
     Confidence = confidence(True, False),
     Coverage = coverage(True, False, Total),
     if Coverage =< MinCoverage;
@@ -23,7 +26,7 @@ extract(#rr_leaf{distribution={True, False}, class=Class}, MinConfidence, MinCov
        true ->
 	    [{rule, lists:reverse(Rule), Confidence, Coverage, Class}|Acc]
     end;
-extract(#rr_node{feature=Feature, 
+extract(#rf_node{feature=Feature, 
 		 left=Left, 
 		 right=Right, 
 		 distribution={LeftCount, RightCount, {Class, True}}}, MinConfidence, MinCoverage, Total, Rule, Acc) ->
