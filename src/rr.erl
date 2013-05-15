@@ -5,7 +5,6 @@
 %%% @end
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr).
--compile(export_all).
 -author('isak-kar@dsv.su.se').
 -define(DATE, "2013-05-14").
 -define(MAJOR_VERSION, "0").
@@ -14,15 +13,28 @@
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 
+-export([
+	 main/1,
 
-main([Hd|Args]) ->
+	 show_help/3,
+	 illegal/1,
+	 illegal/2,
+	 illegal/3,
+	 illegal_option/2,
+	 seconds/1,
+
+	 get_opt_name/2,
+	 any_opt/2
+	]).
+
+main(Args) ->
     Props = read_config(),
     initialize(Props),
-    case Hd of
-	"rf" ->
-	    rf:main(Args);
-	"config" ->
-	    case Args of
+    case Args of
+	["rf"|Cmd] ->
+	    rf:main(Cmd);
+	["config"|Cmd] ->
+	    case Cmd of
 		["get"|Var] ->
 		    io:format("~s ~n", [proplists:get_value(list_to_atom(hd(Var)), Props)]);
 		["set"|_Var] ->
@@ -30,12 +42,13 @@ main([Hd|Args]) ->
 		_Other ->
 		    io:format("invalid argument~n")
 	    end;		
-	_ ->
+	["help"|_Method] ->
+	    show_help();
+	[] ->
+	    io:format("no command specified~n"),
 	    show_help()
-    end;
-main([]) ->
-    io:format("no command specified~n"),
-    show_help().
+    end.
+
 
 read_config() ->
     Default = [{log_level, info}, {log_target, std_err}],
@@ -73,7 +86,6 @@ Copyright (C) 2013+ ~s~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?A
 
 
 %% configuration helpers
-
 get_opt_name(Name, []) ->
     Name;
 get_opt_name(Name, [{RealName, _, Long, _Default, _Descr}|Rest]) ->
@@ -86,18 +98,12 @@ get_opt_name(Name, [{RealName, _, Long, _Default, _Descr}|Rest]) ->
 any_opt([], _) ->
     false;
 any_opt([O|Rest], Options) ->
-    case has_opt(O, Options) of
+    case proplists:is_defined(O, Options) of
 	true ->
 	    O;
 	false ->
 	    any_opt(Rest, Options)
     end.
-
-has_opt(Arg, Options) ->
-    lists:any(fun (K) ->
-		      K == Arg
-	      end, Options).
-    
 
 %% error reporting
 illegal(Argument, Error) ->
@@ -114,11 +120,6 @@ illegal_option(Argument, Option) ->
 illegal(Error) ->
     io:format(standard_error, "rr: ~s. ~nPlease consult the manual.~n", [Error]),
     halt().
-
-default_illegal(Out) ->
-    fun() ->
-	    illegal(Out)
-    end.
 
 %% @doc calculates the number of seconds between now() and Time
 seconds(Time) ->
