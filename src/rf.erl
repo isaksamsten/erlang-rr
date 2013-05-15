@@ -33,33 +33,27 @@
 	  "Show the program version."},
 	 {examples,       undefined,    "examples",     undefined,
 	  "View example usages"},
-	 {input_file,     $i,           "input",        string, 
+	 {input,          $i,           "input",        string, 
 	  "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
 	 {cores,          $c,           "cores",        {integer, erlang:system_info(schedulers)},
 	  "Number of cores used by the algorightm for constructing the model."},
-	 
-	 {split,          $s,           "split",       undefined,
-	  "Evaluate the input dataset by splitting it into two disjoint subsets determined by the 'ratio'-argument. The ratio determines the number of training examples."},
+
+	 {mode,           $x,           "mode",        atom,
+	  "Mode for building and/or evaluation. Available options include: 'cv', 'split', 'build' and 'evaluate'."},
+
 	 {ratio,          $r,           "ratio",       {float, 0.66},
 	  "Splitting ratio (i.e. the fraction of training examples). This argument is only valid when 'split' is activated."},
-	 {cv,             $x,           "cross-validate", undefined,
-	  "Split the dataset into k disjoint subsets (determined by the 'folds'-argument) and build and evaluate a model by combining each k-1 folds and train on one fold repeatedly k times."},
 	 {folds,          undefined,    "folds",       {integer, 10},
 	  "Number of cross validation folds"},
-	 {build,          $b,           "build",       undefined,
-	  "Build a model using the complete dataset and write the produced model to a file determined by the 'model-file'-argument."},
 	 {model_file,     undefined,    "model-file",  string,
 	  "File name when writing a model to file (only applicable when using the 'build' or 'evaluate'-argument')."},
-	 {evaluate,       $e,           "evaluate",    undefined,
-	  "Evaluate the input dataset using a model read from a file described by the 'model-file'-argument."},
-	 {proximity,      $p,           "proximity",   undefined,
-	  "Generate a proximity matrix, which is available to support imputation of missing values (by supplying 'proximity' to the 'missing'-argument)."},
 
 	 {progress,       undefined,    "progress",    {atom, dots},
 	  "Show a progress bar while building a model. Available options include: 'dots', 'numeric' and 'none'. "},
 
 	 {score,          undefined,    "score",       {atom, info},
 	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info' and 'gini', where 'info' denotes information entropy and 'gini' the gini-impurity."},
+
 	 {rule_score,     undefined,    "rule-score",  {atom, laplace},
 	  "Defines the measure, which should be minimized, for evaluating the goodness of a specific rule. Available otpions include: 'm', 'laplace' and 'purity', where 'm' denotes the m-estimate"},
 	 {classifiers,    $n,           "no-trees",    {integer, 10},
@@ -70,16 +64,19 @@
 	 {min_example,    undefined,    "min-examples",{integer, 1},
 	  "Min number of examples allowed for splitting a node"},
 	 
-	 {random_rule,    undefined,    "random-rule", undefined,
-	  "Rule or subset. The random weight is determined by the 'weight-factor'. If set to 1, 'rule' is always selected, if set to 0 a subset is always selected"},
-	 {rule,           undefined,    "rule",        undefined,
-	  "Build, at each node, k (determined by 'no-features') rules from m (determined by 'no-features') features. Thus including a decision based on [1, m] features at each branch."},
-	 {combination,    undefined,    "combination", undefined,
-	  "Generate k * (k - 1), where k is determined by 'no-features' combinations of features and evaluate the goodness of these at each split point. To allow for single features to be included, the attribute 'weight-factor' determines the probability of generating combinations (defaulting to 0.5)."},
-	 {weka,           undefined,    "weka",        undefined,
-	  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k=inf times."},
-	 {resample,       undefined,    "resample",    undefined,
-	  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k (determined by 'no-resamples') times."},
+	 {feature_sampling, undefined,    "feature-sampling", {string, "subset"},
+	  "Select a method for feature sampling. Available options include: 'subset', 'rule', 'random-rule', 'resample', 'weka', and 'combination'."},
+	 
+	 %% {random_rule,    undefined,    "random-rule", undefined,
+	 %%  "Rule or subset. The random weight is determined by the 'weight-factor'. If set to 1, 'rule' is always selected, if set to 0 a subset is always selected"},
+	 %% {rule,           undefined,    "rule",        undefined,
+	 %%  "Build, at each node, k (determined by 'no-features') rules from m (determined by 'no-features') features. Thus including a decision based on [1, m] features at each branch."},
+	 %% {combination,    undefined,    "combination", undefined,
+	 %%  "Generate k * (k - 1), where k is determined by 'no-features' combinations of features and evaluate the goodness of these at each split point. To allow for single features to be included, the attribute 'weight-factor' determines the probability of generating combinations (defaulting to 0.5)."},
+	 %% {weka,           undefined,    "weka",        undefined,
+	 %%  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k=inf times."},
+	 %% {resample,       undefined,    "resample",    undefined,
+	 %%  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k (determined by 'no-resamples') times."},
 
 	 {missing,        $m,           "missing",     {atom, random},
 	  "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
@@ -87,10 +84,13 @@
 	 {distribute,     $d,           "distribute",  {atom, default},
 	  "Distribute examples at each split according to different strategies. Available option include: 'default' or 'rulew'. If 'default' is selected, examples are distributed to either left or right. If 'rulew' is selected, fractions of each example are distributed according to how many antecedents each rule-node classifies the example."},
 
-	 {bagging,        undefined,    "bagging",     undefined,
-	  "To increase model diversity, a bootstrap replicate (i.e. sampling with replacement) of the original dataset is used when building each tree. [default]"},
-	 {subagging,     undefined,    "subagging",    undefined,
-	  "To increase model diversity and improve performance on large datasets, generate a subsample aggregate (i.e. a sample without replacement) from the original dataset."},
+	 {example_sampling, undefined,  "example-sampling", {string, "bagging"},
+	  "Select the method for feature sampling. Available options include: 'bagging' and 'subagging'."},
+
+	 %% {bagging,        undefined,    "bagging",     undefined,
+	 %%  "To increase model diversity, a bootstrap replicate (i.e. sampling with replacement) of the original dataset is used when building each tree. [default]"},
+	 %% {subagging,     undefined,    "subagging",    undefined,
+	 %%  "To increase model diversity and improve performance on large datasets, generate a subsample aggregate (i.e. a sample without replacement) from the original dataset."},
 
 	 {weight_factor,  undefined,    "weight-factor", {float, 0.5},
 	  "Used for controlling the randomness of the 'combination' and 'weighted'-arguments."},
@@ -114,14 +114,14 @@
 
 parse(Args, Options) ->
     case getopt:parse(Options, Args) of
-	{ok, Parsed} -> 
+	{ok, {Parsed, _}} -> 
 	    Parsed;
 	{error, {invalid_option, R}} ->
-	    illegal(io_lib:format("unrecognized option '~s'", [R]));
+	    rr:illegal(io_lib:format("unrecognized option '~s'", [R]));
 	{error, {missing_option_arg, R}} ->
-	    illegal(io_lib:format("missing argument to option '~s'", [get_opt_name(R, ?CMD_SPEC)]));
+	    rr:illegal(io_lib:format("missing argument to option '~s'", [rr:get_opt_name(R, ?CMD_SPEC)]));
 	{error, _} ->
-	    illegal("unknown error")
+	    rr:illegal("unknown error")
     end.
 
 %% @doc suspend a random forest model
@@ -179,7 +179,7 @@ main(Args) ->
     random:seed(now()),
 
     Options = parse(Args, ?CMD_SPEC),
-    case any_opt([help, version, examples], Options) of
+    case rr:any_opt([help, version, examples], Options) of
 	help ->
 	    rr:show_help(options, ?CMD_SPEC, "rf"),
 	    halt();
@@ -193,30 +193,32 @@ main(Args) ->
 	    ok
     end,
 
-    InputFile = get_opt(input_file, Options),
-    Cores = get_opt(cores, Options),
-    Output = create_output(Options),
-    Missing = create_missing_values(Options),
-    RunExperiment = create_experiment(Options),
-    Progress = create_progress(Options),
+    InputFile = proplists:get_value(input, Options),
+    Cores = proplists:get_value(cores, Options),
+    Output = output(Options),
+    Missing = missing_values(Options),
+    Progress = progress(Options),
 
-    rr_log:log(info, "Loading '~s' on ~p core(s)", [InputFile, Cores]),
+    rr_log:info("loading '~s' on ~p core(s)", [InputFile, Cores]),
+    LoadingTime = now(),
     Csv = csv:binary_reader(InputFile),
     {Features, Examples0} = rr_example:load(Csv, Cores),
     Examples = rr_example:shuffle_dataset(Examples0),
-
-   % {Build, Evaluate, _} = rf:new([{no_features, 3}]),
-
+    rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
  
     TotalNoFeatures = length(Features),
-    NoFeatures = get_no_features(TotalNoFeatures, Options),
-    Classifiers = get_opt(classifiers, Options),
-    Score = create_score(Options),
-    MaxDepth = get_opt(max_depth, Options),
-    MinEx = get_opt(min_example, Options),
-    Eval = create_brancher(NoFeatures, ordsets:from_list(Features), Examples, Missing, Score, Options),
-    Bagging = create_bagger(Options),
-    Distribute = create_distribute(Options),
+    NoFeatures = no_features(TotalNoFeatures, Options),
+    Classifiers = proplists:get_value(classifiers, Options),
+    Score = score(Options),
+    MaxDepth = proplists:get_value(max_depth, Options),
+    MinEx = proplists:get_value(min_example, Options),
+    Eval = feature_sampling(NoFeatures, Options),
+    Bagging = example_sampling(Options),
+    Distribute = distribute(Options),
+
+    rr_log:debug("data set contains '~p' example(s) and '~p' feature(s)", [rr_example:count(Examples), TotalNoFeatures]),
+    rr_log:debug("building forest using '~p' trees and '~p' feature(s)", [Classifiers, NoFeatures]),
+    rr_log:debug("limiting the depth of the forest to '~p' node(s) and each node must contain at least '~p' example(s)", [MaxDepth, MinEx]),
 
     {Build, Evaluate, Config} = rf:new([{no_features, NoFeatures},
 					{no_cores, Cores},
@@ -229,11 +231,24 @@ main(Args) ->
 					{progress, Progress},
 					{base_learner, rr_tree}]),
 
-    rr_log:info("Building model using ~p trees and ~p features", [Classifiers, NoFeatures]),
-    Res = rr_eval:split_validation(Features, Examples, [{build, Build}, {evaluate, Evaluate}, {folds, 10}]),
-    io:format("~p ~n", [Res]),
-    halt(),
-
+    ExperimentTime = now(),
+    case proplists:get_value(mode, Options) of
+	split ->
+	    Res = rr_eval:split_validation(Features, Examples, [{build, Build}, 
+								{evaluate, Evaluate}, 
+								{ratio, proplists:get_value(ratio, Options)}]),
+	    io:format("~p ~n", [Res]);
+	    %Output(Res)
+	cv ->
+	    Res = rr_eval:cross_validation(Features, Examples, [{build, Build}, 
+								{evaluate, Evaluate}, 
+								{progress, fun (Fold) -> io:format(standard_error, "fold ~p: ", [Fold]) end},
+								{folds, proplists:get_value(folds, Options)}]),
+	    io:format("~p ~n", [Res]);
+	Other ->
+	    rr:illegal_option("mode", Other)
+    end,
+    rr_log:info("experiment took '~p' second(s)", [rr:seconds(ExperimentTime)]),
     rr_log:stop().
 
 evaluate(Model, Test, Conf) ->
@@ -257,23 +272,25 @@ evaluate(Model, Test, Conf) ->
      {oob_accuracy, OOBAccuracy},
      {brier, Brier}].
 
-create_bagger(Options) ->
-    case any_opt([subagging, bagging], Options) of
-	subagging ->
+example_sampling(Options) ->
+    case proplists:get_value(example_sampling, Options) of
+	"subagging" ->
 	    fun rr_example:subset_aggregate/1;
-	_ ->
-	    fun rr_example:bootstrap_aggregate/1
+	"bagging" ->
+	    fun rr_example:bootstrap_aggregate/1;
+	Other ->
+	    rr:illegal_option("example-sampling", Other)		
     end.
 
-create_distribute(Options) ->	
-    case get_opt(distribute, Options) of
+distribute(Options) ->	
+    case proplists:get_value(distribute, Options) of
 	default -> fun rr_example:distribute/2;
 	rulew -> fun rr_rule:distribute_weighted/2;
-	Other -> illegal_option("distribute", Other)
+	Other -> rr:illegal_option("distribute", Other)
     end.
 
-create_missing_values(Options) ->
-    case get_opt(missing, Options) of
+missing_values(Options) ->
+    case proplists:get_value(missing, Options) of
 	random -> fun rr_missing:random/5;
 	randomw -> fun rr_missing:random_weighted/5;
 	weighted -> fun rr_missing:weighted/5;
@@ -283,77 +300,70 @@ create_missing_values(Options) ->
 	right -> fun rr_missing:right/5;
 	left -> fun rr_missing:left/5;
 	ignore -> fun rr_missing:ignore/5;
-	Other -> illegal_option("missing", Other)
+	Other -> rr:illegal_option("missing", Other)
     end.
 
-create_output(Options) ->
-    case get_opt(output, Options) of
+output(Options) ->
+    case proplists:get_value(output, Options) of
 	default -> rr_result:default();
 	csv -> rr_result:csv();
-	Other -> illegal_option("output", Other)
+	Other -> rr:illegal_option("output", Other)
     end.
 
-create_experiment(Options) ->
-    case any_opt([cv, split, build, evaluate, proximity], Options) of
-	split -> ok;
-	cv -> ok;
-	build -> ok;
-	evaluate -> ok;
-	false -> illegal("No method selected. Please use either 'split', 'cross-validate' or 'build' argument")
-    end.
-
-create_progress(Options) ->
-    case get_opt(progress, Options) of
+progress(Options) ->
+    case proplists:get_value(progress, Options) of
 	dots -> fun(_, _) -> io:format(standard_error, "..", []) end;
 	numeric -> fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
 	none -> fun(_, _) -> ok end;
-	rds -> fun(_, _) -> ok end; %% TODO: implement
-	Other -> illegal_option("progress", Other)
+%	rds -> fun(_, _) -> ok end;
+	Other -> rr:illegal_option("progress", Other)
     end.
 
-create_score(Options) ->
-    case get_opt(score, Options) of
+score(Options) ->
+    case proplists:get_value(score, Options) of
 	info -> rr_tree:info();
 	gini -> rr_tree:gini();
-	Other -> illegal_option("score", Other)		
+	Other -> rr:illegal_option("score", Other)		
     end.
 
-get_no_features(TotalNoFeatures, Options) ->
-    case get_opt(no_features, Options) of
+no_features(TotalNoFeatures, Options) ->
+    case proplists:get_value(no_features, Options) of
 	default -> round(math:log(TotalNoFeatures)/math:log(2)) + 1;
 	sqrt -> round(math:sqrt(TotalNoFeatures));
 	X when is_number(X), X > 0 ->
 	    X;
 	Other ->
-	    illegal_option("no-features", Other)
+	    rr:illegal_option("no-features", Other)
     end.
 
-create_brancher(NoFeatures, _Features, _Examples, _Missing, _Score, Options) ->
-    case any_opt([weka, resample, weighted, combination, rule, random_rule], Options) of
-	weka ->
+feature_sampling(NoFeatures, Options) ->
+    case proplists:get_value(feature_sampling, Options) of
+	"weka" ->
 	    rr_branch:weka(NoFeatures);
-	resample ->
-	    NoResamples = get_opt(no_resamples, Options),
-	    MinGain = get_opt(min_gain, Options),
+	"resample" ->
+	    NoResamples = proplists:get_value(no_resamples, Options),
+	    MinGain = proplists:get_value(min_gain, Options),
 	    rr_branch:resampled(NoResamples, NoFeatures, MinGain);
-	combination ->
-	    Factor = get_opt(weight_factor, Options),
+	"combination" ->
+	    Factor = proplists:get_value(weight_factor, Options),
 	    rr_branch:random_correlation(NoFeatures, Factor);
-	rule ->
-	    {NewNoFeatures, NoRules} = get_no_rules(Options, NoFeatures),
-	    RuleScore = create_rule_score(Options),
+	"rule" ->
+	    {NewNoFeatures, NoRules} = no_rules(Options, NoFeatures),
+	    RuleScore = rule_score(Options),
 	    rr_branch:rule(NewNoFeatures, NoRules, RuleScore); 
-	random_rule ->
-	    Factor = get_opt(weight_factor, Options),
-	    {NewNoFeatures, NoRules} = get_no_rules(Options, NoFeatures),
-	    RuleScore = create_rule_score(Options),
+	"random-rule" ->
+	    Factor = proplists:get_value(weight_factor, Options),
+	    {NewNoFeatures, NoRules} = no_rules(Options, NoFeatures),
+	    RuleScore = rule_score(Options),
 	    rr_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
-	false -> 
-	    rr_branch:subset(NoFeatures)
+	"subset" -> 
+	    rr_branch:subset(NoFeatures);
+	Other ->
+	    rr:illegal_option("no-features", Other)
     end.
 
-get_no_rules(Options, NoFeatures) ->
-    case get_opt(no_rules, Options) of
+no_rules(Options, NoFeatures) ->
+    case proplists:get_value(no_rules, Options) of
 	sh -> {NoFeatures, NoFeatures div 2};
 	ss -> {NoFeatures, NoFeatures};
 	sd -> {NoFeatures, NoFeatures * 2};
@@ -363,40 +373,17 @@ get_no_rules(Options, NoFeatures) ->
 	hh -> {NoFeatures div 2, NoFeatures div 2};
 	hs -> {NoFeatures div 2, NoFeatures};
 	hd -> {NoFeatures div 2, NoFeatures * 2};	
-	Other -> illegal_option("no-rules", Other)
+	Other -> rr:illegal_option("no-rules", Other)
     end.
     
-create_rule_score(Options) ->
-    case get_opt(rule_score, Options) of
+rule_score(Options) ->
+    case proplists:get_value(rule_score, Options) of
 	laplace -> fun rr_rule:laplace/2;
 	m -> fun rr_rule:m_estimate/2;
 	purity -> fun rr_rule:purity/2;
-	Other -> illegal_option("rule-score", Other)					  
+	Other -> rr:illegal_option("rule-score", Other)					  
     end.
 
-illegal() ->
-    getopt:usage(?CMD_SPEC, "rr"),
-    halt().
-
-illegal(Argument, Error) ->
-    illegal(Argument, Error, []),
-    halt().
-
-illegal(Argument, Error, Args) ->
-    io:format(standard_error, "rr: '~s': ~s. ~n", [Argument, io_lib:format(Error, Args)]),
-    halt().
-
-illegal_option(Argument, Option) ->
-    illegal(io_lib:format("unrecognized option '~s' for '~s'", [Option, Argument])).
-
-illegal(Error) ->
-    io:format(standard_error, "rr: ~s. ~nPlease consult the manual.~n", [Error]),
-    halt().
-
-default_illegal(Out) ->
-    fun() ->
-	    illegal(Out)
-    end.
 
 show_examples() ->
     "Example 1: 10-fold cross validation 'car' dataset:
@@ -427,43 +414,6 @@ show_information() ->
 Copyright (C) 2013+ ~s
 
 Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
-
-
-get_opt(Arg, Fun1, {Options, _}) ->	
-    case lists:keyfind(Arg, 1, Options) of
-	{Arg, Ws} ->
-	    Ws;
-	false -> 
-	    Fun1()
-    end.
-
-get_opt(Arg, Options) ->
-    get_opt(Arg, default_illegal(io_lib:format("unrecognized argument '~s'", [Arg])), Options).
-
-get_opt_name(Name, []) ->
-    Name;
-get_opt_name(Name, [{RealName, _, Long, _Default, _Descr}|Rest]) ->
-    if Name == RealName ->
-	    Long;
-       true ->
-	    get_opt_name(Name, Rest)
-    end.
-    
-any_opt([], _) ->
-    false;
-any_opt([O|Rest], Options) ->
-    case has_opt(O, Options) of
-	true ->
-	    O;
-	false ->
-	    any_opt(Rest, Options)
-    end.
-
-has_opt(Arg, {Options, _ }) ->
-    lists:any(fun (K) ->
-		      K == Arg
-	      end, Options).
-    
 
 
 

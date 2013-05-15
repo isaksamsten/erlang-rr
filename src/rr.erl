@@ -70,3 +70,56 @@ show_help() ->
 show_information() -> 
     io_lib:format("rr (Random Rule Learner) ~s.~s.~s (build date: ~s)
 Copyright (C) 2013+ ~s~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR]).
+
+
+%% configuration helpers
+
+get_opt_name(Name, []) ->
+    Name;
+get_opt_name(Name, [{RealName, _, Long, _Default, _Descr}|Rest]) ->
+    if Name == RealName ->
+	    Long;
+       true ->
+	    get_opt_name(Name, Rest)
+    end.
+    
+any_opt([], _) ->
+    false;
+any_opt([O|Rest], Options) ->
+    case has_opt(O, Options) of
+	true ->
+	    O;
+	false ->
+	    any_opt(Rest, Options)
+    end.
+
+has_opt(Arg, Options) ->
+    lists:any(fun (K) ->
+		      K == Arg
+	      end, Options).
+    
+
+%% error reporting
+illegal(Argument, Error) ->
+    illegal(Argument, Error, []),
+    halt().
+
+illegal(Argument, Error, Args) ->
+    io:format(standard_error, "rr: '~s': ~s. ~n", [Argument, io_lib:format(Error, Args)]),
+    halt().
+
+illegal_option(Argument, Option) ->
+    illegal(io_lib:format("unrecognized option '~s' for '~s'", [Option, Argument])).
+
+illegal(Error) ->
+    io:format(standard_error, "rr: ~s. ~nPlease consult the manual.~n", [Error]),
+    halt().
+
+default_illegal(Out) ->
+    fun() ->
+	    illegal(Out)
+    end.
+
+%% @doc calculates the number of seconds between now() and Time
+seconds(Time) ->
+    timer:now_diff(erlang:now(), Time)/1000000.

@@ -10,6 +10,10 @@
 -export([
 	 info/1,
 	 info/2,
+	 
+	 debug/1,
+	 debug/2,
+
 	 log/3,
 	 log/2,
 	 new/2,
@@ -41,6 +45,11 @@ info(Str, Params) ->
     log(info, Str, Params).
 info(Str) ->
     log(info, Str).
+
+debug(Str, Params) ->
+    log(debug, Str, Params).
+debug(Str) ->
+    log(debug, Str).
 
 log(Level, Str, Params) ->
     try

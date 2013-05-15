@@ -17,7 +17,7 @@
 	 precision/1]).
 
 %% @headerfile "rr_tree.hrl"
--include("rr_tree.hrl"). %% note: for specs
+-include("rr.hrl"). %% note: for specs
 
 
 -type result_list() :: {atom(), any()} | {atom(), any(), any()}.
@@ -39,9 +39,11 @@ cross_validation(Features, Examples, Props) ->
 	       end,
     NoFolds = proplists:get_value(folds, Props, 10),
     ToAverage = proplists:get_value(average, Props, [accuracy, auc, oob_accuracy, brier]),
+    Progress = proplists:get_value(progress, Props, fun (_) -> ok end),
 
     Total = rr_example:cross_validation(
 	      fun (Train, Test, Fold) ->
+		      Progress(Fold),
 		      Model = Build(Features, Train),
 		      Result = Evaluate(Model, Test),
 		      {{fold, Fold, Model}, Result}
