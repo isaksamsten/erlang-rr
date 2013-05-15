@@ -296,7 +296,7 @@ distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}
 	    end
      end, C};
 distribute({rule, Rule, _Lenght}, ExId) ->
-    {rr_rule:evaluate_rule(Rule, ExId), count(ExId)}.
+    {rf_rule:evaluate_rule(Rule, ExId), count(ExId)}.
 
 %% @private split data set using Feature
 split_feature(_Feature, [], _, Left, Right, Missing) ->

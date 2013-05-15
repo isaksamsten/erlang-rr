@@ -9,8 +9,8 @@
 -author('isak-kar@dsv.su.se').
 -compile(export_all). %% TODO: export
 
-%% @headerfile "rr_tree.hrl"
--include("rr_tree.hrl").
+%% @headerfile "rf_tree.hrl"
+-include("rf_tree.hrl").
 
 init() ->
     ets:new(models, [public, named_table]).

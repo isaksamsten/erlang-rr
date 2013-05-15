@@ -18,37 +18,47 @@
 %% @doc return a csv result generator
 -spec csv() -> result_fun().
 csv() ->
-    fun(Type, Data) ->
-	    csv_writer(Type, Data)
+    fun(Data) ->
+	    csv_output(Data)
     end.
 
-csv_writer(method, {Method, Data}) ->
-    io:format("~s ~p,", [Method, Data]);
-csv_writer(evaluation, Data) ->
-    lists:foreach(fun ({file, File}) ->
-			  io:format("~p,", [File]);
-		      ({accuracy, Accuracy}) ->
-			  io:format("~p,", [Accuracy]);
-		      ({auc, _Auc, Avg}) ->
-			  io:format("~p,", [Avg]);
-		      ({auc, Auc}) ->
-			  io:format("~p,", [Auc]);
-		      ({oob_accuracy, OOB}) ->
-			  io:format("~p,", [OOB]);
-		      ({precision, _Precision}) ->
-			  ok;
-		      ({brier, Brier}) ->
-			  io:format("~p ~n", [Brier]); %% NOTE: must be last...
-		      (_) -> ok
-		  end, Data);
-csv_writer(_, _) ->
-    ok.
+csv_output({cv, _, Folds}) ->
+    csv_output_cv(Folds);
+csv_output({split, Split}) ->
+    csv_output_split(Split).
+
+csv_output_cv([]) ->
+    done;
+csv_output_cv([{{_, Fold, _}, Measures}|Rest]) ->
+    io:format("fold ~p,", [Fold]),
+    csv_output_measures(Measures),
+    csv_output_cv(Rest).
+
+csv_output_split({_, Measures}) ->
+    csv_output_measures(Measures).
+
+csv_output_measures(Measures) ->
+    lists:foreach(
+      fun ({accuracy, Accuracy}) ->
+	      io:format("~p,", [Accuracy]);
+	  ({auc, _Auc, Avg}) ->
+	      io:format("~p,", [Avg]);
+	  ({auc, Auc}) ->
+	      io:format("~p,", [Auc]);
+	  ({oob_accuracy, OOB}) ->
+	      io:format("~p,", [OOB]);
+	  ({precision, _Precision}) ->
+	      ok;
+	  ({brier, Brier}) ->
+	      io:format("~p ~n", [Brier]); %% NOTE: must be last...
+	  (_) -> ok
+      end, Measures).
 
 %% @doc return a default result generator (human-readable)
 -spec default() -> result_fun().
 default() ->
-    fun(Type, Data) ->
-	    default_writer(Type, Data)
+    fun(Data) ->
+	    io:format("~p ~n", [Data])
     end.
 
 default_writer(start, Time) ->

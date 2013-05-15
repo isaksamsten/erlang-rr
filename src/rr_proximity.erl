@@ -8,7 +8,8 @@
 -export([generate_proximity/3,
 	 examples/1,
 	 init/0]).
--include("rr_tree.hrl").
+
+-include("rr.hrl").
 
 init() ->
     catch ets:delete(proximity),

@@ -136,23 +136,23 @@ new(Props) ->
 		 end,
 
     Cores = proplists:get_value(no_cores, Props, erlang:system_info(schedulers)),
-    Missing = proplists:get_value(missing_values, Props, fun rr_missing:weighted/5),
+    Missing = proplists:get_value(missing_values, Props, fun rf_missing:weighted/5),
     Progress = proplists:get_value(progress, Props, fun (_, _) -> ok end),
-    Score = proplists:get_value(score, Props, rr_tree:info()),
+    Score = proplists:get_value(score, Props, rf_tree:info()),
     NoTrees = proplists:get_value(no_trees, Props, 100),
-    Prune = proplists:get_value(pre_prune, Props, rr_tree:example_depth_stop(2, 1000)),
+    Prune = proplists:get_value(pre_prune, Props, rf_tree:example_depth_stop(2, 1000)),
 
-    FeatureSampling = proplists:get_value(feature_sampling, Props, rr_branch:subset(NoFeatures)),
+    FeatureSampling = proplists:get_value(feature_sampling, Props, rf_branch:subset(NoFeatures)),
     ExampleSampling = proplists:get_value(example_sampling, Props, fun rr_example:bootstrap_aggregate/1),
     Distribute = proplists:get_value(distribute, Props, fun rr_example:distribute/2),
-    BaseLearner = proplists:get_value(base_learner, Props, rr_tree),
+    BaseLearner = proplists:get_value(base_learner, Props, rf_tree),
 
 
     Tree = #rf_tree{
 	      score = Score,
 	      prune = Prune,
 	      branch = FeatureSampling,
-	      split = fun rr_tree:random_split/4,
+	      split = fun rf_tree:random_split/4,
 	      distribute = Distribute,
 	      missing_values = Missing
 	     },
@@ -224,12 +224,12 @@ main(Args) ->
 					{no_cores, Cores},
 					{no_trees, Classifiers},
 					{score, Score},
-					{pre_prune, rr_tree:example_depth_stop(MinEx, MaxDepth)},
+					{pre_prune, rf_tree:example_depth_stop(MinEx, MaxDepth)},
 					{feature_sampling, Eval},
 					{example_sampling, Bagging},
 					{distribute, Distribute},
 					{progress, Progress},
-					{base_learner, rr_tree}]),
+					{base_learner, rf_tree}]),
 
     ExperimentTime = now(),
     case proplists:get_value(mode, Options) of
@@ -237,14 +237,13 @@ main(Args) ->
 	    Res = rr_eval:split_validation(Features, Examples, [{build, Build}, 
 								{evaluate, Evaluate}, 
 								{ratio, proplists:get_value(ratio, Options)}]),
-	    io:format("~p ~n", [Res]);
-	    %Output(Res)
+	    Output(Res);
 	cv ->
 	    Res = rr_eval:cross_validation(Features, Examples, [{build, Build}, 
 								{evaluate, Evaluate}, 
-								{progress, fun (Fold) -> io:format(standard_error, "fold ~p: ", [Fold]) end},
+								{progress, fun (Fold) -> io:format(standard_error, "fold ~p ", [Fold]) end},
 								{folds, proplists:get_value(folds, Options)}]),
-	    io:format("~p ~n", [Res]);
+	    Output(Res);
 	Other ->
 	    rr:illegal_option("mode", Other)
     end,
@@ -291,15 +290,15 @@ distribute(Options) ->
 
 missing_values(Options) ->
     case proplists:get_value(missing, Options) of
-	random -> fun rr_missing:random/5;
-	randomw -> fun rr_missing:random_weighted/5;
-	weighted -> fun rr_missing:weighted/5;
-	partition -> fun rr_missing:random_partition/5;
-	wpartition -> fun rr_missing:weighted_partition/5;
-	proximity -> fun rr_missing:proximity/5;
-	right -> fun rr_missing:right/5;
-	left -> fun rr_missing:left/5;
-	ignore -> fun rr_missing:ignore/5;
+	random -> fun rf_missing:random/5;
+	randomw -> fun rf_missing:random_weighted/5;
+	weighted -> fun rf_missing:weighted/5;
+	partition -> fun rf_missing:random_partition/5;
+	wpartition -> fun rf_missing:weighted_partition/5;
+	proximity -> fun rf_missing:proximity/5;
+	right -> fun rf_missing:right/5;
+	left -> fun rf_missing:left/5;
+	ignore -> fun rf_missing:ignore/5;
 	Other -> rr:illegal_option("missing", Other)
     end.
 
@@ -321,8 +320,8 @@ progress(Options) ->
 
 score(Options) ->
     case proplists:get_value(score, Options) of
-	info -> rr_tree:info();
-	gini -> rr_tree:gini();
+	info -> rf_tree:info();
+	gini -> rf_tree:gini();
 	Other -> rr:illegal_option("score", Other)		
     end.
 
@@ -339,25 +338,25 @@ no_features(TotalNoFeatures, Options) ->
 feature_sampling(NoFeatures, Options) ->
     case proplists:get_value(feature_sampling, Options) of
 	"weka" ->
-	    rr_branch:weka(NoFeatures);
+	    rf_branch:weka(NoFeatures);
 	"resample" ->
 	    NoResamples = proplists:get_value(no_resamples, Options),
 	    MinGain = proplists:get_value(min_gain, Options),
-	    rr_branch:resampled(NoResamples, NoFeatures, MinGain);
+	    rf_branch:resampled(NoResamples, NoFeatures, MinGain);
 	"combination" ->
 	    Factor = proplists:get_value(weight_factor, Options),
-	    rr_branch:random_correlation(NoFeatures, Factor);
+	    rf_branch:random_correlation(NoFeatures, Factor);
 	"rule" ->
 	    {NewNoFeatures, NoRules} = no_rules(Options, NoFeatures),
 	    RuleScore = rule_score(Options),
-	    rr_branch:rule(NewNoFeatures, NoRules, RuleScore); 
+	    rf_branch:rule(NewNoFeatures, NoRules, RuleScore); 
 	"random-rule" ->
 	    Factor = proplists:get_value(weight_factor, Options),
 	    {NewNoFeatures, NoRules} = no_rules(Options, NoFeatures),
 	    RuleScore = rule_score(Options),
-	    rr_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
+	    rf_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
 	"subset" -> 
-	    rr_branch:subset(NoFeatures);
+	    rf_branch:subset(NoFeatures);
 	Other ->
 	    rr:illegal_option("no-features", Other)
     end.
@@ -378,9 +377,9 @@ no_rules(Options, NoFeatures) ->
     
 rule_score(Options) ->
     case proplists:get_value(rule_score, Options) of
-	laplace -> fun rr_rule:laplace/2;
-	m -> fun rr_rule:m_estimate/2;
-	purity -> fun rr_rule:purity/2;
+	laplace -> fun rf_rule:laplace/2;
+	m -> fun rf_rule:m_estimate/2;
+	purity -> fun rf_rule:purity/2;
 	Other -> rr:illegal_option("rule-score", Other)					  
     end.
 

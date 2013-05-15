@@ -10,7 +10,7 @@
 %%%
 %%% @end
 %%% Created : 13 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
--module(rr_missing).
+-module(rf_missing).
 -compile(export_all).
 -export([
 	 random_partition/0

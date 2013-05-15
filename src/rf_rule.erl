@@ -4,7 +4,7 @@
 %%% Module for learning rules
 %%% @end
 %%% Created : 30 Mar 2013 by Isak Karlsson <isak@Isaks-MacBook-Pro.local>
--module(rr_rule).
+-module(rf_rule).
 -author('isak-kar@dsv.su.se').
 
 -export([best/7,

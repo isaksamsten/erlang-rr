@@ -4,7 +4,7 @@
 %%% 
 %%% @end
 %%% Created :  8 Apr 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
--module(rr_branch).
+-module(rf_branch).
 -export([
 	 random/0,
 	 resampled/3,
@@ -157,7 +157,7 @@ all() ->
 -spec rule(integer(), integer(), score_fun()) -> branch_fun().
 rule(NoFeatures, NoRules, RuleScore) ->
     fun (Features, Examples, Total, Conf) ->
-	    rr_rule:best(Features, Examples, Total, Conf#rf_tree{split = fun rr_tree:deterministic_split/4}, 
+	    rf_rule:best(Features, Examples, Total, Conf#rf_tree{split = fun rf_tree:deterministic_split/4}, 
 			 NoFeatures, NoRules, RuleScore)
     end.
 
