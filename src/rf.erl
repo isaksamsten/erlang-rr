@@ -176,7 +176,7 @@ new(Props) ->
 main(Args) ->
     rr_example:init(),
     rr_ensemble:init(),
-    random:seed(now()),
+%    random:seed(now()),
 
     Options = parse(Args, ?CMD_SPEC),
     case rr:any_opt([help, version, examples], Options) of

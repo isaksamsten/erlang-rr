@@ -35,12 +35,17 @@ main(Args) ->
 	    rf:main(Cmd);
 	["config"|Cmd] ->
 	    case Cmd of
-		["get"|Var] ->
-		    io:format("~s ~n", [proplists:get_value(list_to_atom(hd(Var)), Props)]);
-		["set"|_Var] ->
-		    io:format("unimplemented ~n");
+		["get",Var] ->
+		    io:format("~s ~n", [proplists:get_value(list_to_atom(Var), Props)]);
+		["set",Var,Val] ->
+		    Atom = list_to_atom(Var),
+		    DelProps = proplists:delete(Atom, Props),
+		    NewProps = [{Atom, list_to_atom(Val)}|DelProps],
+		    file:write_file("rr.config", lists:foldl(fun (Prop, Acc) ->
+								     [Acc,io_lib:format("~p.~n", [Prop])]
+							     end, [], NewProps));
 		_Other ->
-		    io:format("invalid argument~n")
+		    io:format("config: invalid argument~n")
 	    end;		
 	["help"|_Method] ->
 	    show_help();
@@ -49,9 +54,8 @@ main(Args) ->
 	    show_help()
     end.
 
-
 read_config() ->
-    Default = [{log_level, info}, {log_target, std_err}],
+    Default = [{'log.level', info}, {'log.target', std_err}],
     case file:consult("rr.config") of
 	{ok, Prop} ->
 	    Prop;
