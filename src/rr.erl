@@ -6,10 +6,10 @@
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr).
 -author('isak-kar@dsv.su.se').
--define(DATE, "2013-05-14").
--define(MAJOR_VERSION, "0").
--define(MINOR_VERSION, "1").
--define(REVISION, "1.0").
+-define(DATE, "2013-05-16").
+-define(MAJOR_VERSION, "1").
+-define(MINOR_VERSION, "0").
+-define(REVISION, "0.0").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 
@@ -47,8 +47,16 @@ main(Args) ->
 		_Other ->
 		    io:format("config: invalid argument~n")
 	    end;		
-	["help"|_Method] ->
-	    show_help();
+	["help"|Methods] ->
+	    case Methods of
+		[Method] ->
+		    Atom = list_to_atom(Method),
+		    Atom:help();
+		[] ->
+		    show_help()
+	    end;
+	["version"] ->
+	    io:format("~s~n", [show_information()]);
 	[] ->
 	    io:format("no command specified~n"),
 	    show_help()
@@ -82,6 +90,7 @@ show_help() ->
    rf             generate a random forest
    config         set and get global configuration options
    help           show program options
+   version        show program version
 ").
 
 show_information() -> 

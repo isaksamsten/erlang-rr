@@ -7,15 +7,16 @@
 
 -module(rf).
 
--define(DATE, "2013-04-15").
--define(MAJOR_VERSION, "0").
--define(MINOR_VERSION, "5").
--define(REVISION, "1.0").
+-define(DATE, "2013-05-16").
+-define(MAJOR_VERSION, "1").
+-define(MINOR_VERSION, "0").
+-define(REVISION, "0.0").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 -export([
 	 main/1,
-
+	 
+	 help/0,
 	 new/1,
 	 kill/1
 	]).
@@ -124,6 +125,9 @@ parse(Args, Options) ->
 	    rr:illegal("unknown error")
     end.
 
+help() ->
+    rr:show_help(options, ?CMD_SPEC, "rf").
+
 %% @doc suspend a random forest model
 kill(Model) ->
     Model ! {exit, self()}.
@@ -181,7 +185,7 @@ main(Args) ->
     Options = parse(Args, ?CMD_SPEC),
     case rr:any_opt([help, version, examples], Options) of
 	help ->
-	    rr:show_help(options, ?CMD_SPEC, "rf"),
+	    help(),
 	    halt();
 	version ->
 	    io:format(show_information()),
