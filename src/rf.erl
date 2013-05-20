@@ -52,8 +52,8 @@
 	 {progress,       undefined,    "progress",    {atom, dots},
 	  "Show a progress bar while building a model. Available options include: 'dots', 'numeric' and 'none'. "},
 
-	 {score,          undefined,    "score",       {atom, info},
-	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info' and 'gini', where 'info' denotes information entropy and 'gini' the gini-impurity."},
+	 {score,          undefined,    "score",       {string, "info"},
+	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info', 'gini' and 'gini-info', where 'info' denotes information entropy and 'gini' the gini-impurity."},
 
 	 {rule_score,     undefined,    "rule-score",  {atom, laplace},
 	  "Defines the measure, which should be minimized, for evaluating the goodness of a specific rule. Available otpions include: 'm', 'laplace' and 'purity', where 'm' denotes the m-estimate"},
@@ -318,14 +318,14 @@ progress(Options) ->
 	dots -> fun(_, _) -> io:format(standard_error, "..", []) end;
 	numeric -> fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
 	none -> fun(_, _) -> ok end;
-%	rds -> fun(_, _) -> ok end;
 	Other -> rr:illegal_option("progress", Other)
     end.
 
 score(Options) ->
     case proplists:get_value(score, Options) of
-	info -> rf_tree:info();
-	gini -> rf_tree:gini();
+	"info" -> rf_tree:info();
+	"gini" -> rf_tree:gini();
+	"gini-info" -> rf_tree:gini_info(proplists:get_value(weight_factor, Options));	
 	Other -> rr:illegal_option("score", Other)		
     end.
 
@@ -361,6 +361,8 @@ feature_sampling(NoFeatures, Options) ->
 	    rf_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
+	"random-subset" ->
+	    rf_branch:random_subset(NoFeatures, 2);
 	Other ->
 	    rr:illegal_option("no-features", Other)
     end.
