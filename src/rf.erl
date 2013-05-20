@@ -362,7 +362,7 @@ feature_sampling(NoFeatures, Options) ->
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
 	"random-subset" ->
-	    rf_branch:random_subset(NoFeatures, 2);
+	    rf_branch:random_subset(NoFeatures, NoFeatures);
 	Other ->
 	    rr:illegal_option("no-features", Other)
     end.

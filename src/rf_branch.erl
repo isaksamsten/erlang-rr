@@ -186,7 +186,11 @@ random_subset(Features, Examples, Total, Conf, NoFeatures, Variance) ->
     Random1 = random:uniform(),
 	
     NewVariance = Random0 * Variance * if Random1 > 0.5 -> 1; true -> 1 end,
-    NewNoFeatures = round(NoFeatures + NewVariance),
+    NewNoFeatures = case round(NoFeatures + NewVariance) of
+			X when X > length(Features) -> length(Features);
+			X when X < 1 -> 1;
+			X -> X
+		    end,
     NewFeatures = rr_example:random_features(Features, NewNoFeatures),
     rr_example:best_split(NewFeatures, Examples, Total, Score, Split, Distribute, Missing).
     
