@@ -105,59 +105,6 @@ default_output_measures(Fold, Measures) ->
 		      (_) ->
 			  ok
 		  end, Measures).
-default_writer(start, Time) ->
-    io:format("*** Start (at: ~s) *** ~n", [strftime:f(Time, "%F %T")]);
-default_writer('end', Time) ->
-    io:format("*** End (at: ~s) *** ~n", [strftime:f(Time, "%F %T")]);
-default_writer(vi, {Data, N, No}) ->
-    io:format("** Variable Importance ** ~n"),
-    output_variable_importance(Data, N, No);
-default_writer(predictions, Data) ->
-    io:format("** Predictions ** ~n"),
-    output_predictions(Data);
-default_writer(method, {Method, Data}) ->
-    io:format("** ~s ~p ** ~n", [Method, Data]);
-default_writer(parameters, Data) ->
-    io:format("** Parameters ** ~n"),
-    lists:foreach(fun ({file, File}) ->
-			  io:format("File: ~p ~n", [File]);
-		      ({classifiers, Classifiers}) ->
-			  io:format("Trees: ~p ~n", [Classifiers]);
-		      ({no_features, NoFeatures}) ->
-			  io:format("Features: ~p ~n", [NoFeatures]);
-		      ({total_no_features, TotalNoFeatures}) ->
-			  io:format("Total No Features: ~p ~n", [TotalNoFeatures]);
-		      ({examples, Examples}) ->
-			  io:format("Examples: ~p ~n", [Examples]);
-		      ({time, Time}) ->
-			  io:format("Time: ~p seconds ~n", [Time])
-		  end, Data);
-
-default_writer(evaluation, Data) ->
-    io:format("** Evaluation ** ~n"),
-    lists:foreach(fun ({accuracy, Accuracy}) ->
-			  io:format("Accuracy: ~p ~n", [Accuracy]);
-		      ({auc, Auc, Avg}) ->
-			  io:format("Area under ROC~n"),
-			  lists:foreach(fun({Class, _, A}) ->
-						io:format("  ~s: ~p ~n", [Class, A])
-					end, Auc),
-			  io:format(" average: ~p ~n", [Avg]);
-		      ({oob_accuracy, OOB}) ->
-			  io:format("Base accuracy: ~p ~n", [OOB]);
-		      ({auc, Auc}) ->
-			  io:format("Auc: ~p ~n", [Auc]);
-		      ({precision, Precision}) ->
-			  io:format("Precision~n"),
-			  lists:foreach(fun({Class, P}) ->
-						io:format("  ~s: ~p ~n", [Class, P])
-					end, Precision);
-		      ({brier, Brier}) ->
-			  io:format("Brier: ~p ~n", [Brier]);
-		      (_) ->
-			  ok
-		  end, Data).
-
     
 output_variable_importance([], _, _) ->
     ok;

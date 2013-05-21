@@ -38,9 +38,8 @@ best_rule(Features, Examples, Total, Conf, NoFeatures, N, RuleScore,  #rr_candid
 
 %% @private generate a rule predicting a random class
 -spec generate_rule(features(), examples(), number(), Conf::#rf_tree{}, number(), score_fun()) -> #rr_candidate{}.
-generate_rule(Features, Examples, Total, #rf_tree{split=Split, score=Score, 
-						  distribute = Distribute, 
-						  missing_values=Missing} = Conf, NoFeatures, RuleScore) ->
+generate_rule(Features, Examples, Total, Conf, NoFeatures, RuleScore) ->
+    #rf_tree{split=Split, score=Score, distribute = Distribute,  missing_values=Missing} = Conf,
     NoClasses = length(Examples),
     {Class, _, _} = lists:nth(random:uniform(NoClasses), Examples),
     Subset = rr_example:random_features(Features, NoFeatures),

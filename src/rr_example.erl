@@ -324,7 +324,7 @@ find_numeric_split(FeatureId, Examples, Gain) ->
 	[{Value, Class}|ClassIds] ->
 	    Gt = lists:map(fun({C, Num, _}) -> {C, Num, []} end, Examples),
 	    Lt = lists:map(fun({C, _, _}) -> {C, 0, []} end, Examples),
-	    Dist = {Lt, Gt},
+	    Dist = {both, Lt, Gt},
 	    First = {Value, Class},
 	    Total = rr_example:count(Examples),
 	    find_numeric_split(ClassIds, First, FeatureId, Gain, Total, {Value/2, inf}, Dist);
@@ -337,15 +337,15 @@ find_numeric_split([], _, _, _, _, {Threshold, _}, _) ->
 find_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId, 
 			    Gain, Total, {OldThreshold, OldGain}, Dist) ->
 
-    {Left, Right} = Dist, 
+    {both, Left, Right} = Dist, 
     Dist0 = case lists:keytake(Class, 1, Left) of
 		{value, {Class, Num, _}, ClassRest} ->
-		    {[{Class, Num + 1, []}|ClassRest], Right}
+		    {both, [{Class, Num + 1, []}|ClassRest], Right}
 	    end,
-    {Left0, Right0} = Dist0,
+    {both, Left0, Right0} = Dist0,
     NewDist = case lists:keytake(Class, 1, Right0) of
 	{value, {Class, Num0, _}, ClassRest0} ->
-	    {Left0, [{Class, Num0 - 1, []}|ClassRest0]}
+	    {both, Left0, [{Class, Num0 - 1, []}|ClassRest0]}
     end,
     case Class == OldClass of
 	true -> find_numeric_split(Rest, {Value, Class}, FeatureId,

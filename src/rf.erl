@@ -216,7 +216,7 @@ main(Args) ->
     Score = score(Options),
     MaxDepth = proplists:get_value(max_depth, Options),
     MinEx = proplists:get_value(min_example, Options),
-    Eval = feature_sampling(NoFeatures, Options),
+    Eval = feature_sampling(NoFeatures, TotalNoFeatures, Options),
     Bagging = example_sampling(Options),
     Distribute = distribute(Options),
 
@@ -339,7 +339,7 @@ no_features(TotalNoFeatures, Options) ->
 	    rr:illegal_option("no-features", Other)
     end.
 
-feature_sampling(NoFeatures, Options) ->
+feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
     case proplists:get_value(feature_sampling, Options) of
 	"weka" ->
 	    rf_branch:weka(NoFeatures);
@@ -362,7 +362,9 @@ feature_sampling(NoFeatures, Options) ->
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
 	"random-subset" ->
-	    rf_branch:random_subset(NoFeatures, NoFeatures);
+	    rf_branch:random_subset(NoFeatures, 0);
+	"depth" ->
+	    rf_branch:depth(TotalNoFeatures div 2);
 	Other ->
 	    rr:illegal_option("no-features", Other)
     end.
