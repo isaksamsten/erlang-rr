@@ -197,7 +197,12 @@ main(Args) ->
 	    ok
     end,
 
-    InputFile = proplists:get_value(input, Options),
+    InputFile = case proplists:get_value(input, Options) of
+		    undefined ->
+			rr:illegal("no input file defined"),
+			halt();
+		    File -> File
+		end,
     Cores = proplists:get_value(cores, Options),
     Output = output(Options),
     Missing = missing_values(Options),
@@ -205,7 +210,7 @@ main(Args) ->
 
     rr_log:info("loading '~s' on ~p core(s)", [InputFile, Cores]),
     LoadingTime = now(),
-    Csv = csv:binary_reader(InputFile),
+    Csv = csv:binary_reader(InputFile), %% todo fix error!
     {Features, Examples0} = rr_example:load(Csv, Cores),
     Examples = rr_example:shuffle_dataset(Examples0),
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
