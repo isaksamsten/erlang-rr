@@ -145,6 +145,17 @@ laplace(C, N) ->
 random_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
+value_split(Feature, Examples, Distribute, Missing) ->
+    rr_example:split(Feature, Examples, Distribute, Missing,
+		     fun ({numeric, FeatureId}, Ex) ->
+			     none; %% TODO: sample from those with value
+			 ({categoric, FeatureId}, Ex) ->
+			     none; %% TODO: same..
+			 (Ff, Ex) ->
+			     rr_example:sample_split_value(Ff, Ex)
+		     end).
+
+
 %% @doc make a determinisc split in the numeric data set
 deterministic_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing, 
@@ -153,6 +164,8 @@ deterministic_split(Feature, Examples, Distribute, Missing) ->
 			 (Ff, Ex) ->
 			     rr_example:sample_split_value(Ff, Ex)
 		     end).
+
+
 
 %% @doc random choice between gini-impurity and entropy
 -spec gini_info(float()) -> score_fun().

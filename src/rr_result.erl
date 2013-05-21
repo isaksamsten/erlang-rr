@@ -58,9 +58,53 @@ csv_output_measures(Measures) ->
 -spec default() -> result_fun().
 default() ->
     fun(Data) ->
-	    io:format("~p ~n", [Data])
+	    default_output(Data)
     end.
 
+default_output({cv, _, Data}) ->
+    OutputFolds = rr_config:get_value('output.folds', false),
+    default_output_cv(Data, OutputFolds).
+
+default_output_cv([], _) -> 
+    done;
+default_output_cv([{{_, Fold, _}, Measures}|Rest], OutputFolds) ->
+    if OutputFolds == true ->
+	    default_output_measures(Fold, Measures),
+	    io:format("~n"),
+	    default_output_cv(Rest, OutputFolds);
+       OutputFolds == false ->
+	    if Fold == average ->
+		    default_output_measures(Fold, Measures),
+		    default_output_cv(Rest, OutputFolds);
+	       true ->
+		    default_output_cv(Rest, OutputFolds)
+	    end
+    end.
+		    
+default_output_measures(Fold, Measures) ->
+    io:format("fold ~p ~n", [Fold]),
+    lists:foreach(fun ({accuracy, Accuracy}) ->
+			  io:format("accuracy: ~p ~n", [Accuracy]);
+		      ({auc, Auc, Avg}) ->
+			  io:format("area under ROC~n"),
+			  lists:foreach(fun({Class, _, A}) ->
+						io:format("  ~s: ~p ~n", [Class, A])
+					end, Auc),
+			  io:format(" average: ~p ~n", [Avg]);
+		      ({oob_accuracy, OOB}) ->
+			  io:format("base accuracy: ~p ~n", [OOB]);
+		      ({auc, Auc}) ->
+			  io:format("auc: ~p ~n", [Auc]);
+		      ({precision, Precision}) ->
+			  io:format("precision~n"),
+			  lists:foreach(fun({Class, P}) ->
+						io:format("  ~s: ~p ~n", [Class, P])
+					end, Precision);
+		      ({brier, Brier}) ->
+			  io:format("brier: ~p ~n", [Brier]);
+		      (_) ->
+			  ok
+		  end, Measures).
 default_writer(start, Time) ->
     io:format("*** Start (at: ~s) *** ~n", [strftime:f(Time, "%F %T")]);
 default_writer('end', Time) ->
@@ -88,6 +132,7 @@ default_writer(parameters, Data) ->
 		      ({time, Time}) ->
 			  io:format("Time: ~p seconds ~n", [Time])
 		  end, Data);
+
 default_writer(evaluation, Data) ->
     io:format("** Evaluation ** ~n"),
     lists:foreach(fun ({accuracy, Accuracy}) ->
