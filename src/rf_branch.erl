@@ -21,7 +21,8 @@
 
 	 random_examples/2,
 
-	 depth/1
+	 depth/1,
+	 depth_rule/3
 	]).
 
 %% @headerfile "rf_tree.hrl"
@@ -167,7 +168,7 @@ random_examples(NoFeatures, NoExamples) ->
 	    end
     end.
 
-random_examples(Features, Examples, Total, Conf, NoExamples) ->
+random_examples(Features, Examples, _Total, Conf, NoExamples) ->
     #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
     Examples0 = rr_examples:random_examples(Examples, NoExamples),
     rr_example:best_split(Features, Examples0, NoExamples, Score, Split, Distribute, Missing).
@@ -205,4 +206,14 @@ depth(NoFeatures) ->
 	    rr_example:best_split(NewFeatures, Examples, Total, Score, Split, Distribute, Missing)
     end.
 				       
-	    
+depth_rule(NoFeatures, NoRules, RuleScore) ->
+    Rule = rule(NoFeatures, NoRules, RuleScore),
+    Subset = subset(NoFeatures),
+    fun (Features, Examples, Total, Conf) ->
+	    #rf_tree{depth=Depth} = Conf,
+	    if Depth >= NoFeatures -> %% todo: base on what?
+		    Rule(Features, Examples, Total, Conf);
+	       true ->
+		    Subset(Features, Examples, Total, Conf)
+	    end
+    end.

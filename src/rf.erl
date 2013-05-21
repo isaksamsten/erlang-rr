@@ -365,6 +365,10 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	    rf_branch:random_subset(NoFeatures, 0);
 	"depth" ->
 	    rf_branch:depth(TotalNoFeatures div 2);
+	"depth-rule" ->
+	    {NewNoFeatures, NoRules} = no_rules(Options, NoFeatures),
+	    RuleScore = rule_score(Options),
+	    rf_branch:depth_rule(NewNoFeatures, NoRules, RuleScore);
 	Other ->
 	    rr:illegal_option("no-features", Other)
     end.
