@@ -43,7 +43,7 @@ csv_output_measures(Measures) ->
 	      io:format("~p,", [Accuracy]);
 	  ({auc, _Auc, Avg}) ->
 	      io:format("~p,", [Avg]);
-	  ({auc, Auc}) ->
+	  ({auc, Auc}) -> %% this is for average
 	      io:format("~p,", [Auc]);
 	  ({oob_accuracy, OOB}) ->
 	      io:format("~p,", [OOB]);
@@ -103,6 +103,8 @@ default_output_measures(Fold, Measures) ->
 			  io:format("base accuracy: ~p ~n", [Base]);
 		      ({strength, Margin}) ->
 			  io:format("strength: ~p ~n", [Margin]);
+		      ({correlation, C}) ->
+			  io:format("correlation: ~p ~n", [C]);
 		      ({variance, A}) ->
 			  io:format("variance: ~p ~n", [A]);
 		      ({auc, Auc}) ->

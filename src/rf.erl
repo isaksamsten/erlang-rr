@@ -264,8 +264,9 @@ evaluate(Model, Test, Conf) ->
     OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
     BaseAccuracy = rr_ensemble:base_accuracy(Model, Test, Conf),
     
-    Margin = rr_eval:strength(Dict, NoTestExamples),
+    Strength = rr_eval:strength(Dict, NoTestExamples),
     Variance = rr_eval:variance(Dict, NoTestExamples),
+    Correlation = rr_eval:correlation(Dict, NoTestExamples),
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
@@ -278,7 +279,8 @@ evaluate(Model, Test, Conf) ->
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy},
      {auc, Auc, AvgAuc}, 
-     {strength, Margin},
+     {strength, Strength},
+     {correlation, Correlation},
      {variance, Variance},
      {precision, Precision}, 
      {oob_accuracy, OOBAccuracy},
@@ -380,7 +382,7 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	    RuleScore = rule_score(Options),
 	    rf_branch:depth_rule(NewNoFeatures, NoRules, RuleScore);
 	Other ->
-	    rr:illegal_option("no-features", Other)
+	    rr:illegal_option("feature-sampling", Other)
     end.
 
 no_rules(Options, NoFeatures) ->

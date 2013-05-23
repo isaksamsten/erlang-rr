@@ -9,6 +9,7 @@
 
 -export([
 	 cross_validation/3,
+	 average_cross_validation/3,
 	 split_validation/3,
 
 	 accuracy/1,
@@ -16,7 +17,8 @@
 	 brier/2,
 	 precision/1,
 	 strength/2,
-	 variance/2
+	 variance/2,
+	 correlation/2
 	]).
 
 %% @headerfile "rr.hrl"
@@ -57,7 +59,11 @@ cross_validation(Features, Examples, Props) ->
 
 %% @private default method for averaging the results of cross-validation
 average_cross_validation(Result, Folds) ->
-    average_cross_validation(Result, Folds, [accuracy, auc, strength, variance, oob_accuracy, base_accuracy, brier], []).
+    average_cross_validation(Result, Folds, [accuracy, auc, strength, correlation, variance, oob_accuracy, base_accuracy, brier]).
+
+%% @doc average the cross-validation (for the results specified in Inputs)
+average_cross_validation(Result, Folds, Inputs) ->
+        average_cross_validation(Result, Folds, Inputs, []).
 
 %% @private average cross-validation
 average_cross_validation(_, _, [], Acc) ->
@@ -68,7 +74,9 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
 				{H, _, Auc} ->
 				    Sum + Auc;
 				{H, O} ->
-				    Sum + O
+				    Sum + O;
+				false ->
+				    Sum 
 			    end
 		    end, 0, Avg) / Folds,
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
@@ -172,6 +180,30 @@ find_prob(Class, Probs) ->
 	    0
     end.
 
+%% @doc correlation, calculated as variance()/(1/K)P(h(x)=y)+P(h(x)=j) + (P(h(x)=y)-P(h(x)=j)) where y /= j
+%% @todo validate tha this is indeed correct..
+correlation(Predictions, NoExamples) ->
+    Nominator = variance(Predictions, NoExamples),
+    Denominator = calculate_value_for_classes(dict:fetch_keys(Predictions), Predictions, fun calculate_correlation/3, 0),
+    Nominator/math:pow((1/NoExamples)*Denominator, 2).
+
+calculate_correlation([], _, Score) ->
+    Score;
+calculate_correlation([{_, Probs}|Rest], Actual, Score) ->
+    NextBest = case lists:keydelete(Actual, 1, Probs) of
+		   [] -> 0;
+		   [{_, NextBest0}|_] ->
+		       NextBest0
+	       end,
+    calculate_correlation(Rest, Actual,
+		       case lists:keyfind(Actual, 1, Probs) of
+			   {_, Best} ->
+			       Score + math:sqrt((Best + NextBest + math:pow(Best - NextBest, 2)));
+			   false ->
+			       Score + math:sqrt((0 + NextBest + math:pow(0 - NextBest, 2)))
+		       end).  
+
+
 variance(Predictions, NoExamples) ->
     Strength = strength(Predictions, NoExamples),
     Variance = calculate_value_for_classes(dict:fetch_keys(Predictions), Predictions, fun calculate_variance/3, 0),
@@ -197,12 +229,6 @@ calculate_variance([{_, Probs}|Rest], Actual, Score) ->
 %% @doc the strength of RF, calculated as: (1/N)(P(h(x) = Y) - P(h(x) = j) where j /= Y)
 strength(Predictions, NoExamples) ->
     calculate_value_for_classes(dict:fetch_keys(Predictions), Predictions, fun calculate_strength/3, 0) / NoExamples.
-
-calculate_value_for_classes([], _, _, Score) ->
-    Score;
-calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
-    calculate_value_for_classes(Rest, Predictions, Fun,
-				Fun(dict:fetch(Actual, Predictions), Actual, Score)).
 
 calculate_strength([], _, Score) ->
     Score;
@@ -241,6 +267,15 @@ calculate_brier_score([{_, Probs}|Rest], Actual, Score) ->
 								    Acc + math:pow(Prob, 2)
 							    end
 						    end, Score, Probs)).
+
+%% @private calulate an accumulated score for each estimate
+calculate_value_for_classes([], _, _, Score) ->
+    Score;
+calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
+    calculate_value_for_classes(Rest, Predictions, Fun,
+				Fun(dict:fetch(Actual, Predictions), Actual, Score)).
+
+
 
 %% @doc Calculate the precision when predicting each class
 -spec precision(dict()) -> [{Class::atom(), Precision::float()}].
