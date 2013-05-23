@@ -264,7 +264,8 @@ evaluate(Model, Test, Conf) ->
     OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
     BaseAccuracy = rr_ensemble:base_accuracy(Model, Test, Conf),
     
-    Margin = rr_eval:margin(Dict, NoTestExamples),
+    Margin = rr_eval:strength(Dict, NoTestExamples),
+    Variance = rr_eval:variance(Dict, NoTestExamples),
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
@@ -277,7 +278,8 @@ evaluate(Model, Test, Conf) ->
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy},
      {auc, Auc, AvgAuc}, 
-     {margin, Margin},
+     {strength, Margin},
+     {variance, Variance},
      {precision, Precision}, 
      {oob_accuracy, OOBAccuracy},
      {base_accuracy, BaseAccuracy},

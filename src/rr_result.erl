@@ -49,7 +49,9 @@ csv_output_measures(Measures) ->
 	      io:format("~p,", [OOB]);
 	  ({base_accuracy, A}) ->
 	      io:format("~p,", [A]);
-	  ({margin, A}) ->
+	  ({variance, A}) ->
+	      io:format("~p,", [A]);
+	  ({strength, A}) ->
 	      io:format("~p,", [A]);
 	  ({precision, _Precision}) ->
 	      ok;
@@ -89,8 +91,6 @@ default_output_measures(Fold, Measures) ->
     io:format("fold ~p ~n", [Fold]),
     lists:foreach(fun ({accuracy, Accuracy}) ->
 			  io:format("accuracy: ~p ~n", [Accuracy]);
-		      ({margin, Margin}) ->
-			  io:format("margin: ~p ~n", [Margin]);
 		      ({auc, Auc, Avg}) ->
 			  io:format("area under ROC~n"),
 			  lists:foreach(fun({Class, _, A}) ->
@@ -101,6 +101,10 @@ default_output_measures(Fold, Measures) ->
 			  io:format("base oob-accuracy: ~p ~n", [OOB]);
 		      ({base_accuracy, Base}) ->
 			  io:format("base accuracy: ~p ~n", [Base]);
+		      ({strength, Margin}) ->
+			  io:format("strength: ~p ~n", [Margin]);
+		      ({variance, A}) ->
+			  io:format("variance: ~p ~n", [A]);
 		      ({auc, Auc}) ->
 			  io:format("auc: ~p ~n", [Auc]);
 		      ({precision, Precision}) ->

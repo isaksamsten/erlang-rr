@@ -15,8 +15,9 @@
 	 auc/2,
 	 brier/2,
 	 precision/1,
-	 margin/2
-]).
+	 strength/2,
+	 variance/2
+	]).
 
 %% @headerfile "rr.hrl"
 -include("rr.hrl"). %% note: for specs
@@ -56,7 +57,7 @@ cross_validation(Features, Examples, Props) ->
 
 %% @private default method for averaging the results of cross-validation
 average_cross_validation(Result, Folds) ->
-    average_cross_validation(Result, Folds, [accuracy, auc, margin, oob_accuracy, base_accuracy, brier], []).
+    average_cross_validation(Result, Folds, [accuracy, auc, strength, variance, oob_accuracy, base_accuracy, brier], []).
 
 %% @private average cross-validation
 average_cross_validation(_, _, [], Acc) ->
@@ -171,24 +172,47 @@ find_prob(Class, Probs) ->
 	    0
     end.
 
-margin(Predictions, NoExamples) ->
-    calculate_margin_for_classes(dict:fetch_keys(Predictions), Predictions, 0) / NoExamples.
+variance(Predictions, NoExamples) ->
+    Strength = strength(Predictions, NoExamples),
+    Variance = calculate_value_for_classes(dict:fetch_keys(Predictions), Predictions, fun calculate_variance/3, 0),
+    ((1/NoExamples)*Variance) - math:pow(Strength, 2).
 
-calculate_margin_for_classes([], _, Score) ->
+calculate_variance([], _, Score) ->
     Score;
-calculate_margin_for_classes([Actual|Rest], Predictions, Score) ->
-    calculate_margin_for_classes(Rest, Predictions,
-				 calculate_margin(dict:fetch(Actual, Predictions), Actual, Score)).
-
-calculate_margin([], _, Score) ->
-    Score;
-calculate_margin([{_, Probs}|Rest], Actual, Score) ->
+calculate_variance([{_, Probs}|Rest], Actual, Score) ->
     NextBest = case lists:keydelete(Actual, 1, Probs) of
 		   [] -> 0;
 		   [{_, NextBest0}|_] ->
 		       NextBest0
 	       end,
-    calculate_margin(Rest, Actual, 
+    calculate_strength(Rest, Actual, 
+		     case lists:keyfind(Actual, 1, Probs) of
+			 {_, Best} ->
+			     Score + math:pow(Best - NextBest, 2);
+			 false ->
+			     Score + math:pow(0 - NextBest, 2)
+		     end).  
+
+
+%% @doc the strength of RF, calculated as: (1/N)(P(h(x) = Y) - P(h(x) = j) where j /= Y)
+strength(Predictions, NoExamples) ->
+    calculate_value_for_classes(dict:fetch_keys(Predictions), Predictions, fun calculate_strength/3, 0) / NoExamples.
+
+calculate_value_for_classes([], _, _, Score) ->
+    Score;
+calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
+    calculate_value_for_classes(Rest, Predictions, Fun,
+				Fun(dict:fetch(Actual, Predictions), Actual, Score)).
+
+calculate_strength([], _, Score) ->
+    Score;
+calculate_strength([{_, Probs}|Rest], Actual, Score) ->
+    NextBest = case lists:keydelete(Actual, 1, Probs) of
+		   [] -> 0;
+		   [{_, NextBest0}|_] ->
+		       NextBest0
+	       end,
+    calculate_strength(Rest, Actual, 
 		     case lists:keyfind(Actual, 1, Probs) of
 			 {_, Best} ->
 			     Score + Best - NextBest;
@@ -204,13 +228,7 @@ calculate_margin([{_, Probs}|Rest], Actual, Score) ->
 %% @end
 -spec brier(dict(), integer()) -> Brier::float().
 brier(Predictions, NoExamples) ->
-   calculate_brier_score_for_classes(dict:fetch_keys(Predictions), Predictions, 0) / NoExamples.
-
-calculate_brier_score_for_classes([], _, Score) ->
-    Score;
-calculate_brier_score_for_classes([Actual|Rest], Predictions, Score) ->
-    calculate_brier_score_for_classes(Rest, Predictions, 
-				      calculate_brier_score(dict:fetch(Actual, Predictions), Actual, Score)).
+   calculate_value_for_classes(dict:fetch_keys(Predictions), Predictions, fun calculate_brier_score/3, 0) / NoExamples.
 
 %% @private
 calculate_brier_score([], _, Score) ->
