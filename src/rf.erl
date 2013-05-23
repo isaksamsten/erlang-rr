@@ -21,8 +21,6 @@
 	 kill/1
 	]).
 
-%% @headerfile "rr.hrl"
-%-include("rr.hrl").
 
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
@@ -52,8 +50,8 @@
 	 {progress,       undefined,    "progress",    {atom, dots},
 	  "Show a progress bar while building a model. Available options include: 'dots', 'numeric' and 'none'. "},
 
-	 {score,          undefined,    "score",       {atom, info},
-	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info' and 'gini', where 'info' denotes information entropy and 'gini' the gini-impurity."},
+	 {score,          undefined,    "score",       {string, "info"},
+	  "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info', 'gini' and 'gini-info', where 'info' denotes information entropy and 'gini' the gini-impurity."},
 
 	 {rule_score,     undefined,    "rule-score",  {atom, laplace},
 	  "Defines the measure, which should be minimized, for evaluating the goodness of a specific rule. Available otpions include: 'm', 'laplace' and 'purity', where 'm' denotes the m-estimate"},
@@ -180,7 +178,7 @@ new(Props) ->
 main(Args) ->
     rr_example:init(),
     rr_ensemble:init(),
-%    random:seed(now()),
+						%    random:seed(now()),
 
     Options = parse(Args, ?CMD_SPEC),
     case rr:any_opt([help, version, examples], Options) of
@@ -212,16 +210,16 @@ main(Args) ->
     LoadingTime = now(),
     Csv = csv:binary_reader(InputFile), %% todo fix error!
     {Features, Examples0} = rr_example:load(Csv, Cores),
-    Examples = rr_example:shuffle_dataset(Examples0),
+    Examples = rr_example:randomize(Examples0),
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
- 
+
     TotalNoFeatures = length(Features),
     NoFeatures = no_features(TotalNoFeatures, Options),
     Classifiers = proplists:get_value(classifiers, Options),
     Score = score(Options),
     MaxDepth = proplists:get_value(max_depth, Options),
     MinEx = proplists:get_value(min_example, Options),
-    Eval = feature_sampling(NoFeatures, Options),
+    Eval = feature_sampling(NoFeatures, TotalNoFeatures, Options),
     Bagging = example_sampling(Options),
     Distribute = distribute(Options),
 
@@ -229,16 +227,17 @@ main(Args) ->
     rr_log:debug("building forest using '~p' trees and '~p' feature(s)", [Classifiers, NoFeatures]),
     rr_log:debug("limiting the depth of the forest to '~p' node(s) and each node must contain at least '~p' example(s)", [MaxDepth, MinEx]),
 
-    {Build, Evaluate, Config} = rf:new([{no_features, NoFeatures},
-					{no_cores, Cores},
-					{no_trees, Classifiers},
-					{score, Score},
-					{pre_prune, rf_tree:example_depth_stop(MinEx, MaxDepth)},
-					{feature_sampling, Eval},
-					{example_sampling, Bagging},
-					{distribute, Distribute},
-					{progress, Progress},
-					{base_learner, rf_tree}]),
+    {Build, Evaluate, _} = rf:new([{no_features, NoFeatures},
+				   {no_cores, Cores},
+				   {no_trees, Classifiers},
+				   {score, Score},
+				   {missing_values, Missing},
+				   {pre_prune, rf_tree:example_depth_stop(MinEx, MaxDepth)},
+				   {feature_sampling, Eval},
+				   {example_sampling, Bagging},
+				   {distribute, Distribute},
+				   {progress, Progress},
+				   {base_learner, rf_tree}]),
 
     ExperimentTime = now(),
     case proplists:get_value(mode, Options) of
@@ -263,7 +262,9 @@ evaluate(Model, Test, Conf) ->
     NoTestExamples = rr_example:count(Test),
     Dict = rr_ensemble:evaluate_model(Model, Test, Conf),
     OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
-
+    BaseAccuracy = rr_ensemble:base_accuracy(Model, Test, Conf),
+    
+    Margin = rr_eval:margin(Dict, NoTestExamples),
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
@@ -274,10 +275,12 @@ evaluate(Model, Test, Conf) ->
 			 end, 0, Auc),
     Precision = rr_eval:precision(Dict),
     Brier = rr_eval:brier(Dict, NoTestExamples),
-    [{accuracy, Accuracy}, 
+    [{accuracy, Accuracy},
      {auc, Auc, AvgAuc}, 
+     {margin, Margin},
      {precision, Precision}, 
      {oob_accuracy, OOBAccuracy},
+     {base_accuracy, BaseAccuracy},
      {brier, Brier}].
 
 example_sampling(Options) ->
@@ -323,14 +326,14 @@ progress(Options) ->
 	dots -> fun(_, _) -> io:format(standard_error, "..", []) end;
 	numeric -> fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
 	none -> fun(_, _) -> ok end;
-%	rds -> fun(_, _) -> ok end;
 	Other -> rr:illegal_option("progress", Other)
     end.
 
 score(Options) ->
     case proplists:get_value(score, Options) of
-	info -> rf_tree:info();
-	gini -> rf_tree:gini();
+	"info" -> rf_tree:info();
+	"gini" -> rf_tree:gini();
+	"gini-info" -> rf_tree:gini_info(proplists:get_value(weight_factor, Options));	
 	Other -> rr:illegal_option("score", Other)		
     end.
 
@@ -344,7 +347,7 @@ no_features(TotalNoFeatures, Options) ->
 	    rr:illegal_option("no-features", Other)
     end.
 
-feature_sampling(NoFeatures, Options) ->
+feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
     case proplists:get_value(feature_sampling, Options) of
 	"weka" ->
 	    rf_branch:weka(NoFeatures);
@@ -366,6 +369,14 @@ feature_sampling(NoFeatures, Options) ->
 	    rf_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
+	"random-subset" ->
+	    rf_branch:random_subset(NoFeatures, 0);
+	"depth" ->
+	    rf_branch:depth(TotalNoFeatures div 2);
+	"depth-rule" ->
+	    {NewNoFeatures, NoRules} = no_rules(Options, NoFeatures),
+	    RuleScore = rule_score(Options),
+	    rf_branch:depth_rule(NewNoFeatures, NoRules, RuleScore);
 	Other ->
 	    rr:illegal_option("no-features", Other)
     end.

@@ -7,16 +7,48 @@
 %%% @end
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_example).
--compile(export_all).
+%-compile(export_all).
 -export([
 	 init/0,
 	 load/2,
 	 insert_prediction/2,
 
+	 sample_split_value/2,
+	 find_numeric_split/3,
+
 	 split/4,
+	 split/5,
 	 distribute/2,
+	 
 	 exid/1,
-	 feature/2
+	 count/2,
+	 count/1,
+	 clone/1,
+
+	 random_features/2,
+	 feature/2,
+	 feature_id/1,
+	 feature_name/1,
+
+	 to_binary/2,
+	 count_exclude/2,
+	 remove_covered/2,
+	 coverage/1,
+
+	 get_class/2,
+	 classes/1,
+	 majority/1,
+	 randomize/1,
+	 cross_validation/3,
+	 split_dataset/2,
+
+	 bootstrap_aggregate/1,
+	 subset_aggregate/1,
+
+	 parse_example_process/5,
+
+	 best_split/7,
+	 best_split/8
 	]).
 
 %% @headerfile "rr.hrl"
@@ -211,25 +243,25 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
     end.
 
 %% @doc Split Examples into two disjoint subsets according to Feature.
--spec split(feature(), examples(), distribute_fun(), missing_fun()) -> {none | atom(), split()}.
-split(Feature, Examples, Distribute, DistributeMissing) ->
-    {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples, Distribute),
+-spec split(feature(), examples(), distribute_fun(), missing_fun(), any()) -> {none | atom(), split()}.
+split(Feature, Examples, Distribute, DistributeMissing, Sample) ->
+    {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples, Distribute, Sample),
     {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 
 				      Left, Right, Missing, [], [], DistributeMissing)}.
 
+%% @doc split examples into two subsets according to feature handle split randomly
+-spec split(feature(), examples(), distribute_fun(), missing_fun()) -> {none | atom(), split()}.
+split(Feature, Examples, Distribute, DistributeMissing) ->
+    split(Feature, Examples, Distribute, DistributeMissing, fun sample_split_value/2).
+    
 %% @private Split into three disjoint subsets, Left, Right and Missing
-split_with_value(Feature, Examples, Distribute) when element(1, Feature) == numeric;
-						     element(1, Feature) == categoric;
-						     element(1, Feature) == combined->
-    Value = sample_split_value(Feature, Examples),
-    {Value, split_feature({Feature, Value}, Examples, Distribute, [], [], [])};
-split_with_value({{numeric, FeatureId}, Gain}, Examples, Distribute) -> %% NOTE: deterministic split
-    Value = find_numeric_split(FeatureId, Examples, Gain),
-    {Value, split_feature({{numeric, FeatureId}, Value}, Examples, Distribute, [], [], [])}; 
-split_with_value(Feature, Examples, Distribute) ->
-    {none, split_feature(Feature, Examples, Distribute, [], [], [])}.    
-
-
+split_with_value(Feature, Examples, Distribute, Sample) ->
+    case Sample(Feature, Examples) of
+	none -> 
+	    {none, split_feature(Feature, Examples, Distribute, [], [], [])};
+	Value ->
+	    {Value, split_feature({Feature, Value}, Examples, Distribute, [], [], [])}
+    end.
 
 %% @private split the class distribution (i.e. one example())
 split_class_distribution(_, [], _, _, Left, Right, Missing) ->
@@ -324,14 +356,14 @@ find_numeric_split(FeatureId, Examples, Gain) ->
 	    Dist = {both, Lt, Gt},
 	    First = {Value, Class},
 	    Total = rr_example:count(Examples),
-	    deterministic_numeric_split(ClassIds, First, FeatureId, Gain, Total, {Value/2, inf}, Dist);
+	    find_numeric_split(ClassIds, First, FeatureId, Gain, Total, {Value/2, inf}, Dist);
 	[] ->
-	    0.0 %% All values where missing. We have to guess....
+	    0.0 %% All values were missing. We have to guess....
     end.
 
-deterministic_numeric_split([], _, _, _, _, {Threshold, _}, _) ->
+find_numeric_split([], _, _, _, _, {Threshold, _}, _) ->
     Threshold;
-deterministic_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId, 
+find_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId, 
 			    Gain, Total, {OldThreshold, OldGain}, Dist) ->
 
     {both, Left, Right} = Dist, 
@@ -345,7 +377,7 @@ deterministic_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, Feature
 	    {both, Left0, [{Class, Num0 - 1, []}|ClassRest0]}
     end,
     case Class == OldClass of
-	true -> deterministic_numeric_split(Rest, {Value, Class}, FeatureId,
+	true -> find_numeric_split(Rest, {Value, Class}, FeatureId,
 					    Gain, Total, {OldThreshold, OldGain}, NewDist);
 	false ->
 	    Threshold = (Value + OldValue) / 2,
@@ -354,20 +386,26 @@ deterministic_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, Feature
 			       true -> {Threshold, NewGain0};
 			       false -> {OldThreshold, OldGain}
 			   end,
-	    deterministic_numeric_split(Rest, {Value, Class}, FeatureId,
+	    find_numeric_split(Rest, {Value, Class}, FeatureId,
 					Gain, Total, NewThreshold, NewDist)
     end.
 
-%% @private sample a split value for Feature randomly
+%% @doc 
+%% sample a split point. this function is used in split() and can be overriden. 
+%% please use this as the default
+%% @end
 sample_split_value(Feature, Examples) ->
     case Feature of
-	{categoric, FeatureId} ->
-	    resample_random_split(FeatureId, Examples, 5);
-	{numeric, FeatureId} ->
-	    sample_numeric_split(FeatureId, Examples);
-	{combined, A, B} ->
-	    sample_combined(A, B, Examples)
-    end.
+	 {categoric, FeatureId} ->
+	     resample_categoric_split(FeatureId, Examples, 5);
+	 {numeric, FeatureId} ->
+	     sample_numeric_split(FeatureId, Examples);
+	 {combined, A, B} ->
+	     sample_combined(A, B, Examples);
+	 _ ->
+	     none
+     end.
+
 sample_split_value(Feature, Examples, Ex1, Ex2) ->
     case Feature of
 	{categoric, FeatureId} ->
@@ -412,12 +450,12 @@ sample_numeric_split(FeatureId, Ex1, Ex2) ->
     end.
 
 %% @private resample a random categoric split if a missing value is found
-resample_random_split(_, _, 0) ->
+resample_categoric_split(_, _, 0) ->
     '?';
-resample_random_split(FeatureId, Examples, N) ->
+resample_categoric_split(FeatureId, Examples, N) ->
     case sample_categoric_split(FeatureId, Examples) of	
 	'?' ->
-	    resample_random_split(FeatureId, Examples, N - 1);
+	    resample_categoric_split(FeatureId, Examples, N - 1);
 	X ->  
 	    X
     end.
@@ -570,37 +608,12 @@ feature_name(Rules) when is_list(Rules) ->
     [feature_name(Rule) || Rule <- Rules];
 feature_name(Id) ->
     ets:lookup_element(features, Id, 2).
-
-%%
-%% Generate a set of random numbers
-%%
-generate_featurestrap(Features, Subset) ->
-    Length = length(Features),
-    case Length >= Subset of
-	true -> generate_featurestrap(Subset, Length, sets:new());
-	false -> lists:seq(1, Length) 
-    end.
-generate_featurestrap(N, Length, Set) ->
-    Random = random:uniform(Length),
-    Set0 = sets:add_element(Random, Set),
-    case sets:size(Set0) == N of
-	true ->
-	    Set0;
-	false ->
-	    generate_featurestrap(N, Length, Set0)
-    end.
-	    
-%%
-%% Return a random subset of size "Subset" from Features
-%%						    
+%% @doc Return a random subset of size "Subset" from Features
 random_features(Features, Subset) ->
     {Top, _} = lists:split(Subset, shuffle_list(Features)),
     Top.
 
-%%
-%% Return the dataset splitted into {Train, Test} with "Ratio"
-%% examples belonging to Train
-%% 
+%% @doc Return the dataset splitted into {Train, Test} with "Ratio" denoting the size of Train
 split_dataset(Examples, Ratio) ->
     lists:foldl(fun({Class, Count, Ids}, 
 		    {TrainAcc, TestAcc}) ->
@@ -610,15 +623,16 @@ split_dataset(Examples, Ratio) ->
 			 [{Class, length(Test), Test}|TestAcc]}
 		end, {[], []}, Examples).
 
-shuffle_dataset(Examples) ->
+%% @doc shuffle the data set (for example, before splitting)
+-spec randomize(examples()) -> examples().
+randomize(Examples) ->
     lists:foldl(fun({Class, Count, Ids}, Acc) ->
 			[{Class, Count, shuffle_list(Ids)}|Acc]
 		end, [], Examples).
 
+%% @private randomly permute a list of items
 shuffle_list(Ids0) ->
-    [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> 
-							 {random:uniform(), Id} 
-						 end, Ids0))].
+    [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> {random:uniform(), Id} end, Ids0))].
 
 %% @doc generate a dictionary of Folds folds.
 -spec generate_folds(examples(), integer()) -> dict().

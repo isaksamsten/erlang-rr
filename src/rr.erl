@@ -76,6 +76,7 @@ read_config() ->
     end.
 
 initialize(Props) ->
+    rr_config:init(Props),
     rr_log:new(proplists:get_value('log.target', Props, std_err),
 	       proplists:get_value('log.level', Props, info)),
     ok.

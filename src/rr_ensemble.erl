@@ -66,7 +66,7 @@ oob_accuracy(Model, Conf) ->
 %% @doc calculate the base Test accuracy for each model
 base_accuracy(Model, Test, Conf) ->
     TreeFun = fun(BaseModels, #rr_ensemble{base_learner={Base, BaseConf}}) ->
-		      lists:foldl(fun({BaseModel, _, _}, Acc) ->
+		      lists:foldl(fun({_, BaseModel, _}, Acc) ->
 					  [rr_eval:accuracy(Base:evaluate_model(BaseModel, Test, BaseConf))|Acc]
 				  end, [], BaseModels)
 	      end,
@@ -232,7 +232,7 @@ base_evaluator_process(Coordinator, Self, #rr_ensemble{base_learner={Base, BaseC
 	{exit, Coordinator, Self} ->
 	    done;  
 	{q, Method, TreeFun, Coordinator, Self} ->
-	    Coordinator ! {{q, Method}, Coordinator, Self, TreeFun(Models, BaseConf)},
+	    Coordinator ! {{q, Method}, Coordinator, Self, TreeFun(Models, Conf)},
 	    base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models)
     end.
 

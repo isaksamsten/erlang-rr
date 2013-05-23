@@ -14,9 +14,11 @@
 	 accuracy/1,
 	 auc/2,
 	 brier/2,
-	 precision/1]).
+	 precision/1,
+	 margin/2
+]).
 
-%% @headerfile "rr_tree.hrl"
+%% @headerfile "rr.hrl"
 -include("rr.hrl"). %% note: for specs
 
 
@@ -25,7 +27,7 @@
 -type result_set() :: {cv, Folds::integer(), [result(),...]} | {split, result()}.
 
 %% @doc
-%% Do cross-validation on Examples
+%% Do cross-validation on Examples.
 %% @end
 -spec cross_validation(features(), examples(), any()) -> result_set().
 cross_validation(Features, Examples, Props) ->
@@ -38,7 +40,7 @@ cross_validation(Features, Examples, Props) ->
 		   Evaluate0 -> Evaluate0
 	       end,
     NoFolds = proplists:get_value(folds, Props, 10),
-    ToAverage = proplists:get_value(average, Props, [accuracy, auc, oob_accuracy, brier]),
+    Average = proplists:get_value(average, Props, fun average_cross_validation/2),
     Progress = proplists:get_value(progress, Props, fun (_) -> ok end),
 
     Total = rr_example:cross_validation(
@@ -48,8 +50,13 @@ cross_validation(Features, Examples, Props) ->
 		      Result = Evaluate(Model, Test),
 		      {{fold, Fold, Model}, Result}
 	      end, NoFolds, Examples),
-    Avg = average_cross_validation(Total, NoFolds, ToAverage, []),
+    Avg = Average(Total, NoFolds),
     {cv, NoFolds, Total ++ [Avg]}.
+
+
+%% @private default method for averaging the results of cross-validation
+average_cross_validation(Result, Folds) ->
+    average_cross_validation(Result, Folds, [accuracy, auc, margin, oob_accuracy, base_accuracy, brier], []).
 
 %% @private average cross-validation
 average_cross_validation(_, _, [], Acc) ->
@@ -163,6 +170,32 @@ find_prob(Class, Probs) ->
 	false ->
 	    0
     end.
+
+margin(Predictions, NoExamples) ->
+    calculate_margin_for_classes(dict:fetch_keys(Predictions), Predictions, 0) / NoExamples.
+
+calculate_margin_for_classes([], _, Score) ->
+    Score;
+calculate_margin_for_classes([Actual|Rest], Predictions, Score) ->
+    calculate_margin_for_classes(Rest, Predictions,
+				 calculate_margin(dict:fetch(Actual, Predictions), Actual, Score)).
+
+calculate_margin([], _, Score) ->
+    Score;
+calculate_margin([{_, Probs}|Rest], Actual, Score) ->
+    NextBest = case lists:keydelete(Actual, 1, Probs) of
+		   [] -> 0;
+		   [{_, NextBest0}|_] ->
+		       NextBest0
+	       end,
+    calculate_margin(Rest, Actual, 
+		     case lists:keyfind(Actual, 1, Probs) of
+			 {_, Best} ->
+			     Score + Best - NextBest;
+			 false ->
+			     Score + 0 - NextBest
+		     end).    
+    
 
 %% @doc
 %% Calculate the brier score for predictions (i.e. the mean square

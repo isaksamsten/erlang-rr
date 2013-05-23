@@ -12,7 +12,7 @@
 %% * split = [Left, Right]
 %%
 -record(rr_candidate, {
-	  feature :: feature(),
+	  feature :: {Feature::feature(), Value::atom()},
 	  score :: score(), 
 	  split :: split()
 	 }).

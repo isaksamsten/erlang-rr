@@ -10,12 +10,18 @@
 -export([
 	 generate_model/3,
 	 evaluate_model/3,
+
 	 predict/4,
+
 	 random_split/4,
 	 deterministic_split/4,
+	 value_split/4,
+
 	 example_depth_stop/2,
+
 	 info/0,
 	 gini/0,
+	 gini_info/1,
 	 entropy/1
 ]).
 
@@ -59,7 +65,7 @@ predict(ExId, #rf_node{id=NodeNr,
 		       feature=F, 
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
-		       right=Right}, #rf_tree{distribute=Distribute, %% TODO: fix me
+		       right=Right}, #rf_tree{distribute=_Distribute, %% TODO: fix me
 					      missing_values=Missing} = Conf, Acc) ->
     NewAcc = [NodeNr|Acc],
     case rr_example:distribute(F, ExId) of
@@ -140,11 +146,43 @@ laplace(C, N) ->
 random_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
+-spec value_split(features(), examples(), distribute_fun(), missing_fun()) -> split().
+value_split(Feature, Examples, Distribute, Missing) ->
+    rr_example:split(Feature, Examples, Distribute, Missing,
+		     fun ({numeric, _FeatureId}, _Ex) ->
+			     none; %% TODO: sample from those with value
+			 ({categoric, _FeatureId}, _Ex) ->
+			     none; %% TODO: same..
+			 (Ff, Ex) ->
+			     rr_example:sample_split_value(Ff, Ex)
+		     end).
+
+
 %% @doc make a determinisc split in the numeric data set
-deterministic_split({numeric, _} = Feature, Examples, Distribute, Missing) ->
-    rr_example:split({Feature, info()}, Examples, Distribute, Missing);
+-spec deterministic_split(features(), examples(), distribute_fun(), missing_fun()) -> split().
 deterministic_split(Feature, Examples, Distribute, Missing) ->
-    rr_example:split(Feature, Examples, Distribute, Missing).
+    rr_example:split(Feature, Examples, Distribute, Missing, 
+		     fun ({numeric, FeatureId}, Ex) ->
+			     rr_example:find_numeric_split(FeatureId, Ex, info());
+			 (Ff, Ex) ->
+			     rr_example:sample_split_value(Ff, Ex)
+		     end).
+
+
+
+%% @doc random choice between gini-impurity and entropy
+-spec gini_info(float()) -> score_fun().
+gini_info(Fraction) ->
+    Gini = gini(),
+    Info = info(),
+    fun (Split, Total) ->
+	    Random = random:uniform(),
+	    if Random =< Fraction ->
+		    Gini(Split, Total);
+	       true ->
+		    Info(Split, Total)
+	    end
+    end.
 
 
 %% @doc return a scoring function for the gini-importance (todo: fix)
@@ -156,19 +194,26 @@ gini() ->
 gini({both, Left, Right}, Total) ->
     LeftGini = gini_content(Left, Total),
     RightGini = gini_content(Right, Total),
-    {(LeftGini + RightGini), LeftGini, RightGini};
+    {1-(LeftGini + RightGini), LeftGini, RightGini};
 gini({left, Left}, Total) ->
     LeftGini = gini_content(Left, Total),
-    {LeftGini, LeftGini, 0.0};
+    {1-LeftGini, LeftGini, 1.0};
 gini({right, Right}, Total) ->
     RightGini = gini_content(Right, Total),
-    {RightGini, 0.0, RightGini}.
-
+    {1-RightGini, 1.0, RightGini}.
     
-gini_content(Examples, Total) -> 
-    Fi = rr_example:count(Examples) / Total,
-    math:pow(Fi, 2).
-	
+gini_content(Examples, _Total) -> 
+    Counts = [C || {_, C, _} <- Examples],
+    Total = lists:sum(Counts),
+    lists:foldl(fun (0.0, Count) ->
+			Count;
+		    (0, Count) ->
+			Count;
+		    (Class, Count) ->
+			Count + math:pow(Class/Total, 2)
+		end, 0.0, Counts).
+			
+
 %% @doc return score function for information gain
 -spec info() -> score_fun().
 info() ->

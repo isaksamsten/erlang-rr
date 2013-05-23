@@ -58,61 +58,57 @@ csv_output_measures(Measures) ->
 -spec default() -> result_fun().
 default() ->
     fun(Data) ->
-	    io:format("~p ~n", [Data])
+	    default_output(Data)
     end.
 
-default_writer(start, Time) ->
-    io:format("*** Start (at: ~s) *** ~n", [strftime:f(Time, "%F %T")]);
-default_writer('end', Time) ->
-    io:format("*** End (at: ~s) *** ~n", [strftime:f(Time, "%F %T")]);
-default_writer(vi, {Data, N, No}) ->
-    io:format("** Variable Importance ** ~n"),
-    output_variable_importance(Data, N, No);
-default_writer(predictions, Data) ->
-    io:format("** Predictions ** ~n"),
-    output_predictions(Data);
-default_writer(method, {Method, Data}) ->
-    io:format("** ~s ~p ** ~n", [Method, Data]);
-default_writer(parameters, Data) ->
-    io:format("** Parameters ** ~n"),
-    lists:foreach(fun ({file, File}) ->
-			  io:format("File: ~p ~n", [File]);
-		      ({classifiers, Classifiers}) ->
-			  io:format("Trees: ~p ~n", [Classifiers]);
-		      ({no_features, NoFeatures}) ->
-			  io:format("Features: ~p ~n", [NoFeatures]);
-		      ({total_no_features, TotalNoFeatures}) ->
-			  io:format("Total No Features: ~p ~n", [TotalNoFeatures]);
-		      ({examples, Examples}) ->
-			  io:format("Examples: ~p ~n", [Examples]);
-		      ({time, Time}) ->
-			  io:format("Time: ~p seconds ~n", [Time])
-		  end, Data);
-default_writer(evaluation, Data) ->
-    io:format("** Evaluation ** ~n"),
+default_output({cv, _, Data}) ->
+    OutputFolds = rr_config:get_value('output.folds', false),
+    default_output_cv(Data, OutputFolds).
+
+default_output_cv([], _) -> 
+    done;
+default_output_cv([{{_, Fold, _}, Measures}|Rest], OutputFolds) ->
+    if OutputFolds == true ->
+	    default_output_measures(Fold, Measures),
+	    io:format("~n"),
+	    default_output_cv(Rest, OutputFolds);
+       OutputFolds == false ->
+	    if Fold == average ->
+		    default_output_measures(Fold, Measures),
+		    default_output_cv(Rest, OutputFolds);
+	       true ->
+		    default_output_cv(Rest, OutputFolds)
+	    end
+    end.
+		    
+default_output_measures(Fold, Measures) ->
+    io:format("fold ~p ~n", [Fold]),
     lists:foreach(fun ({accuracy, Accuracy}) ->
-			  io:format("Accuracy: ~p ~n", [Accuracy]);
+			  io:format("accuracy: ~p ~n", [Accuracy]);
+		      ({margin, Margin}) ->
+			  io:format("margin: ~p ~n", [Margin]);
 		      ({auc, Auc, Avg}) ->
-			  io:format("Area under ROC~n"),
+			  io:format("area under ROC~n"),
 			  lists:foreach(fun({Class, _, A}) ->
 						io:format("  ~s: ~p ~n", [Class, A])
 					end, Auc),
 			  io:format(" average: ~p ~n", [Avg]);
 		      ({oob_accuracy, OOB}) ->
-			  io:format("Base accuracy: ~p ~n", [OOB]);
+			  io:format("base oob-accuracy: ~p ~n", [OOB]);
+		      ({base_accuracy, Base}) ->
+			  io:format("base accuracy: ~p ~n", [Base]);
 		      ({auc, Auc}) ->
-			  io:format("Auc: ~p ~n", [Auc]);
+			  io:format("auc: ~p ~n", [Auc]);
 		      ({precision, Precision}) ->
-			  io:format("Precision~n"),
+			  io:format("precision~n"),
 			  lists:foreach(fun({Class, P}) ->
 						io:format("  ~s: ~p ~n", [Class, P])
 					end, Precision);
 		      ({brier, Brier}) ->
-			  io:format("Brier: ~p ~n", [Brier]);
+			  io:format("brier: ~p ~n", [Brier]);
 		      (_) ->
 			  ok
-		  end, Data).
-
+		  end, Measures).
     
 output_variable_importance([], _, _) ->
     ok;
