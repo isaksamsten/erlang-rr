@@ -47,10 +47,14 @@ csv_output_measures(Measures) ->
 	      io:format("~p,", [Auc]);
 	  ({oob_accuracy, OOB}) ->
 	      io:format("~p,", [OOB]);
+	  ({base_accuracy, A}) ->
+	      io:format("~p,", [A]);
+	  ({margin, A}) ->
+	      io:format("~p,", [A]);
 	  ({precision, _Precision}) ->
 	      ok;
 	  ({brier, Brier}) ->
-	      io:format("~p ~n", [Brier]); %% NOTE: must be last...
+	      io:format("~p ~n", [Brier]);
 	  (_) -> ok
       end, Measures).
 
