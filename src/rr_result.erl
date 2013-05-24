@@ -12,6 +12,29 @@
 	 default/0
 ]).
 
+-define(DEFAULT_CSV_OUTPUT, [{"fold", fold},
+			     {"accuracy", accuracy}, 
+			     {"auc", auc}, 
+			     {"oob-base-accuracy", oob_base_accuracy},
+			     {"base-accuracy", base_accuracy},
+			     {"strength", strength}, 
+			     {"variance", variance}, 
+			     {"correlation", correlation},
+			     {"c/s^2", c_s2}, 
+			     {"brier", brier}]).
+
+
+-define(DEFAULT_OUTPUT, [{"fold", fold},
+			 {"accuracy", accuracy}, 
+			 {"auc", auc}, 
+			 {"oob-base-accuracy", oob_base_accuracy},
+			 {"base-accuracy", base_accuracy},
+			 {"strength", strength}, 
+			 {"variance", variance}, 
+			 {"correlation", correlation},
+			 {"c/s^2", c_s2}, 
+			 {"brier", brier}]).
+
 -type result() :: vi | predictions | evaluation | method | start | 'end'.
 -type result_fun() :: fun((result(), any()) -> ok).
 
@@ -19,119 +42,133 @@
 -spec csv() -> result_fun().
 csv() ->
     fun(Data) ->
+	    Header = rr_config:get_value('output.csv.header', ?DEFAULT_CSV_OUTPUT),
 	    case rr_config:get_value('output.csv.header', true) of
 		true ->
-		    Default = ["fold","accuracy", "auc", "oob-base-accuracy", "base-accuracy",
-			       "strength", "variance", "correlation", "c/s^2", "brier"],
-		    Header = rr_config:get_value('csv.header', Default),
-		    io:format("~s~n", [string:join(Header, ",")]);
+		    io:format("~s~n", [string:join(lists:map(fun ({H, _}) -> H end, Header), ",")]);
 		false ->
 		    ok
 	    end,
-	    csv_output(Data)
+	    csv_output(Data, Header)
     end.
 
-csv_output({cv, _, Folds}) ->
-    csv_output_cv(Folds);
-csv_output({split, Split}) ->
-    csv_output_split(Split).
+csv_output({cv, _, Folds}, Header) ->
+    csv_output_cv(Folds, Header);
+csv_output({split, Split}, Header) ->
+    csv_output_split(Split, Header).
 
-csv_output_cv([]) ->
+csv_output_cv([], _) ->
     done;
-csv_output_cv([{{_, Fold, _}, Measures}|Rest]) ->
+csv_output_cv([{{_, Fold, _}, Measures}|Rest], Header) ->
     io:format("fold ~p,", [Fold]),
-    csv_output_measures(Measures),
-    csv_output_cv(Rest).
+    csv_output_measures(Measures, Header),
+    csv_output_cv(Rest, Header).
 
-csv_output_split({_, Measures}) ->
-    csv_output_measures(Measures).
+csv_output_split({_, Measures}, Header) ->
+    csv_output_measures(Measures, Header).
 
-csv_output_measures(Measures) ->
-    {accuracy, Accuracy} = lists:keyfind(accuracy, 1, Measures),
-    AUC = case lists:keyfind(auc, 1, Measures) of
-	      {auc, _, Avg} ->
-		  Avg;
-	      {auc, Avg} ->
-		  Avg
-	  end,
-    {oob_base_accuracy, Oba} = lists:keyfind(oob_base_accuracy, 1, Measures),
-    {base_accuracy, Ba} = lists:keyfind(base_accuracy, 1, Measures),
-    {variance, V} = lists:keyfind(variance, 1, Measures),
-    {strength, S} = lists:keyfind(strength, 1, Measures),
-    {correlation, Corr} = lists:keyfind(correlation, 1, Measures),
-    {c_s2, Cs2} = lists:keyfind(c_s2, 1, Measures),
-    {brier, Brier} = lists:keyfind(brier, 1, Measures),
-    io:format("~p,", [Accuracy]),
-    io:format("~p,", [AUC]),
-    io:format("~p,", [Oba]),
-    io:format("~p,", [Ba]),
-    io:format("~p,", [S]),
-    io:format("~p,", [V]),
-    io:format("~p,", [Corr]),
-    io:format("~p,", [Cs2]),
-    io:format("~p ~n", [Brier]).
+csv_output_measures(Measures, Header) ->
+    [{_, Last}|NewHeader] = lists:reverse(Header),
+    lists:foreach(fun ({_, Key}) ->
+			  case lists:keyfind(Key, 1, Measures) of
+			      {Key, Value} ->
+				  io:format("~p,", [Value]);
+			      {Key, _, Value} ->
+				  io:format("~p,", [Value]);
+			      _ ->
+				  ok
+			  end
+		  end, lists:reverse(NewHeader)),
+    case lists:keyfind(Last, 1, Measures) of
+	{Last, Value} ->
+	    io:format("~p~n", [Value]);
+	_ ->
+	    rr:illegal("invalid ending in header...")
+    end.
 
 %% @doc return a default result generator (human-readable)
 -spec default() -> result_fun().
 default() ->
     fun(Data) ->
-	    default_output(Data)
+	    Header = rr_config:get_value('output.default.header', ?DEFAULT_OUTPUT),
+	    default_output(Data, Header)
     end.
 
-default_output({cv, _, Data}) ->
+default_output({cv, _, Data}, Header) ->
     OutputFolds = rr_config:get_value('output.cv.folds', false),
-    default_output_cv(Data, OutputFolds).
+    default_output_cv(Data, OutputFolds, Header).
 
-default_output_cv([], _) -> 
+default_output_cv([], _, _) -> 
     done;
-default_output_cv([{{_, Fold, _}, Measures}|Rest], OutputFolds) ->
+default_output_cv([{{_, Fold, _}, Measures}|Rest], OutputFolds, Header) ->
     if OutputFolds == true ->
-	    default_output_measures(Fold, Measures),
+	    default_output_measures(Fold, Measures, Header),
 	    io:format("~n"),
-	    default_output_cv(Rest, OutputFolds);
+	    default_output_cv(Rest, OutputFolds, Header);
        OutputFolds == false ->
 	    if Fold == average ->
-		    default_output_measures(Fold, Measures),
-		    default_output_cv(Rest, OutputFolds);
+		    default_output_measures(Fold, Measures, Header),
+		    default_output_cv(Rest, OutputFolds, Header);
 	       true ->
-		    default_output_cv(Rest, OutputFolds)
+		    default_output_cv(Rest, OutputFolds, Header)
 	    end
     end.
 		    
-default_output_measures(Fold, Measures) ->
+default_output_measures(Fold, Measures, Header) ->
     io:format("fold ~p ~n", [Fold]),
-    lists:foreach(fun ({accuracy, Accuracy}) ->
-			  io:format("accuracy: ~p ~n", [Accuracy]);
-		      ({auc, Auc, Avg}) ->
-			  io:format("area under ROC~n"),
-			  lists:foreach(fun({Class, _, A}) ->
-						io:format("  ~s: ~p ~n", [Class, A])
-					end, Auc),
-			  io:format(" average: ~p ~n", [Avg]);
-		      ({oob_accuracy, OOB}) ->
-			  io:format("base oob-accuracy: ~p ~n", [OOB]);
-		      ({base_accuracy, Base}) ->
-			  io:format("base accuracy: ~p ~n", [Base]);
-		      ({strength, Margin}) ->
-			  io:format("strength: ~p ~n", [Margin]);
-		      ({correlation, C}) ->
-			  io:format("correlation: ~p ~n", [C]);
-		      ({c_s2, Cs2}) ->
-			  io:format("c/s^2: ~p ~n", [Cs2]);
-		      ({variance, A}) ->
-			  io:format("variance: ~p ~n", [A]);
-		      ({auc, Auc}) ->
-			  io:format("auc: ~p ~n", [Auc]);
-		      ({precision, Precision}) ->
-			  io:format("precision~n"),
-			  lists:foreach(fun({Class, P}) ->
+    lists:foreach(fun ({Name, Key}) ->
+			  case lists:keyfind(Key, 1, Measures) of
+			      {precision, Value} ->
+				  io:format("precision~n"),
+				  lists:foreach(fun({Class, P}) ->
 						io:format("  ~s: ~p ~n", [Class, P])
-					end, Precision);
-		      ({brier, Brier}) ->
-			  io:format("brier: ~p ~n", [Brier]);
-		      (_) ->
-			  ok
-		  end, Measures).
+					end, Value);
+			      {Key, Value} ->
+				  io:format("~s: ~p~n", [Name, Value]);
+			      {Key, Auc, Value} ->
+				  io:format("area under ROC~n"),
+				  lists:foreach(fun({Class, _, A}) ->
+							io:format("  ~s: ~p ~n", [Class, A])
+						end, Auc),
+				  io:format("average: ~p~n", [Value]);
+			      _ ->
+				  ok
+			  end
+		  end, Header).
+
+
+    %% lists:foreach(fun ({accuracy, Accuracy}) ->
+    %% 			  io:format("accuracy: ~p ~n", [Accuracy]);
+    %% 		      ({auc, Auc, Avg}) ->
+    %% 			  io:format("area under ROC~n"),
+    %% 			  lists:foreach(fun({Class, _, A}) ->
+    %% 						io:format("  ~s: ~p ~n", [Class, A])
+    %% 					end, Auc),
+    %% 			  io:format(" average: ~p ~n", [Avg]);
+    %% 		      ({oob_accuracy, OOB}) ->
+    %% 			  io:format("base oob-accuracy: ~p ~n", [OOB]);
+    %% 		      ({base_accuracy, Base}) ->
+    %% 			  io:format("base accuracy: ~p ~n", [Base]);
+    %% 		      ({strength, Margin}) ->
+    %% 			  io:format("strength: ~p ~n", [Margin]);
+    %% 		      ({correlation, C}) ->
+    %% 			  io:format("correlation: ~p ~n", [C]);
+    %% 		      ({c_s2, Cs2}) ->
+    %% 			  io:format("c/s^2: ~p ~n", [Cs2]);
+    %% 		      ({variance, A}) ->
+    %% 			  io:format("variance: ~p ~n", [A]);
+    %% 		      ({auc, Auc}) ->
+    %% 			  io:format("auc: ~p ~n", [Auc]);
+    %% 		      ({precision, Precision}) ->
+    %% 			  io:format("precision~n"),
+    %% 			  lists:foreach(fun({Class, P}) ->
+    %% 						io:format("  ~s: ~p ~n", [Class, P])
+    %% 					end, Precision);
+    %% 		      ({brier, Brier}) ->
+    %% 			  io:format("brier: ~p ~n", [Brier]);
+    %% 		      (_) ->
+    %% 			  ok
+    %% 		  end, Measures).
     
 output_variable_importance([], _, _) ->
     ok;

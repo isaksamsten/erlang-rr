@@ -79,7 +79,7 @@ initialize(Props) ->
     rr_config:init(Props),
     rr_log:new(proplists:get_value('log.target', Props, std_err),
 	       proplists:get_value('log.level', Props, info)),
-    ok.
+    rr_log:debug("initialized configuration file").
 
 show_help(options, CmdSpec, Application) ->
     io:format("~s~n", [show_information()]),
