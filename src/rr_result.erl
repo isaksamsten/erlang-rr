@@ -12,28 +12,28 @@
 	 default/0
 ]).
 
--define(DEFAULT_CSV_OUTPUT, [{"fold", fold},
-			     {"accuracy", accuracy}, 
-			     {"auc", auc}, 
-			     {"oob-base-accuracy", oob_base_accuracy},
-			     {"base-accuracy", base_accuracy},
-			     {"strength", strength}, 
-			     {"variance", variance}, 
-			     {"correlation", correlation},
-			     {"c/s^2", c_s2}, 
-			     {"brier", brier}]).
+-define(DEFAULT_CSV_HEADERS, [{"fold", fold},
+			      {"accuracy", accuracy}, 
+			      {"auc", auc}, 
+			      {"oob-base-accuracy", oob_base_accuracy},
+			      {"base-accuracy", base_accuracy},
+			      {"strength", strength}, 
+			      {"variance", variance}, 
+			      {"correlation", correlation},
+			      {"c/s^2", c_s2}, 
+			      {"brier", brier}]).
 
 
--define(DEFAULT_OUTPUT, [{"fold", fold},
-			 {"accuracy", accuracy}, 
-			 {"auc", auc}, 
-			 {"oob-base-accuracy", oob_base_accuracy},
-			 {"base-accuracy", base_accuracy},
-			 {"strength", strength}, 
-			 {"variance", variance}, 
-			 {"correlation", correlation},
-			 {"c/s^2", c_s2}, 
-			 {"brier", brier}]).
+-define(DEFAULT_HEADERS, [{"fold", fold},
+			  {"accuracy", accuracy}, 
+			  {"auc", auc}, 
+			  {"oob-base-accuracy", oob_base_accuracy},
+			  {"base-accuracy", base_accuracy},
+			  {"strength", strength}, 
+			  {"variance", variance}, 
+			  {"correlation", correlation},
+			  {"c/s^2", c_s2}, 
+			  {"brier", brier}]).
 
 -type result() :: vi | predictions | evaluation | method | start | 'end'.
 -type result_fun() :: fun((result(), any()) -> ok).
@@ -42,7 +42,7 @@
 -spec csv() -> result_fun().
 csv() ->
     fun(Data) ->
-	    Header = rr_config:get_value('output.csv.header', ?DEFAULT_CSV_OUTPUT),
+	    Header = rr_config:get_value('csv.headers', ?DEFAULT_CSV_HEADERS),
 	    case rr_config:get_value('output.csv.header', true) of
 		true ->
 		    io:format("~s~n", [string:join(lists:map(fun ({H, _}) -> H end, Header), ",")]);
@@ -90,7 +90,7 @@ csv_output_measures(Measures, Header) ->
 -spec default() -> result_fun().
 default() ->
     fun(Data) ->
-	    Header = rr_config:get_value('output.default.header', ?DEFAULT_OUTPUT),
+	    Header = rr_config:get_value('default.headers', ?DEFAULT_HEADERS),
 	    default_output(Data, Header)
     end.
 
