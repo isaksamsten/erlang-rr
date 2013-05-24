@@ -12,6 +12,7 @@
 	 init/0,
 	 load/2,
 	 insert_prediction/2,
+	 format_number/1,
 
 	 sample_split_value/2,
 	 find_numeric_split/3,
@@ -130,7 +131,7 @@ format_features([Value|Values], [numeric|Types], Column, Acc) ->
 							throw({error, {invalid_number_format, Column, Value}})
 						end|Acc]).
 
-%% @private determine if a string is a number or missing (?)
+%% @doc determine if a string is a number or missing (?)
 format_number("?") ->
     '?';
 format_number(L) ->

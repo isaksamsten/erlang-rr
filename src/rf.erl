@@ -98,7 +98,7 @@
 	 {min_gain,       undefined,    "min-gain",    {float, 0},
 	  "Minimum allowed gain for not re-sampling (if the 'resample'-argument is specified)."},
 	 
-	 {no_features,    undefined,    "no-features", {atom, default},
+	 {no_features,    undefined,    "no-features", {string, "default"},
 	  "Number of features to inspect at each split. If set to log log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
 	 {no_rules,       undefined,    "no-rules",    {atom, ss},
 	  "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used otherwise n is used."},
@@ -225,7 +225,8 @@ main(Args) ->
 
     rr_log:debug("data set contains '~p' example(s) and '~p' feature(s)", [rr_example:count(Examples), TotalNoFeatures]),
     rr_log:debug("building forest using '~p' trees and '~p' feature(s)", [Classifiers, NoFeatures]),
-    rr_log:debug("limiting the depth of the forest to '~p' node(s) and each node must contain at least '~p' example(s)", [MaxDepth, MinEx]),
+    rr_log:debug("limiting the depth of a tree to '~p' node(s)", [MaxDepth]),
+    rr_log:debug("each node must contain at least '~p' example(s)", [MinEx]),
 
     {Build, Evaluate, _} = rf:new([{no_features, NoFeatures},
 				   {no_cores, Cores},
@@ -266,7 +267,8 @@ evaluate(Model, Test, Conf) ->
     
     Strength = rr_eval:strength(Dict, NoTestExamples),
     Variance = rr_eval:variance(Dict, NoTestExamples),
-    Correlation = rr_eval:correlation(Dict, NoTestExamples),
+    Correlation = rr_eval:correlation(Dict, NoTestExamples, Conf#rr_ensemble.no_classifiers),
+
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
@@ -282,8 +284,9 @@ evaluate(Model, Test, Conf) ->
      {strength, Strength},
      {correlation, Correlation},
      {variance, Variance},
+     {c_s2, Correlation/math:pow(Strength, 2)},
      {precision, Precision}, 
-     {oob_accuracy, OOBAccuracy},
+     {oob_base_accuracy, OOBAccuracy},
      {base_accuracy, BaseAccuracy},
      {brier, Brier}].
 
@@ -343,10 +346,13 @@ score(Options) ->
 
 no_features(TotalNoFeatures, Options) ->
     case proplists:get_value(no_features, Options) of
-	default -> round(math:log(TotalNoFeatures)/math:log(2)) + 1;
-	sqrt -> round(math:sqrt(TotalNoFeatures));
-	X when is_number(X), X > 0 ->
-	    X;
+	"default" -> round(math:log(TotalNoFeatures)/math:log(2)) + 1;
+	"sqrt" -> round(math:sqrt(TotalNoFeatures));
+	X ->
+	    case rr_example:format_number(X) of
+		{true, Number} when Number > 0 -> Number;
+		_ -> rr:illegal(io_lib:format("invalid number to argument '~s'", ["no-features"]))
+	    end;
 	Other ->
 	    rr:illegal_option("no-features", Other)
     end.

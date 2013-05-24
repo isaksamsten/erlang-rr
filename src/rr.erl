@@ -37,13 +37,13 @@ main(Args) ->
 	    case Cmd of
 		["get",Var] ->
 		    io:format("~s ~n", [proplists:get_value(list_to_atom(Var), Props)]);
-		["set",Var,Val] ->
-		    Atom = list_to_atom(Var),
-		    DelProps = proplists:delete(Atom, Props),
-		    NewProps = [{Atom, list_to_atom(Val)}|DelProps],
-		    file:write_file("rr.config", lists:foldl(fun (Prop, Acc) ->
-								     [Acc,io_lib:format("~p.~n", [Prop])]
-							     end, [], NewProps));
+		%% ["set",Var,Val] ->
+		%%     Atom = list_to_atom(Var),
+		%%     DelProps = proplists:delete(Atom, Props),
+		%%     NewProps = [{Atom, list_to_atom(Val)}|DelProps],
+		%%     file:write_file("rr.config", lists:foldl(fun (Prop, Acc) ->
+		%% 						     [Acc,io_lib:format("~p.~n", [Prop])]
+		%% 					     end, [], NewProps));
 		_Other ->
 		    io:format("config: invalid argument~n")
 	    end;		
