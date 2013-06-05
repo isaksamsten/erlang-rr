@@ -168,8 +168,6 @@ deterministic_split(Feature, Examples, Distribute, Missing) ->
 			     rr_example:sample_split_value(Ff, Ex)
 		     end).
 
-
-
 %% @doc random choice between gini-impurity and entropy
 -spec gini_info(float()) -> score_fun().
 gini_info(Fraction) ->
@@ -183,7 +181,6 @@ gini_info(Fraction) ->
 		    Info(Split, Total)
 	    end
     end.
-
 
 %% @doc return a scoring function for the gini-importance (todo: fix)
 -spec gini() -> score_fun().

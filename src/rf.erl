@@ -1,10 +1,9 @@
-%%% @author Isak Karlsson <>
+%%% @author Isak Karlsson <isak-kar@dsv.su.se>
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
 %%%
 %%% @end
 %%% Created : 12 May 2013 by Isak Karlsson <>
-
 -module(rf).
 
 -define(DATE, "2013-05-16").
@@ -20,7 +19,6 @@
 	 new/1,
 	 kill/1
 	]).
-
 
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
@@ -66,17 +64,6 @@
 	 {feature_sampling, undefined,    "feature-sampling", {string, "subset"},
 	  "Select a method for feature sampling. Available options include: 'subset', 'rule', 'random-rule', 'resample', 'weka', and 'combination'."},
 	 
-	 %% {random_rule,    undefined,    "random-rule", undefined,
-	 %%  "Rule or subset. The random weight is determined by the 'weight-factor'. If set to 1, 'rule' is always selected, if set to 0 a subset is always selected"},
-	 %% {rule,           undefined,    "rule",        undefined,
-	 %%  "Build, at each node, k (determined by 'no-features') rules from m (determined by 'no-features') features. Thus including a decision based on [1, m] features at each branch."},
-	 %% {combination,    undefined,    "combination", undefined,
-	 %%  "Generate k * (k - 1), where k is determined by 'no-features' combinations of features and evaluate the goodness of these at each split point. To allow for single features to be included, the attribute 'weight-factor' determines the probability of generating combinations (defaulting to 0.5)."},
-	 %% {weka,           undefined,    "weka",        undefined,
-	 %%  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k=inf times."},
-	 %% {resample,       undefined,    "resample",    undefined,
-	 %%  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k (determined by 'no-resamples') times."},
-
 	 {missing,        $m,           "missing",     {atom, random},
 	  "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
 
@@ -85,11 +72,6 @@
 
 	 {example_sampling, undefined,  "example-sampling", {string, "bagging"},
 	  "Select the method for feature sampling. Available options include: 'bagging' and 'subagging'."},
-
-	 %% {bagging,        undefined,    "bagging",     undefined,
-	 %%  "To increase model diversity, a bootstrap replicate (i.e. sampling with replacement) of the original dataset is used when building each tree. [default]"},
-	 %% {subagging,     undefined,    "subagging",    undefined,
-	 %%  "To increase model diversity and improve performance on large datasets, generate a subsample aggregate (i.e. a sample without replacement) from the original dataset."},
 
 	 {weight_factor,  undefined,    "weight-factor", {float, 0.5},
 	  "Used for controlling the randomness of the 'combination' and 'weighted'-arguments."},
@@ -443,6 +425,3 @@ show_information() ->
 Copyright (C) 2013+ ~s
 
 Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
-
-
-
