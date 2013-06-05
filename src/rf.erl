@@ -130,13 +130,13 @@ new(Props) ->
     ExampleSampling = proplists:get_value(example_sampling, Props, fun rr_example:bootstrap_aggregate/1),
     Distribute = proplists:get_value(distribute, Props, fun rr_example:distribute/2),
     BaseLearner = proplists:get_value(base_learner, Props, rf_tree),
-
+    Split = proplists:get_value(split, Props, fun rf_tree:random_split/4),
 
     Tree = #rf_tree{
 	      score = Score,
 	      prune = Prune,
 	      branch = FeatureSampling,
-	      split = fun rf_tree:random_split/4,
+	      split = Split, %fun rf_tree:random_split/4,
 	      distribute = Distribute,
 	      missing_values = Missing
 	     },

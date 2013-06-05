@@ -16,7 +16,8 @@
 
 	 sample_split_value/2,
 	 find_numeric_split/3,
-
+	 sample_example_pair/1,
+	 
 	 split/4,
 	 split/5,
 	 distribute/2,
@@ -26,7 +27,11 @@
 	 count/1,
 	 clone/1,
 
+	 shuffle/1,
+	 flatten/1,
 	 random_features/2,
+	 
+	 vector/1,
 	 feature/2,
 	 feature_id/1,
 	 feature_name/1,
@@ -540,6 +545,11 @@ get_class(Class, Examples) ->
 classes(Examples) ->
     length(Examples).
 
+flatten(Examples) ->
+    lists:foldl(fun ({_, _, Ex}, Acc) ->
+			Ex ++ Acc
+		end, [], Examples).
+
 %%
 %% Count the number of examples in "Examples" excluding examples with
 %% class Class
@@ -591,6 +601,9 @@ coverage(Examples) ->
 feature(ExId, At) ->
     ets:lookup_element(examples, exid(ExId), At + 1).
 
+vector(ExId) ->
+    hd(ets:lookup(examples, exid(ExId))).
+
 
 feature_id({{combined, IdA, IdB}, _}) ->
     list_to_tuple(lists:sort([feature_id(IdA), feature_id(IdB)]));
@@ -631,7 +644,11 @@ randomize(Examples) ->
 			[{Class, Count, shuffle_list(Ids)}|Acc]
 		end, [], Examples).
 
-%% @private randomly permute a list of items
+%% @doc randomly permute a list (public)
+shuffle(List) ->
+    shuffle_list(List).
+
+%% @doc randomly permute a list of items
 shuffle_list(Ids0) ->
     [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> {random:uniform(), Id} end, Ids0))].
 
