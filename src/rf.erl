@@ -93,17 +93,6 @@
 	  "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"}
 	]).
 
-parse(Args, Options) ->
-    case getopt:parse(Options, Args) of
-	{ok, {Parsed, _}} -> 
-	    Parsed;
-	{error, {invalid_option, R}} ->
-	    rr:illegal(io_lib:format("unrecognized option '~s'", [R]));
-	{error, {missing_option_arg, R}} ->
-	    rr:illegal(io_lib:format("missing argument to option '~s'", [rr:get_opt_name(R, ?CMD_SPEC)]));
-	{error, _} ->
-	    rr:illegal("unknown error")
-    end.
 
 help() ->
     rr:show_help(options, ?CMD_SPEC, "rf").
@@ -162,7 +151,7 @@ main(Args) ->
     rr_ensemble:init(),
 						%    random:seed(now()),
 
-    Options = parse(Args, ?CMD_SPEC),
+    Options = rr:parse(Args, ?CMD_SPEC),
     case rr:any_opt([help, version, examples], Options) of
 	help ->
 	    help(),
@@ -361,6 +350,8 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	    rf_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
+	"chi-square" ->
+	    rf_branch:chi_square(NoFeatures);
 	"random-subset" ->
 	    rf_branch:random_subset(NoFeatures, 0);
 	"depth" ->

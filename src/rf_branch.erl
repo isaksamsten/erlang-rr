@@ -22,7 +22,9 @@
 	 random_examples/2,
 
 	 depth/1,
-	 depth_rule/3
+	 depth_rule/3,
+
+	 chi_square/1
 	]).
 
 %% @headerfile "rf_tree.hrl"
@@ -73,7 +75,7 @@ weka_branch_split(Features, Examples, Total, Conf, NoFeatures) ->
 		end,
     Cand = rr_example:best_split(Features0, Examples, Total, ScoreFun, Split, Distribute, Missing),
     {Score, _, _} = Cand#rr_candidate.score,
-    Gain = (Total*rr_tree:entropy(Examples)) - Score,
+    Gain = (Total*rf_tree:entropy(Examples)) - Score,
     if Gain =< 0.0 ->
 	    weka_branch_split(ordsets:subtract(Features, ordsets:from_list(Features0)),
 			      Examples, Total, Conf#rf_tree{no_features=NoTotal - NoFeatures}, NoFeatures);
@@ -214,3 +216,59 @@ depth_rule(NoFeatures, NoRules, RuleScore) ->
 		    Subset(Features, Examples, Total, Conf)
 	    end
     end.
+
+chi_square(NoFeatures) ->
+    Subset = subset(NoFeatures),
+    fun (Features, Examples, Total, Conf) ->
+	    Cand = Subset(Features, Examples, Total, Conf),
+	    Split = Cand#rr_candidate.split,
+	    K = chi_square(Split, Examples, Total),
+	    io:format("~p: ~p ~n", [Cand#rr_candidate.split, K]),
+	    if K < 0.01 ->
+		    no_information;
+	       true ->
+		    Cand
+	    end	    
+    end.
+
+chi_square(Split, Examples, Total) ->
+    {Left, Right} = chi_p(Split),
+    Pl = chi_sum(Left)/Total,
+    Pr = chi_sum(Right)/Total,
+    NLprim = chi_e(Examples, Pl),
+    NRprim = chi_e(Examples, Pr),
+    
+    K = chi_sig(Left, NLprim) + chi_sig(Right, NRprim),
+%    io:format("~p :: ~p :: ~p ~n", [K, Left, Right]),
+    K.
+
+chi_sig(N, Nprim) ->
+    lists:foldl(fun ({Class, N}, Acc) ->
+		     case lists:keyfind(Class, 1, Nprim) of
+			 false ->
+			     Acc + N;
+			 {Class, NP} ->
+			     math:pow(N-NP, 2)/NP
+		     end
+		end, 0.0, N).
+
+
+chi_sum(Examples) ->
+    lists:foldl(fun ({_, A}, Acc) -> A+Acc end, 0, Examples).			  
+
+chi_p({both, Left, Right}) ->
+    {[{Class, Count} || {Class, Count, _} <- Left] , [{Class, Count} || {Class, Count, _} <- Right]};
+chi_p({left, Left}) ->
+    {[{Class, Count} || {Class, Count, _} <- Left], []};
+chi_p({right, Right}) ->
+    {[], [{Class, Count} || {Class, Count, _} <- Right]}.
+
+chi_e(Examples, P) ->
+    lists:foldl(fun ({Class, N, _}, Acc) ->
+			[{Class, N*P}|Acc]
+		end, [], Examples).
+			
+
+
+
+

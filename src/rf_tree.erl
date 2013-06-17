@@ -65,10 +65,10 @@ predict(ExId, #rf_node{id=NodeNr,
 		       feature=F, 
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
-		       right=Right}, #rf_tree{distribute=_Distribute, %% TODO: fix me
+		       right=Right}, #rf_tree{distribute=Distribute, %% TODO: fix me
 					      missing_values=Missing} = Conf, Acc) ->
     NewAcc = [NodeNr|Acc],
-    case rr_example:distribute(F, ExId) of
+    case Distribute(F, ExId) of
 	{'?', _} ->
 	    case Missing(predict, F, ExId, LeftExamples, RightExamples) of
 		{left, _} ->

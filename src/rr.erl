@@ -17,6 +17,8 @@
 	 main/1,
 
 	 show_help/3,
+
+	 parse/2,
 	 illegal/1,
 	 illegal/2,
 	 illegal/3,
@@ -133,3 +135,15 @@ illegal(Error) ->
 %% @doc calculates the number of seconds between now() and Time
 seconds(Time) ->
     timer:now_diff(erlang:now(), Time)/1000000.
+
+parse(Args, Options) ->
+    case getopt:parse(Options, Args) of
+	{ok, {Parsed, _}} -> 
+	    Parsed;
+	{error, {invalid_option, R}} ->
+	    rr:illegal(io_lib:format("unrecognized option '~s'", [R]));
+	{error, {missing_option_arg, R}} ->
+	    rr:illegal(io_lib:format("missing argument to option '~s'", [rr:get_opt_name(R, Options)]));
+	{error, _} ->
+	    rr:illegal("unknown error")
+    end.
