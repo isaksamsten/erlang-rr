@@ -13,7 +13,7 @@ for f in $FOLDER/*.txt; do
 	echo "info: running $f iteration $i/$ITERATIONS"
 	TMP=`./rr rf -i "$f" -o csv "$@"`
 	while read -r line; do
-	    echo "Iteration $i, $EX, $line" >> "$OUTPUT"
+	    echo "Iteration $i, $EX, $f, $line" >> "$OUTPUT"
 	done  <<< "$TMP";
     done
 done
