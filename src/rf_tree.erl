@@ -21,9 +21,8 @@
 
 	 info/0,
 	 gini/0,
-	 gini_info/1,
-	 entropy/1
-]).
+	 gini_info/1
+	]).
 
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
@@ -38,7 +37,7 @@ example_depth_stop(MaxExamples, MaxDepth) ->
 %% @doc generate a decision tree
 -spec generate_model(features(), examples(), #rf_tree{}) -> #rf_node{}.
 generate_model(Features, Examples, Conf) ->
-    Info = info_content(Examples, rr_example:count(Examples)),
+    Info = rr_estimator:info(Examples, rr_example:count(Examples)),
     build_decision_node(Features, Examples, dict:new(), 0, Info, Conf, 1).
 
 -spec evaluate_model(#rf_node{}, examples(), #rf_tree{}) -> dict().
@@ -101,7 +100,7 @@ build_decision_node(Features, Examples, Importance, Total, Error, #rf_tree{prune
 	true ->
 	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 	false ->
-	    case Branch(Features, Examples, NoExamples, Conf) of
+	    case rf_branch:unpack(Branch(Features, Examples, NoExamples, Conf)) of
 		no_information ->
 		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 		#rr_candidate{split={_, _}} ->
@@ -185,70 +184,12 @@ gini_info(Fraction) ->
 %% @doc return a scoring function for the gini-importance (todo: fix)
 -spec gini() -> score_fun().
 gini() ->
-    fun gini/2.
-    
-%% @private TODO: fix
-gini({both, Left, Right}, Total) ->
-    LeftGini = gini_content(Left, Total),
-    RightGini = gini_content(Right, Total),
-    {1-(LeftGini + RightGini), LeftGini, RightGini};
-gini({left, Left}, Total) ->
-    LeftGini = gini_content(Left, Total),
-    {1-LeftGini, LeftGini, 1.0};
-gini({right, Right}, Total) ->
-    RightGini = gini_content(Right, Total),
-    {1-RightGini, 1.0, RightGini}.
-    
-gini_content(Examples, _Total) -> 
-    Counts = [C || {_, C, _} <- Examples],
-    Total = lists:sum(Counts),
-    lists:foldl(fun (0.0, Count) ->
-			Count;
-		    (0, Count) ->
-			Count;
-		    (Class, Count) ->
-			Count + math:pow(Class/Total, 2)
-		end, 0.0, Counts).
-			
+    fun rr_estimator:gini/2.
 
 %% @doc return score function for information gain
 -spec info() -> score_fun().
 info() ->
-    fun info/2.
+    fun rr_estimator:info_gain/2.
 
-%% @private
-info({both, Left, Right}, Total) ->
-    LeftInfo = info_content(Left, Total),
-    RightInfo = info_content(Right, Total),
-    {LeftInfo + RightInfo, LeftInfo, RightInfo};
-info({left, Left}, Total) ->
-    LeftInfo = info_content(Left, Total),
-    {LeftInfo, LeftInfo, 0.0};
-info({right, Right}, Total) ->
-    RightInfo = info_content(Right, Total),
-    {RightInfo, 0.0, RightInfo}.
-
-    
-info_content(Side, Total) ->
-    NoSide = rr_example:count(Side),
-    if NoSide > 0 ->
-	    Total * (NoSide / Total) * entropy(Side);
-       true ->
-	    0.0
-    end.
         
-%% @doc calculate the entropy
--spec entropy(examples()) -> number().
-entropy(Examples) ->
-    Counts = [C || {_, C, _} <- Examples],
-    entropy(Counts, lists:sum(Counts)).
 
-entropy(Counts, Total) ->
-    -1 * lists:foldl(fun (0.0, Count) ->
-			     Count;
-			 (0, Count) ->
-			     Count;
-			 (Class, Count) ->
-			     Fraction = Class / Total,
-			     Count + Fraction * math:log(Fraction)%/math:log(2)
-		     end, 0.0, Counts).

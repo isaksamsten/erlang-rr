@@ -68,7 +68,8 @@ separate_and_conquer(Features, Examples, Total, Conf, RuleScore, {Rules, Score})
 			{Pos, _} when Pos =< 0 ->
 			    {Rules, Covered};
 			_NewCoverage ->
-			    separate_and_conquer(Features -- [Feature], Covered, Total, Conf, RuleScore, {[Rule|Rules], NewScore})
+			    separate_and_conquer(Features -- [Feature], Covered, Total, 
+						 Conf, RuleScore, {[Rule|Rules], NewScore})
 		    end;
 		false ->
 		    {Rules, Covered}
@@ -76,8 +77,10 @@ separate_and_conquer(Features, Examples, Total, Conf, RuleScore, {Rules, Score})
     end.
 
 %% @doc learn one additional rule
--spec learn_one_rule(features(), examples(), number(), score_fun(), Conf::#rf_tree{}) -> {feature(), Score::number(), Covered::examples()}.
-learn_one_rule(Features, Examples, Total, Score, #rf_tree{split = Split, distribute = Distribute, missing_values=Missing}) ->
+-spec learn_one_rule(features(), examples(), number(), score_fun(), Conf::#rf_tree{}) -> 
+			    {feature(), Score::number(), Covered::examples()}.
+learn_one_rule(Features, Examples, Total, Score, Conf) ->
+    #rf_tree{split = Split, distribute = Distribute, missing_values=Missing} = Conf,
     case rr_example:best_split(Features, Examples, Total, Score, Split, Distribute, Missing) of
 	no_features ->
 	    1;
@@ -97,55 +100,23 @@ learn_one_rule(Features, Examples, Total, Score, #rf_tree{split = Split, distrib
 -spec m_estimate({Pos::number(), Pos::number()}, Total::number()) -> score_fun().
 m_estimate(Apriori, M) ->
     fun (Examples, _) ->
-	    error(Examples, fun m_estimate2/2, {Apriori, M})
+	    rr_estimator:m_estimate(Examples, {Apriori, M})
     end.
     
 %% @doc return a score function for laplace-corrected purity
 -spec laplace({Pos::number(), Pos::number()}, Total::number()) -> score_fun().
 laplace(_, Classes) ->
     fun(Examples, _) ->
-	    error(Examples, fun laplace_estimate/2, Classes)
+	    rr_estimator:laplace(Examples, Classes)
     end.
 
 %% @doc return score function for purity measure
 -spec purity(None::any(), None::any()) -> score_fun().
 purity(_, _) ->
     fun (Examples, _) ->
-	    error(Examples, fun purity_estimate/2, 0)
+	rr_estimator:purity(Examples, 0)
     end.
 
-%% @private calculate the purity
-purity_estimate(Side, 0) ->
-    {P, N} = rr_example:coverage(Side),
-    if P > 0 -> P / (P+N); true -> 0.0 end.
-
-%% @private calculate m estimated 
-m_estimate2(Side, {{Pos, Neg}, M}) ->
-    {P, N} = rr_example:coverage(Side),
-    Pi = if Pos > 0 -> Pos / (Pos + Neg); true -> 0.0 end,
-    (P+M*Pi)/(P+N+M).
-
-%% @private calculate laplace corrected purity
-laplace_estimate(Side, Classes) ->
-    {Pos, Neg} = rr_example:coverage(Side),
-    (Pos + 1) / (Pos + Neg + Classes).
-
--spec error(Split::split(), fun((examples(), any()) -> number()), any()) -> score().
-error({both, LeftEx, RightEx}, Fun, Payload) ->
-    Left = 1 - Fun(LeftEx, Payload),
-    Right = 1 - Fun(RightEx, Payload),
-    Smallest = if Left < Right ->
-		       Left;
-		  true ->
-		       Right
-	       end,
-    {Smallest, Left, Right};
-error({left, Side}, Fun, Payload) ->
-    Left = 1 - Fun(Side, Payload),
-    {Left, Left, 1.0};
-error({right, Side}, Fun, Payload) ->
-    Right = 1 - Fun(Side, Payload),
-    {Right, 1.0, Right}.
 
 %% @doc distribute examples according to the number of rules fireing for each direction
 distribute_weighted({rule, Rule, Length}, ExId) ->

@@ -149,7 +149,7 @@ new(Props) ->
 main(Args) ->
     rr_example:init(),
     rr_ensemble:init(),
-						%    random:seed(now()),
+    %random:seed(now()),
 
     Options = rr:parse(Args, ?CMD_SPEC),
     case rr:any_opt([help, version, examples], Options) of
@@ -335,7 +335,7 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	"resample" ->
 	    NoResamples = proplists:get_value(no_resamples, Options),
 	    MinGain = proplists:get_value(min_gain, Options),
-	    rf_branch:resampled(NoResamples, NoFeatures, MinGain);
+	    rf_branch:resample(NoResamples, NoFeatures, MinGain);
 	"combination" ->
 	    Factor = proplists:get_value(weight_factor, Options),
 	    rf_branch:random_correlation(NoFeatures, Factor);
@@ -351,7 +351,7 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
 	"chi-square" ->
-	    rf_branch:chi_square(NoFeatures);
+	    rf_branch:chisquare(NoFeatures, 0.05);
 	"random-subset" ->
 	    rf_branch:random_subset(NoFeatures, 0);
 	"depth" ->

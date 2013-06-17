@@ -7,7 +7,7 @@
 %%% @end
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_example).
-%-compile(export_all).
+
 -export([
 	 init/0,
 	 load/2,
@@ -30,7 +30,8 @@
 	 shuffle/1,
 	 flatten/1,
 	 random_features/2,
-	 
+	 unpack_split/1,
+
 	 vector/1,
 	 feature/2,
 	 feature_id/1,
@@ -56,6 +57,11 @@
 	 best_split/7,
 	 best_split/8
 	]).
+
+-ifdef(TEST).
+-compile(export_all).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 %% @headerfile "rr.hrl"
 -include("rr.hrl").
@@ -247,6 +253,16 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
 						LeftExamples, RightExamples, Distribute)
     end.
+
+%% @doc unpack a split to a tuple containing {Left, Right}
+-spec unpack_split(split()) -> {examples() | [], examples() | []}.
+unpack_split({both, Left, Right}) ->
+    {Left, Right};
+unpack_split({left, Left}) ->
+    {Left, []};
+unpack_split({right, Right}) ->
+    {[], Right}.
+
 
 %% @doc Split Examples into two disjoint subsets according to Feature.
 -spec split(feature(), examples(), distribute_fun(), missing_fun(), any()) -> {none | atom(), split()}.
@@ -622,9 +638,14 @@ feature_name(Rules) when is_list(Rules) ->
     [feature_name(Rule) || Rule <- Rules];
 feature_name(Id) ->
     ets:lookup_element(features, Id, 2).
+
 %% @doc Return a random subset of size "Subset" from Features
+random_features(Features, 1) when length(Features) > 1 ->
+    [lists:nth(random:uniform(length(Features)), Features)];
+random_features(Features, Subset) when Subset > length(Features) ->
+    Features;
 random_features(Features, Subset) ->
-    {Top, _} = lists:split(Subset, shuffle_list(Features)),
+    {Top, _} = lists:split(Subset, shuffle(Features)),
     Top.
 
 %% @doc Return the dataset splitted into {Train, Test} with "Ratio" denoting the size of Train
@@ -793,3 +814,14 @@ sample_class_pair(Examples, Random, NoEx, Acc) ->
 	Other ->
 	    [lists:nth(Other, Examples)|Acc]
     end.
+
+-ifdef(TEST).
+
+mock_examples(Mock) ->
+    lists:foldl(fun ({Class, Count}, Acc) ->
+			[{Class, Count, []}|Acc]
+		end, [], Mock).
+
+mock_split(Left, Right) ->
+    {both, mock_examples(Left), mock_examples(Right)}.
+-endif.
