@@ -7,7 +7,7 @@
 %%% @end
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_example).
-%-compile(export_all).
+
 -export([
 	 init/0,
 	 load/2,
@@ -16,7 +16,8 @@
 
 	 sample_split_value/2,
 	 find_numeric_split/3,
-
+	 sample_example_pair/1,
+	 
 	 split/4,
 	 split/5,
 	 distribute/2,
@@ -26,7 +27,12 @@
 	 count/1,
 	 clone/1,
 
+	 shuffle/1,
+	 flatten/1,
 	 random_features/2,
+	 unpack_split/1,
+
+	 vector/1,
 	 feature/2,
 	 feature_id/1,
 	 feature_name/1,
@@ -51,6 +57,11 @@
 	 best_split/7,
 	 best_split/8
 	]).
+
+-ifdef(TEST).
+-compile(export_all).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 %% @headerfile "rr.hrl"
 -include("rr.hrl").
@@ -242,6 +253,16 @@ distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight
 	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
 						LeftExamples, RightExamples, Distribute)
     end.
+
+%% @doc unpack a split to a tuple containing {Left, Right}
+-spec unpack_split(split()) -> {examples() | [], examples() | []}.
+unpack_split({both, Left, Right}) ->
+    {Left, Right};
+unpack_split({left, Left}) ->
+    {Left, []};
+unpack_split({right, Right}) ->
+    {[], Right}.
+
 
 %% @doc Split Examples into two disjoint subsets according to Feature.
 -spec split(feature(), examples(), distribute_fun(), missing_fun(), any()) -> {none | atom(), split()}.
@@ -540,6 +561,11 @@ get_class(Class, Examples) ->
 classes(Examples) ->
     length(Examples).
 
+flatten(Examples) ->
+    lists:foldl(fun ({_, _, Ex}, Acc) ->
+			Ex ++ Acc
+		end, [], Examples).
+
 %%
 %% Count the number of examples in "Examples" excluding examples with
 %% class Class
@@ -591,6 +617,9 @@ coverage(Examples) ->
 feature(ExId, At) ->
     ets:lookup_element(examples, exid(ExId), At + 1).
 
+vector(ExId) ->
+    hd(ets:lookup(examples, exid(ExId))).
+
 
 feature_id({{combined, IdA, IdB}, _}) ->
     list_to_tuple(lists:sort([feature_id(IdA), feature_id(IdB)]));
@@ -609,9 +638,14 @@ feature_name(Rules) when is_list(Rules) ->
     [feature_name(Rule) || Rule <- Rules];
 feature_name(Id) ->
     ets:lookup_element(features, Id, 2).
+
 %% @doc Return a random subset of size "Subset" from Features
+random_features(Features, 1) when length(Features) > 1 ->
+    [lists:nth(random:uniform(length(Features)), Features)];
+random_features(Features, Subset) when Subset > length(Features) ->
+    Features;
 random_features(Features, Subset) ->
-    {Top, _} = lists:split(Subset, shuffle_list(Features)),
+    {Top, _} = lists:split(Subset, shuffle(Features)),
     Top.
 
 %% @doc Return the dataset splitted into {Train, Test} with "Ratio" denoting the size of Train
@@ -631,7 +665,11 @@ randomize(Examples) ->
 			[{Class, Count, shuffle_list(Ids)}|Acc]
 		end, [], Examples).
 
-%% @private randomly permute a list of items
+%% @doc randomly permute a list (public)
+shuffle(List) ->
+    shuffle_list(List).
+
+%% @doc randomly permute a list of items
 shuffle_list(Ids0) ->
     [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> {random:uniform(), Id} end, Ids0))].
 
@@ -776,3 +814,14 @@ sample_class_pair(Examples, Random, NoEx, Acc) ->
 	Other ->
 	    [lists:nth(Other, Examples)|Acc]
     end.
+
+-ifdef(TEST).
+
+mock_examples(Mock) ->
+    lists:foldl(fun ({Class, Count}, Acc) ->
+			[{Class, Count, []}|Acc]
+		end, [], Mock).
+
+mock_split(Left, Right) ->
+    {both, mock_examples(Left), mock_examples(Right)}.
+-endif.

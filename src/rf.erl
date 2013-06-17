@@ -1,10 +1,9 @@
-%%% @author Isak Karlsson <>
+%%% @author Isak Karlsson <isak-kar@dsv.su.se>
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
 %%%
 %%% @end
 %%% Created : 12 May 2013 by Isak Karlsson <>
-
 -module(rf).
 
 -define(DATE, "2013-05-16").
@@ -20,7 +19,6 @@
 	 new/1,
 	 kill/1
 	]).
-
 
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
@@ -66,17 +64,6 @@
 	 {feature_sampling, undefined,    "feature-sampling", {string, "subset"},
 	  "Select a method for feature sampling. Available options include: 'subset', 'rule', 'random-rule', 'resample', 'weka', and 'combination'."},
 	 
-	 %% {random_rule,    undefined,    "random-rule", undefined,
-	 %%  "Rule or subset. The random weight is determined by the 'weight-factor'. If set to 1, 'rule' is always selected, if set to 0 a subset is always selected"},
-	 %% {rule,           undefined,    "rule",        undefined,
-	 %%  "Build, at each node, k (determined by 'no-features') rules from m (determined by 'no-features') features. Thus including a decision based on [1, m] features at each branch."},
-	 %% {combination,    undefined,    "combination", undefined,
-	 %%  "Generate k * (k - 1), where k is determined by 'no-features' combinations of features and evaluate the goodness of these at each split point. To allow for single features to be included, the attribute 'weight-factor' determines the probability of generating combinations (defaulting to 0.5)."},
-	 %% {weka,           undefined,    "weka",        undefined,
-	 %%  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k=inf times."},
-	 %% {resample,       undefined,    "resample",    undefined,
-	 %%  "If none of the randomly sampled features provide any additional information, re-sample m (determined by 'no-features') attributes k (determined by 'no-resamples') times."},
-
 	 {missing,        $m,           "missing",     {atom, random},
 	  "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
 
@@ -85,11 +72,6 @@
 
 	 {example_sampling, undefined,  "example-sampling", {string, "bagging"},
 	  "Select the method for feature sampling. Available options include: 'bagging' and 'subagging'."},
-
-	 %% {bagging,        undefined,    "bagging",     undefined,
-	 %%  "To increase model diversity, a bootstrap replicate (i.e. sampling with replacement) of the original dataset is used when building each tree. [default]"},
-	 %% {subagging,     undefined,    "subagging",    undefined,
-	 %%  "To increase model diversity and improve performance on large datasets, generate a subsample aggregate (i.e. a sample without replacement) from the original dataset."},
 
 	 {weight_factor,  undefined,    "weight-factor", {float, 0.5},
 	  "Used for controlling the randomness of the 'combination' and 'weighted'-arguments."},
@@ -111,17 +93,6 @@
 	  "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"}
 	]).
 
-parse(Args, Options) ->
-    case getopt:parse(Options, Args) of
-	{ok, {Parsed, _}} -> 
-	    Parsed;
-	{error, {invalid_option, R}} ->
-	    rr:illegal(io_lib:format("unrecognized option '~s'", [R]));
-	{error, {missing_option_arg, R}} ->
-	    rr:illegal(io_lib:format("missing argument to option '~s'", [rr:get_opt_name(R, ?CMD_SPEC)]));
-	{error, _} ->
-	    rr:illegal("unknown error")
-    end.
 
 help() ->
     rr:show_help(options, ?CMD_SPEC, "rf").
@@ -148,13 +119,13 @@ new(Props) ->
     ExampleSampling = proplists:get_value(example_sampling, Props, fun rr_example:bootstrap_aggregate/1),
     Distribute = proplists:get_value(distribute, Props, fun rr_example:distribute/2),
     BaseLearner = proplists:get_value(base_learner, Props, rf_tree),
-
+    Split = proplists:get_value(split, Props, fun rf_tree:random_split/4),
 
     Tree = #rf_tree{
 	      score = Score,
 	      prune = Prune,
 	      branch = FeatureSampling,
-	      split = fun rf_tree:random_split/4,
+	      split = Split, %fun rf_tree:random_split/4,
 	      distribute = Distribute,
 	      missing_values = Missing
 	     },
@@ -178,9 +149,9 @@ new(Props) ->
 main(Args) ->
     rr_example:init(),
     rr_ensemble:init(),
-						%    random:seed(now()),
+    %random:seed(now()),
 
-    Options = parse(Args, ?CMD_SPEC),
+    Options = rr:parse(Args, ?CMD_SPEC),
     case rr:any_opt([help, version, examples], Options) of
 	help ->
 	    help(),
@@ -364,7 +335,7 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	"resample" ->
 	    NoResamples = proplists:get_value(no_resamples, Options),
 	    MinGain = proplists:get_value(min_gain, Options),
-	    rf_branch:resampled(NoResamples, NoFeatures, MinGain);
+	    rf_branch:resample(NoResamples, NoFeatures, MinGain);
 	"combination" ->
 	    Factor = proplists:get_value(weight_factor, Options),
 	    rf_branch:random_correlation(NoFeatures, Factor);
@@ -379,6 +350,8 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	    rf_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
+	"chi-square" ->
+	    rf_branch:chisquare(NoFeatures, 0.05);
 	"random-subset" ->
 	    rf_branch:random_subset(NoFeatures, 0);
 	"depth" ->
@@ -443,6 +416,3 @@ show_information() ->
 Copyright (C) 2013+ ~s
 
 Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
-
-
-
