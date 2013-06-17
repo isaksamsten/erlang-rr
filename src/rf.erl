@@ -351,7 +351,8 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
 	"chi-square" ->
-	    rf_branch:chisquare(NoFeatures, 0.05);
+	    Factor = proplists:get_value(weight_factor, Options),
+	    rf_branch:chisquare(NoFeatures, Factor);
 	"random-subset" ->
 	    rf_branch:random_subset(NoFeatures, 0);
 	"depth" ->
