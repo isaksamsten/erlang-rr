@@ -6,13 +6,15 @@
 %%% Created :  8 Apr 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 -module(rf_branch).
 -export([
+	 
+	 %% standard approaches
 	 random/0,
-	 weka/1,
 	 all/0,
 
 	 subset/1,
 	 random_subset/2,
 
+	 %% multi-feature approaches
 	 correlation/1,
 	 random_correlation/2,
 	 rule/3,
@@ -23,11 +25,16 @@
 	 depth/1,
 	 depth_rule/3,
 
-	 chi_square/1,
+	 %% resample
+	 weka/1,
 	 resample/3,
 	 chisquare/2,
+	 chisquare_decrease/3,
 
-	 unpack/1
+	 %% util
+	 unpack/1,
+	 resample/2
+	 
 	]).
 
 -ifdef(TEST).
@@ -173,46 +180,52 @@ depth_rule(NoFeatures, NoRules, RuleScore) ->
 	    end
     end.
 
-chi_square(NoFeatures) ->
-    Subset = subset(NoFeatures),
-    fun (Features, Examples, Total, Conf) ->
-	    Cand = Subset(Features, Examples, Total, Conf),
-	    Split = Cand#rr_candidate.split,
-	    K = rr_estimator:chisquare(Split, Examples, Total),
-	    if K < 0.05 ->
-		    no_information;
-	       true ->
-		    Cand
-	    end	    
-    end.       
-
-chisquare(NoFeatures, Sigma) ->
-    Sample = sample_wrap(NoFeatures, subset(NoFeatures)),
-    Resample = chisquare_resample(Sample, Sigma),
-    resample(Sample, Resample).
-
-chisquare_resample(Sample, Sigma) ->
-    fun (#rr_candidate{split=Split}, Examples, Total) ->
+%% @doc
+%% resample a decreasing number of features each time an
+%% insignificant feature is found, until only one feature is inspected
+%% @end
+chisquare_decrease(NoFeatures, Rate, Sigma) ->
+    Sample = resample_curry(NoFeatures, subset(NoFeatures)),
+    resample(Sample, chisquare_decrease_resample(Sample, Rate, Sigma)).
+    
+chisquare_decrease_resample(Sample, Rate, Sigma) ->
+    fun (#rr_candidate{split=Split}, NoFeatures, Examples, Total) ->
 	    Significance = rr_estimator:chisquare(Split, Examples, Total),
 	    if Significance < Sigma ->
-%		    io:format("~p is not significant. ~n", [Significance]),
-		    {true, Sample, chisquare_resample(Sample, Sigma)};
+		    NewNoFeatures = if NoFeatures > 1 -> round(NoFeatures * Rate); true -> 1 end,
+		    NewSample = resample_curry(NewNoFeatures, subset(NewNoFeatures)),
+		    {true, NewSample, chisquare_decrease_resample(NewSample, Rate, Sigma)};
 	       true ->
 		    false
 	    end
     end.
-		
 
-%% @doc resample n features m times if gain =< delta
+%% @doc resample features if chi-square significance is lower than Sigma
+chisquare(NoFeatures, Sigma) ->
+    Sample = resample_curry(NoFeatures, subset(NoFeatures)),
+    Resample = chisquare_resample(Sample, Sigma),
+    resample(Sample, Resample).
+		
+chisquare_resample(Sample, Sigma) ->
+    fun (#rr_candidate{split=Split}, _, Examples, Total) ->
+	    Significance = rr_estimator:chisquare(Split, Examples, Total),
+	    if Significance < Sigma ->
+		    {true, Sample, chisquare_resample(Sample, Sigma)};
+	       true ->
+		    false
+	    end
+    end.		
+
+%% @doc resample n features m times if gain delta
 resample(NoFeatures, NoResamples, Delta) ->
-    Sample = sample_wrap(NoFeatures, subset(NoFeatures)),
+    Sample = resample_curry(NoFeatures, subset(NoFeatures)),
     Resample = simple_resample(Sample, NoResamples, Delta),
     resample(Sample, Resample).
 
 simple_resample(_, 0, _) ->
-    fun (_, _, _) -> false end;
+    fun (_, _, _, _) -> no_information end;
 simple_resample(Sample, NoResamples, Delta) ->
-    fun (#rr_candidate{score = {Score, _, _}}, Examples, Total) ->
+    fun (#rr_candidate{score = {Score, _, _}}, _, Examples, Total) ->
 	    Gain = (Total * rr_estimator:entropy(Examples)) - Score,
 	    if Gain =< Delta ->
 		    {true, Sample, simple_resample(Sample, NoResamples - 1, Delta)};
@@ -223,15 +236,15 @@ simple_resample(Sample, NoResamples, Delta) ->
 
 %% @doc resample 1 feature if no informative features is found
 weka(NoFeatures) ->
-    Sample = sample_wrap(NoFeatures, subset(NoFeatures)),
+    Sample = resample_curry(NoFeatures, subset(NoFeatures)),
     Resample = weka_resample(Sample),
     resample(Sample, Resample).
 
 weka_resample(Sample) ->
-    fun (#rr_candidate{score = {Score, _, _}}, Examples, Total) ->
+    fun (#rr_candidate{score = {Score, _, _}}, _, Examples, Total) ->
 	    Gain = (Total * rr_estimator:entropy(Examples)) - Score,
 	    if Gain =< 0.0 ->
-		    NewSample = sample_wrap(1, subset(1)),
+		    NewSample = resample_curry(1, subset(1)),
 		    {true, NewSample, weka_resample(NewSample)};
 	       true ->
 		    false
@@ -255,16 +268,18 @@ resample([], _, _, _, _, _, _) ->
     no_information;
 resample(Features, Examples, Total, Conf, TotalNoFeatures, Sample, Resample) ->
     {NoFeatures, {Best, NewFeatures}} = Sample(Features, Examples, Total, Conf),
-    case Resample(Best, Examples, Total) of
+    case Resample(Best, NoFeatures, Examples, Total) of
 	{true, NewSample, NewResample} ->
 	    resample(ordsets:subtract(Features, ordsets:from_list(NewFeatures)),
 		     Examples, Total, Conf, TotalNoFeatures - NoFeatures, NewSample, NewResample); 
 	false ->
-	    {Best, NewFeatures}
+	    {Best, NewFeatures};
+	no_information ->
+	    no_information
     end.
     
 %% @doc wrap sample-fun Fun to return the number of sampled features
-sample_wrap(NoFeatures, Fun) ->
+resample_curry(NoFeatures, Fun) ->
     fun (Features, Examples, Total, Conf) ->
 	    {NoFeatures, Fun(Features, Examples, Total, Conf)}
     end.

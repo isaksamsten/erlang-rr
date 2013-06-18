@@ -1,7 +1,7 @@
-%%% @author Isak Karlsson <isak-kar@dsv.su.se
+%%% @author Isak Karlsson <isak-kar@dsv.su.se>
 %%% @copyright (C) 2013, 
 %%% @doc
-%%% Evaluation metrics.
+%%% Evaluation metrics
 %%% @end
 %%% Created : 17 Jun 2013 by  <isak-kar@dsv.su.se>
 -module(rr_metrics).

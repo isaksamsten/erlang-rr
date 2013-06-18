@@ -19,11 +19,14 @@
 	 show_help/3,
 
 	 parse/2,
+	 warn/1,
+	 warn/2,
 	 illegal/1,
 	 illegal/2,
 	 illegal/3,
 	 illegal_option/2,
 	 seconds/1,
+	 
 
 	 get_opt_name/2,
 	 any_opt/2
@@ -115,6 +118,11 @@ any_opt([O|Rest], Options) ->
 	false ->
 	    any_opt(Rest, Options)
     end.
+
+warn(String) ->
+    io:format(standard_error, ["warn: "|String], []).
+warn(String, Args) ->
+    io:format(standard_error, ["warn: "|String], Args).
 
 %% error reporting
 illegal(Argument, Error) ->

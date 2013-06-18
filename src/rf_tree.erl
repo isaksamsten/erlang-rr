@@ -8,17 +8,21 @@
 -module(rf_tree).
 -author('isak-kar@dsv.su.se').
 -export([
+	 %% model
 	 generate_model/3,
 	 evaluate_model/3,
-
 	 predict/4,
-
+	 
+	 %% split strategies
 	 random_split/4,
 	 deterministic_split/4,
 	 value_split/4,
 
+	 %% prune
 	 example_depth_stop/2,
-
+	 chisquare_prune/1,
+	 
+	 %% metrics
 	 info/0,
 	 gini/0,
 	 gini_info/1
@@ -32,6 +36,13 @@
 example_depth_stop(MaxExamples, MaxDepth) ->
     fun(Examples, Depth) ->
 	    (Examples =< MaxExamples) or (Depth > MaxDepth)
+    end.
+
+%% @doc pre-prune if the split is not significantly better than no split
+chisquare_prune(Sigma) ->
+    fun (Split, Examples, Total) ->
+	    K = rr_estimator:chisquare(Split, Examples, Total),
+	    K < Sigma
     end.
 
 %% @doc generate a decision tree
@@ -92,9 +103,8 @@ build_decision_node([], Examples, Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, Examples, {Class, Count}), Importance, Total};
-build_decision_node(Features, Examples, Importance, Total, Error, #rf_tree{prune=Prune, 
-									   branch=Branch, 
-									   depth=Depth} = Conf, Id) ->
+build_decision_node(Features, Examples, Importance, Total, Error, Conf, Id) ->
+    #rf_tree{prune=Prune, pre_prune = PrePrune, branch=Branch, depth=Depth} = Conf,
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
 	true ->
@@ -107,7 +117,7 @@ build_decision_node(Features, Examples, Importance, Total, Error, #rf_tree{prune
 		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 		#rr_candidate{feature=Feature, 
 			      score={Score, LeftError, RightError}, 
-			      split={both, LeftExamples, RightExamples}}  ->  
+			      split={both, LeftExamples, RightExamples}}  ->  %%NOTE: consider PrePrune(Split, Examples, Total) -> true, false
 		    NewReduction = Error - (LeftError + RightError),
 		    NewImportance = dict:update_counter(rr_example:feature_id(Feature), NewReduction, Importance),
 		    
@@ -181,7 +191,7 @@ gini_info(Fraction) ->
 	    end
     end.
 
-%% @doc return a scoring function for the gini-importance (todo: fix)
+%% @doc return a scoring function for the gini-importance
 -spec gini() -> score_fun().
 gini() ->
     fun rr_estimator:gini/2.

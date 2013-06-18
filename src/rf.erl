@@ -351,8 +351,23 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
 	"chi-square" ->
-	    Factor = proplists:get_value(weight_factor, Options),
-	    rf_branch:chisquare(NoFeatures, Factor);
+	    F = case proplists:get_value(weight_factor, Options) of
+		    Factor when Factor > 0.2 ->
+			rr:warn("the value of sigma ('weight-factor') > 0.2~n"),
+			Factor;
+		    Factor ->
+			Factor
+		end,
+	    rf_branch:chisquare(NoFeatures, F);
+	"chi-square-dec" ->
+	    F = case proplists:get_value(weight_factor, Options) of
+		    Factor when Factor > 0.2 ->
+			rr:warn("the value of sigma ('weight-factor') > 0.2~n"),
+			Factor;
+		    Factor ->
+			Factor
+		end,
+	    rf_branch:chisquare_decrease(NoFeatures, 0.5, F);
 	"random-subset" ->
 	    rf_branch:random_subset(NoFeatures, 0);
 	"depth" ->

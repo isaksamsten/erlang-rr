@@ -1,7 +1,8 @@
 -include("rr.hrl").
 
 -record(rf_tree, {
-	  prune  :: prune_fun(), 
+	  prune  :: prune_fun(),
+	  pre_prune :: pre_prune_fun(),
 	  depth = 0 :: integer(),
 	  branch :: branch_fun(),
 	  score :: score_fun(),
@@ -38,5 +39,6 @@
 
 -type tree() :: #rf_node{} | #rf_leaf{}.
 -type prune_fun() :: fun((examples(), Depth::number()) -> boolean()).
+-type pre_prune_fun() :: fun((split(), examples(), number()) -> boolean()).
 -type branch_fun() :: fun((features(), examples(), number(), #rf_tree{}) -> #rr_candidate{}). 
 -type score_fun() :: fun((split(), Total::number()) -> score()).

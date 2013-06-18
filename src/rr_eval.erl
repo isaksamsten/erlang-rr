@@ -182,7 +182,7 @@ find_prob(Class, Probs) ->
     end.
 
 %% @doc correlation, calculated as variance()/(1/K)P(h(x)=y)+P(h(x)=j) + (P(h(x)=y)-P(h(x)=j)) where y /= j
-%% @todo this is incorrect?
+%% @todo this is incorrect? (prob not).
 correlation(Predictions, NoExamples, NoTrees) ->
     Nominator = variance(Predictions, NoExamples),
     Denominator = calculate_value_for_classes(Predictions, fun calculate_correlation/3, 0),
