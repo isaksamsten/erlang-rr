@@ -255,7 +255,7 @@ evaluate(Model, Test, Conf) ->
      {strength, Strength},
      {correlation, Correlation},
      {variance, Variance},
-     {c_s2, Correlation/math:pow(Strength, 2)},
+     {c_s2, 0}, %Correlation/math:pow(Strength, 2)},
      {precision, Precision}, 
      {oob_base_accuracy, OOBAccuracy},
      {base_accuracy, BaseAccuracy},
