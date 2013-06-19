@@ -65,13 +65,43 @@ oob_accuracy(Model, Conf) ->
 
 %% @doc calculate the base Test accuracy for each model
 base_accuracy(Model, Test, Conf) ->
+    SecondBestTest = lists:map(
+		       fun ({Class, ExIds}) ->
+			       {Class, length(ExIds), ExIds}
+		       end, dict:to_list(
+			      lists:foldl(
+				fun (Dict, Acc) ->
+					dict:merge(
+					  fun (Class, ExIdA, ExIdB) ->
+						  ExIdA ++ ExIdB
+					  end, Dict, Acc)
+				end, dict:new(), 
+				lists:foldl(
+				  fun ({Class, _, ExIds}, Acc) ->
+					  [lists:foldl(
+					     fun (ExId, New) ->
+						     {_, Preds} = rr_example:get_prediction(ExId),
+						     dict:update(
+						       if length(Preds) > 1 ->
+							       {R, _} = lists:nth(2, Preds),
+							       R;
+							  true ->
+							       undefined
+						       end,
+						       fun (NewExIds) ->
+							       [ExId|NewExIds]
+						       end, [ExId], New)
+					     end, dict:new(), ExIds)|Acc]
+				  end, [], Test)))),
     TreeFun = fun(BaseModels, #rr_ensemble{base_learner={Base, BaseConf}}) ->
 		      lists:foldl(fun({_, BaseModel, _}, Acc) ->
-					  [rr_eval:accuracy(Base:evaluate_model(BaseModel, Test, BaseConf))|Acc]
+					  Pred = Base:evaluate_model(BaseModel, Test, BaseConf),
+					  PredSecond = Base:evaluate_model(BaseModel, SecondBestTest, BaseConf),
+					  [{rr_eval:accuracy(Pred), rr_eval:accuracy(PredSecond)}|Acc]
 				  end, [], BaseModels)
 	      end,
     A = perform(Model, Conf, {base_accuracy, TreeFun, fun lists:append/2}),
-    lists:sum(A)/Conf#rr_ensemble.no_classifiers.
+    {lists:sum([A || {A, _} <- A])/Conf#rr_ensemble.no_classifiers, A}.
 
 %% @doc perform an action on each model in the ensemble
 perform(Model, Conf, {Method, TreeFun, CollectFun}) ->

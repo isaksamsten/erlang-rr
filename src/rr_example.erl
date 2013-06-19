@@ -12,6 +12,8 @@
 	 init/0,
 	 load/2,
 	 insert_prediction/2,
+	 get_prediction/1,
+
 	 format_number/1,
 
 	 sample_split_value/2,
@@ -70,6 +72,9 @@
 -spec insert_prediction(exid(), any()) -> ok.
 insert_prediction(ExId, Pred) ->
     ets:insert(predictions, {exid(ExId), Pred}).
+
+get_prediction(ExId) ->
+    hd(ets:lookup(predictions, exid(ExId))).
 
 %% @doc init ets-tables storing features, examples and predictions
 -spec init() -> ok.

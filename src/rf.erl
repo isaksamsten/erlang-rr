@@ -234,11 +234,11 @@ evaluate(Model, Test, Conf) ->
     NoTestExamples = rr_example:count(Test),
     Dict = rr_ensemble:evaluate_model(Model, Test, Conf),
     OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
-    BaseAccuracy = rr_ensemble:base_accuracy(Model, Test, Conf),
+    {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Model, Test, Conf),
     
     Strength = rr_eval:strength(Dict, NoTestExamples),
     Variance = rr_eval:variance(Dict, NoTestExamples),
-    Correlation = rr_eval:correlation(Dict, NoTestExamples, Conf#rr_ensemble.no_classifiers),
+    Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, Conf#rr_ensemble.no_classifiers),
 
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
@@ -255,7 +255,7 @@ evaluate(Model, Test, Conf) ->
      {strength, Strength},
      {correlation, Correlation},
      {variance, Variance},
-     {c_s2, 0}, %Correlation/math:pow(Strength, 2)},
+     {c_s2, Correlation/math:pow(Strength, 2)},
      {precision, Precision}, 
      {oob_base_accuracy, OOBAccuracy},
      {base_accuracy, BaseAccuracy},

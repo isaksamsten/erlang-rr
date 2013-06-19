@@ -18,7 +18,7 @@
 	 precision/1,
 	 strength/2,
 	 variance/2,
-	 correlation/3
+	 correlation/4
 	]).
 
 %% @headerfile "rr.hrl"
@@ -181,29 +181,16 @@ find_prob(Class, Probs) ->
 	    0
     end.
 
-%% @doc correlation, calculated as variance()/(1/K)P(h(x)=y)+P(h(x)=j) + (P(h(x)=y)-P(h(x)=j)) where y /= j
-%% @todo this is incorrect? (prob not).
-correlation(Predictions, NoExamples, NoTrees) ->
+%% @doc correlation, calculated as variance()/(1/K)P(h(x)=y)+P(h(x)=j) + (P(h_k(x)=y)-P(h_k(x)=j)) where y /= j
+correlation(Predictions, NoExamples, Accuracy, NoTrees) ->
     Nominator = variance(Predictions, NoExamples),
-    Denominator = calculate_value_for_classes(Predictions, fun calculate_correlation/3, 0),
+    Denominator = calculate_tree_correlation(Accuracy, 0),
     Nominator/math:pow((1/NoTrees)*Denominator, 2).
 
-calculate_correlation([], _, Score) ->
-    Score;
-calculate_correlation([{_, Probs}|Rest], Actual, Score) ->
-    NextBest = case lists:keydelete(Actual, 1, Probs) of
-		   [] -> 0;
-		   [{_, NextBest0}|_] ->
-		       NextBest0
-	       end,
-    calculate_correlation(Rest, Actual,
-		       case lists:keyfind(Actual, 1, Probs) of
-			   {_, Best} ->
-			       Score + math:sqrt((Best + NextBest + math:pow(Best - NextBest, 2)));
-			   false ->
-			       Score + math:sqrt((0 + NextBest + math:pow(0 - NextBest, 2)))
-		       end).  
-
+calculate_tree_correlation([], Acc) ->
+    Acc;
+calculate_tree_correlation([{A, B}|Rest], Acc) ->
+    calculate_tree_correlation(Rest, Acc + math:sqrt(A + B + math:pow(A - B, 2))).
 
 variance(Predictions, NoExamples) ->
     Strength = strength(Predictions, NoExamples),
