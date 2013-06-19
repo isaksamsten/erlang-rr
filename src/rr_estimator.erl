@@ -31,7 +31,7 @@
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
 
-%% @private TODO: fix
+%% @doc
 gini({both, Left, Right}, Total) ->
     LeftGini = gini_content(Left, Total),
     RightGini = gini_content(Right, Total),
@@ -54,7 +54,7 @@ gini_content(Examples, _Total) ->
 			Count + math:pow(Class/Total, 2)
 		end, 0.0, Counts).
 
-%% @private
+%% @doc
 info_gain({both, Left, Right}, Total) ->
     LeftInfo = info_content(Left, Total),
     RightInfo = info_content(Right, Total),
