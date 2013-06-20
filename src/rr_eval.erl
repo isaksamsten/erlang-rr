@@ -200,11 +200,7 @@ variance(Predictions, NoExamples) ->
 calculate_variance([], _, Score) ->
     Score;
 calculate_variance([{_, Probs}|Rest], Actual, Score) ->
-    NextBest = case lists:keydelete(Actual, 1, Probs) of
-		   [] -> 0;
-		   [{_, NextBest0}|_] ->
-		       NextBest0
-	       end,
+    NextBest = get_2nd_best_prob(Actual, Probs),
     calculate_variance(Rest, Actual, 
 		     case lists:keyfind(Actual, 1, Probs) of
 			 {_, Best} ->
@@ -221,11 +217,7 @@ strength(Predictions, NoExamples) ->
 calculate_strength([], _, Score) ->
     Score;
 calculate_strength([{_, Probs}|Rest], Actual, Score) ->
-    NextBest = case lists:keydelete(Actual, 1, Probs) of
-		   [] -> 0;
-		   [{_, NextBest0}|_] ->
-		       NextBest0
-	       end,
+    NextBest = get_2nd_best_prob(Actual, Probs),
     calculate_strength(Rest, Actual, 
 		     case lists:keyfind(Actual, 1, Probs) of
 			 {_, Best} ->
@@ -233,7 +225,13 @@ calculate_strength([{_, Probs}|Rest], Actual, Score) ->
 			 false ->
 			     Score + 0 - NextBest
 		     end).    
-    
+
+get_2nd_best_prob(Actual, Probs) ->
+    case lists:keydelete(Actual, 1, Probs) of
+	[] -> 0;
+	[{_, NextBest0}|_] ->
+	    NextBest0
+    end.
 
 %% @doc
 %% Calculate the brier score for predictions (i.e. the mean square

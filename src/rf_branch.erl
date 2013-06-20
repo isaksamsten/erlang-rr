@@ -20,7 +20,7 @@
 	 rule/3,
 	 random_rule/4,
 
-	 random_examples/2,
+	 sample_examples/3,
 
 	 depth/1,
 	 depth_rule/3,
@@ -33,7 +33,7 @@
 
 	 %% util
 	 unpack/1,
-	 resample/2
+	 redo/2
 	 
 	]).
 
@@ -119,21 +119,55 @@ rule(NoFeatures, NoRules, RuleScore) ->
 	    end
     end.
 
-random_examples(NoFeatures, NoExamples) ->
-    Log = subset(NoFeatures),
+sample_examples(NoFeatures, Size, Sigma) ->
+    Do = sample_examples(NoFeatures, Size),
+    Redo = sample_examples_significance(NoFeatures, Size, Sigma),
+    redo(Do, Redo).
+
+
+sample_examples(_NoFeatures, Size) when Size >= 1.0 ->
+    fun (_, _, _, _) ->
+	    {Size, {invalid_subset, []}}
+    end;
+sample_examples(NoFeatures, Size) ->
     fun (Features, Examples, Total, Conf) ->
-	    if Total =< NoExamples ->
-		    Log(Features, Examples, Total, Conf);
-	       true ->
-		    random_examples(Features, Examples, Total, Conf, NoExamples)
+	    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
+	    FeatureSubset = rr_example:random_features(Features, NoFeatures),
+	    Subset = sample_sane_examples(Examples, Size, Size, Total),
+	    #rr_candidate{feature=F} = rr_example:best_split(FeatureSubset, Subset, 
+							     rr_example:count(Subset), Score, Split, Distribute, Missing),
+	    ExSplit = rr_example:split_feature_value(F, Examples, Distribute, Missing),
+	    Best = #rr_candidate{feature = F,
+				 split = ExSplit,
+				 score = Score(ExSplit, rr_example:count(Examples))},
+	    {Size, {Best, []}}
+    end.
+
+sample_sane_examples(Examples, Size, _,  _) when Size >= 1 ->
+    Examples;
+sample_sane_examples(Examples, Size, Step, Total) ->
+    if Total * Size < 2 ->
+	    Examples;
+       true ->
+	    case rr_example:subset(Examples, Size) of
+		Subset when length(Subset) > 1 -> Subset;
+		_ ->
+		    sample_sane_examples(Examples, Size+Step, Step, Total)
 	    end
     end.
 
-random_examples(Features, Examples, _Total, Conf, NoExamples) ->
-    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
-    Examples0 = rr_examples:random_examples(Examples, NoExamples),
-    rr_example:best_split(Features, Examples0, NoExamples, Score, Split, Distribute, Missing).
-
+sample_examples_significance(NoFeatures, Size, Sigma) ->
+    fun (#rr_candidate{split=Split}, NewSize, Examples, Total) ->
+	    S = rr_estimator:chisquare(Split, Examples, Total),
+	    if S < Sigma ->
+		    Inc = NewSize + Size,
+		    {true, sample_examples(NoFeatures, Inc), sample_examples_significance(NoFeatures, Inc, Sigma)};
+	       true ->
+		    false
+	    end;
+	(invalid_subset, _, _, _) ->
+	    no_information
+    end.
 
 random_subset(NoFeatures, Variance) ->
     fun (Features, Examples, Total, Conf) ->
@@ -185,15 +219,15 @@ depth_rule(NoFeatures, NoRules, RuleScore) ->
 %% insignificant feature is found, until only one feature is inspected
 %% @end
 chisquare_decrease(NoFeatures, Rate, Sigma) ->
-    Sample = resample_curry(NoFeatures, subset(NoFeatures)),
-    resample(Sample, chisquare_decrease_resample(Sample, Rate, Sigma)).
+    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
+    redo(Sample, chisquare_decrease_resample(Sample, Rate, Sigma)).
     
-chisquare_decrease_resample(Sample, Rate, Sigma) ->
+chisquare_decrease_resample(_Sample, Rate, Sigma) ->
     fun (#rr_candidate{split=Split}, NoFeatures, Examples, Total) ->
 	    Significance = rr_estimator:chisquare(Split, Examples, Total),
 	    if Significance < Sigma ->
 		    NewNoFeatures = if NoFeatures > 1 -> round(NoFeatures * Rate); true -> 1 end,
-		    NewSample = resample_curry(NewNoFeatures, subset(NewNoFeatures)),
+		    NewSample = redo_curry(NewNoFeatures, subset(NewNoFeatures)),
 		    {true, NewSample, chisquare_decrease_resample(NewSample, Rate, Sigma)};
 	       true ->
 		    false
@@ -202,9 +236,9 @@ chisquare_decrease_resample(Sample, Rate, Sigma) ->
 
 %% @doc resample features if chi-square significance is lower than Sigma
 chisquare(NoFeatures, Sigma) ->
-    Sample = resample_curry(NoFeatures, subset(NoFeatures)),
+    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
     Resample = chisquare_resample(Sample, Sigma),
-    resample(Sample, Resample).
+    redo(Sample, Resample).
 		
 chisquare_resample(Sample, Sigma) ->
     fun (#rr_candidate{split=Split}, _, Examples, Total) ->
@@ -218,9 +252,9 @@ chisquare_resample(Sample, Sigma) ->
 
 %% @doc resample n features m times if gain delta
 resample(NoFeatures, NoResamples, Delta) ->
-    Sample = resample_curry(NoFeatures, subset(NoFeatures)),
+    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
     Resample = simple_resample(Sample, NoResamples, Delta),
-    resample(Sample, Resample).
+    redo(Sample, Resample).
 
 simple_resample(_, 0, _) ->
     fun (_, _, _, _) -> no_information end;
@@ -236,15 +270,15 @@ simple_resample(Sample, NoResamples, Delta) ->
 
 %% @doc resample 1 feature if no informative features is found
 weka(NoFeatures) ->
-    Sample = resample_curry(NoFeatures, subset(NoFeatures)),
+    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
     Resample = weka_resample(Sample),
-    resample(Sample, Resample).
+    redo(Sample, Resample).
 
-weka_resample(Sample) ->
+weka_resample(_Sample) ->
     fun (#rr_candidate{score = {Score, _, _}}, _, Examples, Total) ->
 	    Gain = (Total * rr_estimator:entropy(Examples)) - Score,
 	    if Gain =< 0.0 ->
-		    NewSample = resample_curry(1, subset(1)),
+		    NewSample = redo_curry(1, subset(1)),
 		    {true, NewSample, weka_resample(NewSample)};
 	       true ->
 		    false
@@ -259,19 +293,24 @@ weka_resample(Sample) ->
 %% determining if resampling is needed. This function returns {true, NewSample, NewResample} if
 %% no informative feature is found, o/w false. 
 %% @end
-resample(Sample, Resample) ->
+redo(Do, Redo) ->
     fun (Features, Examples, Total, Conf) ->
-	    resample(Features, Examples, Total, Conf, length(Features), Sample, Resample) %% optimize
+	    redo(Features, Examples, Total, Conf, length(Features), Do, Redo)
     end.
 
-resample([], _, _, _, _, _, _) ->
+redo([], _, _, _, _, _, _) ->
     no_information;
-resample(Features, Examples, Total, Conf, TotalNoFeatures, Sample, Resample) ->
-    {NoFeatures, {Best, NewFeatures}} = Sample(Features, Examples, Total, Conf),
-    case Resample(Best, NoFeatures, Examples, Total) of
-	{true, NewSample, NewResample} ->
-	    resample(ordsets:subtract(Features, ordsets:from_list(NewFeatures)),
-		     Examples, Total, Conf, TotalNoFeatures - NoFeatures, NewSample, NewResample); 
+redo(Features, Examples, Total, Conf, TotalNoFeatures, Do, Redo) ->
+    {NoFeatures, {Best, NewFeatures}} = Do(Features, Examples, Total, Conf),
+    case Redo(Best, NoFeatures, Examples, Total) of
+	{true, NewDo, NewRedo} ->
+	    redo(ordsets:subtract(Features, ordsets:from_list(NewFeatures)),
+		 Examples, Total, Conf, 
+		 if is_integer(NoFeatures) ->
+			 TotalNoFeatures - NoFeatures;
+		    true ->
+			 TotalNoFeatures
+		 end, NewDo, NewRedo); 
 	false ->
 	    {Best, NewFeatures};
 	no_information ->
@@ -279,7 +318,7 @@ resample(Features, Examples, Total, Conf, TotalNoFeatures, Sample, Resample) ->
     end.
     
 %% @doc wrap sample-fun Fun to return the number of sampled features
-resample_curry(NoFeatures, Fun) ->
+redo_curry(NoFeatures, Fun) ->
     fun (Features, Examples, Total, Conf) ->
 	    {NoFeatures, Fun(Features, Examples, Total, Conf)}
     end.

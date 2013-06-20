@@ -116,8 +116,8 @@ build_decision_node(Features, Examples, Importance, Total, Error, Conf, Id) ->
 		#rr_candidate{split={_, _}} ->
 		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 		#rr_candidate{feature=Feature, 
-			      score={Score, LeftError, RightError}, 
-			      split={both, LeftExamples, RightExamples}}  ->  %%NOTE: consider PrePrune(Split, Examples, Total) -> true, false
+			      score={Score, LeftError, RightError} = Sc, 
+			      split={both, LeftExamples, RightExamples} = SS}  ->  %%NOTE: consider PrePrune(Split, Examples, Total) -> true, false
 		    NewReduction = Error - (LeftError + RightError),
 		    NewImportance = dict:update_counter(rr_example:feature_id(Feature), NewReduction, Importance),
 		    

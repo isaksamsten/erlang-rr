@@ -267,6 +267,8 @@ example_sampling(Options) ->
 	    fun rr_example:subset_aggregate/1;
 	"bagging" ->
 	    fun rr_example:bootstrap_aggregate/1;
+	"nothing" ->
+	    fun (Examples) -> {Examples, []} end;
 	Other ->
 	    rr:illegal_option("example-sampling", Other)		
     end.
@@ -370,6 +372,13 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	    rf_branch:chisquare_decrease(NoFeatures, 0.5, F);
 	"random-subset" ->
 	    rf_branch:random_subset(NoFeatures, 0);
+	"sample-examples" ->
+	    case proplists:get_value(example_sampling, Options) of
+		"nothing" -> ok;
+		_ -> rr:warn("'sample-examples' should work best with 'example-sampling' set to 'nothing'~n")
+	    end,
+	    Factor = proplists:get_value(weight_factor, Options),
+	    rf_branch:sample_examples(NoFeatures, 0.1, Factor);
 	"depth" ->
 	    rf_branch:depth(TotalNoFeatures div 2);
 	"depth-rule" ->

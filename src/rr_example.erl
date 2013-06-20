@@ -22,6 +22,8 @@
 	 
 	 split/4,
 	 split/5,
+	 split_feature_value/4,
+
 	 distribute/2,
 	 
 	 exid/1,
@@ -43,6 +45,7 @@
 	 count_exclude/2,
 	 remove_covered/2,
 	 coverage/1,
+	 subset/2,
 
 	 get_class/2,
 	 classes/1,
@@ -268,6 +271,10 @@ unpack_split({left, Left}) ->
 unpack_split({right, Right}) ->
     {[], Right}.
 
+split_feature_value(FeatureValue, Examples, Distribute, DistributeMissing) ->
+    {Left, Right, Missing} = split_feature(FeatureValue, Examples, Distribute, [], [], []),
+    distribute_missing_values(FeatureValue, Examples, count(Left), count(Right), 
+			      Left, Right, Missing, [], [], DistributeMissing).    
 
 %% @doc Split Examples into two disjoint subsets according to Feature.
 -spec split(feature(), examples(), distribute_fun(), missing_fun(), any()) -> {none | atom(), split()}.
@@ -498,6 +505,7 @@ best_split([], _, _, _, _, _, _) ->
 best_split([F|Features], Examples, Total, Score, Split, Distribute, Missing) ->
     {T, ExSplit} = Split(F, Examples, Distribute, Missing),
     Cand = #rr_candidate{feature={F, T}, score=Score(ExSplit, Total), split=ExSplit},
+%    io:format("??? ~p ~n", [Cand#rr_candidate.score]),
     best_split(Features, Examples, Total, Score, Split, Distribute, Missing, Cand).
 
 best_split([], _, _, _, _, _, _, Acc) ->
@@ -509,8 +517,9 @@ best_split([F|Features], Examples, Total, Score, Split, Distribute, Missing, Old
 				 score = Score(ExSplit, Total), 
 				 split = ExSplit}		       
 	   end,
+%    io:format("+++ ~p ~n", [Cand]),
     best_split(Features, Examples, Total, Score, Split, Distribute, Missing, 
-		   case Cand#rr_candidate.score < OldCand#rr_candidate.score of
+		   case element(1, Cand#rr_candidate.score) < element(1, OldCand#rr_candidate.score) of
 		       true -> Cand;
 		       false -> OldCand
 		   end).
@@ -663,6 +672,25 @@ split_dataset(Examples, Ratio) ->
 			 [{Class, length(Test), Test}|TestAcc]}
 		end, {[], []}, Examples).
 
+
+%% @doc 
+%% take a subset of Size from Examples. If size is within [0, 1],
+%% is taken as a fraction, o/w Size is absolute
+%% @doc
+subset(Examples, Size) when is_float(Size), Size =< 1.0, Size >= 0.0 ->
+    Subset = lists:foldl(fun ({Class, Count, Ids}, Acc) ->
+				 Fraction = round(length(Ids) * Size),
+				 {Take, _Leave} = lists:split(Fraction, Ids),
+				 [{Class, Fraction, Take}|Acc]
+			 end, [], Examples),
+    lists:filter(fun ({_, A, _}) ->
+			 A > 0
+		 end, Subset);
+subset(Examples, Size) ->
+    Total = count(Examples),
+    Fraction = Size/Total,
+    if Fraction >= 1 -> Examples; true ->  subset(Examples, Fraction) end.
+
 %% @doc shuffle the data set (for example, before splitting)
 -spec randomize(examples()) -> examples().
 randomize(Examples) ->
@@ -739,7 +767,7 @@ cross_validation(_Fun, _Folds, _NoFolds, 0, Acc) ->
 cross_validation(Fun, Folds, NoFolds, CurrentFold, Acc) -> 
     {Test, Train} = merge_folds(Folds, CurrentFold),
     Result = Fun(Train, Test, NoFolds - CurrentFold + 1),
-    cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, [Result|Acc]). 
+    cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, [Result|Acc]).
 
 %%
 %% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}
@@ -824,9 +852,41 @@ sample_class_pair(Examples, Random, NoEx, Acc) ->
 
 mock_examples(Mock) ->
     lists:foldl(fun ({Class, Count}, Acc) ->
-			[{Class, Count, []}|Acc]
+			[{Class, Count, lists:seq(1, Count)}|Acc]
 		end, [], Mock).
 
 mock_split(Left, Right) ->
     {both, mock_examples(Left), mock_examples(Right)}.
+
+subset_test() ->
+    Examples = mock_examples([{a, 10}, {b, 20}]),
+    Subset = subset(Examples, 0.2),
+    ?assertEqual(count(Subset), round(count(Examples)*0.2)),
+    
+    Subset0 = subset(Examples, 10),
+    ?assertEqual(count(Subset0), 10),
+    ?assertEqual(count(subset(Examples, 30)), 30),
+    ?assertEqual(count(subset(Examples, 33)), 30),
+    ?assertEqual(subset(mock_examples([{a, 10}, {b, 2}]), 0.2), [{a, 2, [1,2]}]).
+
+bootstrap_test() ->
+    random:seed({1,2,3}),
+    Examples = mock_examples([{a, 1000}, {b, 2000}]),
+    {InBag, OutBag} = bootstrap_aggregate(Examples),
+    ?assertEqual(count(a, InBag), 1017),
+    ?assertEqual(count(b, InBag), 1983),
+    
+    SumInBagA = lists:sum([count(C) || C <- element(3, hd(InBag))]),
+    SumInBagB = lists:sum([count(C) || C <- element(3, hd(tl(InBag)))]),
+    ?assertEqual(count(a, InBag), SumInBagA),
+    ?assertEqual(count(b, InBag), SumInBagB),
+
+    SumOutBagA = lists:sum([count(C) || C <- element(3, hd(OutBag))]),
+    SumOutBagB = lists:sum([count(C) || C <- element(3, hd(tl(OutBag)))]),
+    ?assertEqual(count(a, OutBag), SumOutBagA),
+    ?assertEqual(count(b, OutBag), SumOutBagB),
+    ?assertEqual(count(Examples), SumInBagA + SumInBagB),
+    ?assertEqual(round((SumOutBagA + SumOutBagB) / (SumInBagA + SumInBagB) * 100)/100 , 0.36).
+    
+
 -endif.

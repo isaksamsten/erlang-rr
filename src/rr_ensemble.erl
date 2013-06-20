@@ -63,7 +63,11 @@ oob_accuracy(Model, Conf) ->
     A = perform(Model, Conf, {oob_accuracy, TreeFun, fun lists:append/2}),
     lists:sum(A)/Conf#rr_ensemble.no_classifiers.
 
-%% @doc calculate the base Test accuracy for each model
+%% @doc
+%% Calculate the base Test accuracy for each model. This function relies
+%% on the (public) ets-table (predictions) to be filled o/w Second will contain [0.0,...], which
+%% inhibits correct calucultation 
+%% @end
 -spec base_accuracy(any(), examples(), #rr_ensemble{}) -> {Average::float(), [{BaseAccuracy::float(), Second::float()},...]}.
 base_accuracy(Model, Test, Conf) ->
     SecondBestTest = lists:map(
@@ -228,8 +232,8 @@ base_build_process(Coordinator, Features, Examples, Conf) ->
     random:seed({A,B,C}),
     base_build_process(Coordinator, Features, Examples, Conf, dict:new(), []).
 
-base_build_process(Coordinator, Features, Examples, 
-		   #rr_ensemble{no_classifiers = T, base_learner={Base, BaseConf}, progress=Progress, bagging=Bagger} = Conf, VariableImportance, Models) ->
+base_build_process(Coordinator, Features, Examples, Conf, VariableImportance, Models) ->
+    #rr_ensemble{no_classifiers = T, base_learner={Base, BaseConf}, progress=Progress, bagging=Bagger} = Conf,
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id} ->
@@ -237,8 +241,10 @@ base_build_process(Coordinator, Features, Examples,
 	    {Model, TreeVariableImportance, ImportanceSum} = Base:generate_model(Features, Bag, BaseConf),
 	    
 	    NewVariableImportance = update_variable_importance(TreeVariableImportance, VariableImportance, ImportanceSum),
-	    OOBAccuracy = rr_eval:accuracy(Base:evaluate_model(Model, OutBag, BaseConf)),
-
+	    OOBAccuracy = case OutBag of
+			      [] -> 0.0;
+			      _ -> rr_eval:accuracy(Base:evaluate_model(Model, OutBag, BaseConf))
+			  end,
 	    Rem = if T > 10 -> round(T/10); true -> 1 end,
 	    case Id rem Rem of
 		0 ->
