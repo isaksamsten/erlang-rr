@@ -678,7 +678,7 @@ split_dataset(Examples, Ratio) ->
 %% is taken as a fraction, o/w Size is absolute
 %% @doc
 subset(Examples, Size) when is_float(Size), Size =< 1.0, Size >= 0.0 ->
-    Subset = lists:foldl(fun ({Class, Count, Ids}, Acc) ->
+    Subset = lists:foldl(fun ({Class, _Count, Ids}, Acc) ->
 				 Fraction = round(length(Ids) * Size),
 				 {Take, _Leave} = lists:split(Fraction, Ids),
 				 [{Class, Fraction, Take}|Acc]
@@ -857,6 +857,47 @@ mock_examples(Mock) ->
 
 mock_split(Left, Right) ->
     {both, mock_examples(Left), mock_examples(Right)}.
+
+split_test() ->
+    random:seed({1,2,3}),
+    Examples = mock_examples([{a, 10}, {b, 10}]),
+    D = fun (_, _) ->
+		R = random:uniform(),
+		if R =< 0.5 -> {left, 1}; true -> {right, 1} end
+	end,
+    M = fun (_, _, _, _, _) ->
+		ignore
+	end,
+    S = fun (_, _) ->
+		0.5
+	end,
+    Split = split(1, Examples, D, M, S),
+    ?assertEqual(Split, {0.5, {both,[{b,5,[8,7,6,3,1]},{a,4,[10,5,4,3]}],
+			       [{b,5,[10,9,5,4,2]},{a,6,[9,8,7,6,2,1]}]}}),
+
+    OnlyOne = mock_examples([{a, 10}]),
+    Split0 = split(1, OnlyOne, D, M, S),
+    ?assertEqual(Split0, {0.5,{both,[{a,4,[9,7,4,2]}],[{a,6,[10,8,6,5,3,1]}]}}).
+
+best_split_test() ->
+    random:seed({1,2,3}),
+    Examples = mock_examples([{a, 10}, {b, 10}]),
+    D = fun (_, _) ->
+		R = random:uniform(),
+		if R =< 0.5 -> {left, 1}; true -> {right, 1} end
+	end,
+    M = fun (_, _, _, _, _) ->
+		ignore
+	end,
+    S = fun (_, _) ->
+		0.5
+	end,
+    Split = fun (F, E, Dm, DM) ->
+		    split(F, E, Dm, DM, S)
+	    end,
+    Cand = best_split([1,2], Examples, 20, rf_tree:info(), Split, D, M),
+    ?assertEqual(Cand#rr_candidate.feature, {2, 0.5}),
+    ?assertEqual(Cand#rr_candidate.score, {13.46023334018513,6.730116670092565,6.730116670092565}).
 
 subset_test() ->
     Examples = mock_examples([{a, 10}, {b, 20}]),

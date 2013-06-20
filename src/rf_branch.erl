@@ -10,7 +10,6 @@
 	 %% standard approaches
 	 random/0,
 	 all/0,
-
 	 subset/1,
 	 random_subset/2,
 
@@ -20,21 +19,26 @@
 	 rule/3,
 	 random_rule/4,
 
+	 %% example sampling approaches
 	 sample_examples/3,
 
+	 %% increased strength approaches
 	 depth/1,
 	 depth_rule/3,
 
-	 %% resample
+	 %% resampling approahces
 	 weka/1,
 	 resample/3,
+
+	 %% significance approaches
+	 random_chisquare/2,
 	 chisquare/2,
 	 chisquare_decrease/3,
 
 	 %% util
 	 unpack/1,
-	 redo/2
-	 
+	 redo/2,
+	 random/3	 
 	]).
 
 -ifdef(TEST).
@@ -70,14 +74,7 @@ correlation(NoFeatures) ->
 random_correlation(NoFeatures, Fraction) ->
     Corr = correlation(NoFeatures),
     Sub = subset(NoFeatures),
-    fun (Features, Examples, Total, Conf) ->
-	    Random = random:uniform(),
-	    if Random =< Fraction ->
-		    Corr(Features, Examples, Total, Conf);
-	       true ->
-		    Sub(Features, Examples, Total, Conf)
-	    end
-    end.
+    random(Corr, Sub, Fraction).
 
 %% @doc evalate one randomly selected feature (maximum diversity)
 -spec random() -> branch_fun().
@@ -110,20 +107,12 @@ rule(NoFeatures, NoRules, RuleScore) ->
  random_rule(NoFeatures, NoRules, RuleScore, Prob) ->
     Rule = rule(NoFeatures, NoRules, RuleScore),
     Sub = subset(NoFeatures),
-    fun (Features, Examples, Total, Conf) ->
-	    Random = random:uniform(),
-	    if Random =< Prob ->
-		    Rule(Features, Examples, Total, Conf);
-	       true ->
-		    Sub(Features, Examples, Total, Conf)
-	    end
-    end.
+    random(Rule, Sub, Prob).
 
 sample_examples(NoFeatures, Size, Sigma) ->
     Do = sample_examples(NoFeatures, Size),
     Redo = sample_examples_significance(NoFeatures, Size, Sigma),
     redo(Do, Redo).
-
 
 sample_examples(_NoFeatures, Size) when Size >= 1.0 ->
     fun (_, _, _, _) ->
@@ -134,7 +123,7 @@ sample_examples(NoFeatures, Size) ->
 	    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
 	    FeatureSubset = rr_example:random_features(Features, NoFeatures),
 	    Subset = sample_sane_examples(Examples, Size, Size, Total),
-	    #rr_candidate{feature=F} = rr_example:best_split(FeatureSubset, Subset, 
+	    #rr_candidate{feature=F} = rr_example:best_split(Features, Subset, 
 							     rr_example:count(Subset), Score, Split, Distribute, Missing),
 	    ExSplit = rr_example:split_feature_value(F, Examples, Distribute, Missing),
 	    Best = #rr_candidate{feature = F,
@@ -234,6 +223,12 @@ chisquare_decrease_resample(_Sample, Rate, Sigma) ->
 	    end
     end.
 
+%% @doc randomly select either chisquare or subset
+random_chisquare(NoFeatures, Sigma) ->
+    Chi = chisquare(NoFeatures, Sigma),
+    Sub = subset(NoFeatures),
+    random(Chi, Sub, 0.5).
+
 %% @doc resample features if chi-square significance is lower than Sigma
 chisquare(NoFeatures, Sigma) ->
     Sample = redo_curry(NoFeatures, subset(NoFeatures)),
@@ -285,7 +280,6 @@ weka_resample(_Sample) ->
 	    end
     end.
 
-
 %% @doc
 %% Generic function for performing resampling. The first argument - Sample - is used for sampling
 %% features and for finding a candidate. The function should return a tuple with the number of sampled
@@ -315,6 +309,17 @@ redo(Features, Examples, Total, Conf, TotalNoFeatures, Do, Redo) ->
 	    {Best, NewFeatures};
 	no_information ->
 	    no_information
+    end.
+
+%% @doc call either One or Two randomly according to T
+random(One, Two, T) ->
+    fun (Features, Examples, Total, Conf) ->
+	    R = random:uniform(),
+	    if R =< T ->
+		    One(Features, Examples, Total, Conf);
+	       true ->
+		    Two(Features, Examples, Total, Conf)
+	    end
     end.
     
 %% @doc wrap sample-fun Fun to return the number of sampled features

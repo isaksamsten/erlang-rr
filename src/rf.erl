@@ -352,6 +352,8 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	    rf_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
+	"random-chisquare" ->
+	    rf_branch:random_chisquare(NoFeatures, proplists:get_value(weight_factor, Options));
 	"chi-square" ->
 	    F = case proplists:get_value(weight_factor, Options) of
 		    Factor when Factor > 0.2 ->
