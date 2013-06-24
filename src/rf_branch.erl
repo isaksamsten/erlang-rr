@@ -123,8 +123,7 @@ sample_examples(NoFeatures, Size) ->
 	    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
 	    FeatureSubset = rr_example:random_features(Features, NoFeatures),
 	    Subset = sample_sane_examples(Examples, Size, Size, Total),
-	    #rr_candidate{feature=F} = rr_example:best_split(Features, Subset, 
-							     rr_example:count(Subset), Score, Split, Distribute, Missing),
+	    #rr_candidate{feature=F} = rr_example:best_split(FeatureSubset, Subset, rr_example:count(Subset), Score, Split, Distribute, Missing),
 	    ExSplit = rr_example:split_feature_value(F, Examples, Distribute, Missing),
 	    Best = #rr_candidate{feature = F,
 				 split = ExSplit,
@@ -158,6 +157,7 @@ sample_examples_significance(NoFeatures, Size, Sigma) ->
 	    no_information
     end.
 
+%% @doc subset with a slight variance in number of sampled features
 random_subset(NoFeatures, Variance) ->
     fun (Features, Examples, Total, Conf) ->
 	    random_subset(Features, Examples, Total, Conf, NoFeatures, Variance)
@@ -243,7 +243,7 @@ chisquare_resample(Sample, Sigma) ->
 	       true ->
 		    false
 	    end
-    end.		
+    end.
 
 %% @doc resample n features m times if gain delta
 resample(NoFeatures, NoResamples, Delta) ->
@@ -252,7 +252,7 @@ resample(NoFeatures, NoResamples, Delta) ->
     redo(Sample, Resample).
 
 simple_resample(_, 0, _) ->
-    fun (_, _, _, _) -> no_information end;
+    fun (_, _, _, _) -> false end;
 simple_resample(Sample, NoResamples, Delta) ->
     fun (#rr_candidate{score = {Score, _, _}}, _, Examples, Total) ->
 	    Gain = (Total * rr_estimator:entropy(Examples)) - Score,
@@ -289,12 +289,12 @@ weka_resample(_Sample) ->
 %% @end
 redo(Do, Redo) ->
     fun (Features, Examples, Total, Conf) ->
-	    redo(Features, Examples, Total, Conf, length(Features), Do, Redo)
+	    redo(Features, Examples, Total, Conf, length(Features), #rr_candidate{score = {inf}}, Do, Redo)
     end.
 
-redo([], _, _, _, _, _, _) ->
+redo([], _, _, _, _, _, _, _) ->
     no_information;
-redo(Features, Examples, Total, Conf, TotalNoFeatures, Do, Redo) ->
+redo(Features, Examples, Total, Conf, TotalNoFeatures, Prev, Do, Redo) ->
     {NoFeatures, {Best, NewFeatures}} = Do(Features, Examples, Total, Conf),
     case Redo(Best, NoFeatures, Examples, Total) of
 	{true, NewDo, NewRedo} ->
@@ -304,9 +304,13 @@ redo(Features, Examples, Total, Conf, TotalNoFeatures, Do, Redo) ->
 			 TotalNoFeatures - NoFeatures;
 		    true ->
 			 TotalNoFeatures
-		 end, NewDo, NewRedo); 
+		 end, Best, NewDo, NewRedo); 
 	false ->
-	    {Best, NewFeatures};
+	    if element(1, Best#rr_candidate.score) < element(1, Prev#rr_candidate.score) ->
+		    {Best, NewFeatures};
+	       true ->
+		    {Prev, NewFeatures}
+	    end;
 	no_information ->
 	    no_information
     end.
