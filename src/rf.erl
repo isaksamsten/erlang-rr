@@ -319,8 +319,8 @@ score(Options) ->
 
 no_features(TotalNoFeatures, Options) ->
     case proplists:get_value(no_features, Options) of
-	"default" -> round(math:log(TotalNoFeatures)/math:log(2)) + 1;
-	"sqrt" -> round(math:sqrt(TotalNoFeatures));
+	"default" -> trunc(math:log(TotalNoFeatures)/math:log(2)) + 1;
+	"sqrt" -> trunc(math:sqrt(TotalNoFeatures));
 	X ->
 	    case rr_example:format_number(X) of
 		{true, Number} when Number > 0 -> Number;
@@ -350,6 +350,10 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	    {NewNoFeatures, NoRules} = no_rules(Options, NoFeatures),
 	    RuleScore = rule_score(Options),
 	    rf_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
+	"choose-rule" ->
+	    {NewNoFeatures, NoRules} = no_rules(Options, NoFeatures),
+	    RuleScore = rule_score(Options),
+	    rf_branch:choose_rule(NewNoFeatures, NoRules, RuleScore);
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
 	"random-chisquare" ->
@@ -362,7 +366,10 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 		    Factor ->
 			Factor
 		end,
-	    rf_branch:chisquare(NoFeatures, F);
+	    rf_branch:chisquare(NoFeatures, NoFeatures, F);
+	"resquare" ->
+	    F = proplists:get_value(weight_factor, Options),
+	    rf_branch:randomly_resquare(NoFeatures, 0.5, F);
 	"chi-square-dec" ->
 	    F = case proplists:get_value(weight_factor, Options) of
 		    Factor when Factor > 0.2 ->

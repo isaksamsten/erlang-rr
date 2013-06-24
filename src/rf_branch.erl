@@ -18,6 +18,7 @@
 	 random_correlation/2,
 	 rule/3,
 	 random_rule/4,
+	 choose_rule/3,
 
 	 %% example sampling approaches
 	 sample_examples/3,
@@ -31,8 +32,9 @@
 	 resample/3,
 
 	 %% significance approaches
-	 random_chisquare/2,
-	 chisquare/2,
+	 random_chisquare/3,
+	 randomly_resquare/3,
+	 chisquare/3,
 	 chisquare_decrease/3,
 
 	 %% util
@@ -109,6 +111,30 @@ rule(NoFeatures, NoRules, RuleScore) ->
     Sub = subset(NoFeatures),
     random(Rule, Sub, Prob).
 
+%% @doc choose either rule or subset depending on which is best
+choose_rule(NoFeatures, NoRules, RuleScore) ->
+    Rule = rule(NoFeatures, NoRules, RuleScore),
+    Sub = subset(NoFeatures),
+    n([Rule, Sub], fun sig/3).
+
+score([#rr_candidate{score={As, _, _}} = A, #rr_candidate{score={Bs, _, _}} = B], _, _) ->
+    if As < Bs -> 
+	    A; 
+       true -> 
+	    B 
+    end.
+
+sig([#rr_candidate{split = As}=A, #rr_candidate{split=Bs} = B], Examples, Total) ->
+    Achi = rr_estimator:chisquare(As, Examples, Total),
+    Bchi = rr_estimator:chisquare(Bs, Examples, Total),
+    if Achi > Bchi ->
+	    A;
+       true -> 
+	    B
+    end.
+
+
+%% @doc sample a set of examples of Size, if we can find a significant split use it o/w retry
 sample_examples(NoFeatures, Size, Sigma) ->
     Do = sample_examples(NoFeatures, Size),
     Redo = sample_examples_significance(NoFeatures, Size, Sigma),
@@ -224,22 +250,39 @@ chisquare_decrease_resample(_Sample, Rate, Sigma) ->
     end.
 
 %% @doc randomly select either chisquare or subset
-random_chisquare(NoFeatures, Sigma) ->
-    Chi = chisquare(NoFeatures, Sigma),
+random_chisquare(NoFeatures, Next, Sigma) ->
+    Chi = chisquare(NoFeatures, Next, Sigma),
     Sub = subset(NoFeatures),
     random(Chi, Sub, 0.5).
 
 %% @doc resample features if chi-square significance is lower than Sigma
-chisquare(NoFeatures, Sigma) ->
+chisquare(NoFeatures, Next, Sigma) ->
     Sample = redo_curry(NoFeatures, subset(NoFeatures)),
-    Resample = chisquare_resample(Sample, Sigma),
+    Resample = chisquare_resample(Next, Sigma),
     redo(Sample, Resample).
 		
-chisquare_resample(Sample, Sigma) ->
+chisquare_resample(NoFeatures, Sigma) ->
     fun (#rr_candidate{split=Split}, _, Examples, Total) ->
 	    Significance = rr_estimator:chisquare(Split, Examples, Total),
 	    if Significance < Sigma ->
-		    {true, Sample, chisquare_resample(Sample, Sigma)};
+		    {true, redo_curry(NoFeatures, subset(NoFeatures)), chisquare_resample(NoFeatures, Sigma)};
+	       true ->
+		    false
+	    end
+    end.
+
+%% @doc rame as chisquare-resample, however the resampling are done randomly
+randomly_resquare(NoFeatures, Factor, Sigma) ->
+    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
+    Resample = randomly_resquare_redo(NoFeatures, Factor, Sigma),
+    redo(Sample, Resample).
+
+randomly_resquare_redo(NoFeatures, Factor, Sigma) ->
+    fun (#rr_candidate{split=Split}, _, Examples, Total) ->
+	    Significance = rr_estimator:chisquare(Split, Examples, Total),
+	    Random = random:uniform(),
+	    if Significance < Sigma, Random < Factor ->
+		    {true, redo_curry(NoFeatures, subset(NoFeatures)), randomly_resquare_redo(NoFeatures, Factor, Sigma)};
 	       true ->
 		    false
 	    end
@@ -294,7 +337,7 @@ redo(Do, Redo) ->
 
 redo([], _, _, _, _, _, _, _) ->
     no_information;
-redo(Features, Examples, Total, Conf, TotalNoFeatures, Prev, Do, Redo) ->
+redo(Features, Examples, Total, Conf, TotalNoFeatures, _Prev, Do, Redo) ->
     {NoFeatures, {Best, NewFeatures}} = Do(Features, Examples, Total, Conf),
     case Redo(Best, NoFeatures, Examples, Total) of
 	{true, NewDo, NewRedo} ->
@@ -306,11 +349,11 @@ redo(Features, Examples, Total, Conf, TotalNoFeatures, Prev, Do, Redo) ->
 			 TotalNoFeatures
 		 end, Best, NewDo, NewRedo); 
 	false ->
-	    if element(1, Best#rr_candidate.score) < element(1, Prev#rr_candidate.score) ->
-		    {Best, NewFeatures};
-	       true ->
-		    {Prev, NewFeatures}
-	    end;
+%	    if element(1, Best#rr_candidate.score) < element(1, Prev#rr_candidate.score) ->
+	    {Best, NewFeatures};
+%	       true ->
+%		    {Prev, NewFeatures}
+%	    end;
 	no_information ->
 	    no_information
     end.
@@ -325,6 +368,20 @@ random(One, Two, T) ->
 		    Two(Features, Examples, Total, Conf)
 	    end
     end.
+
+%% @doc apply n Feature selection algorithms and use Choose to pick one
+n([],_, Examples, Total, _, Choose, Acc) ->
+    Choose(Acc, Examples, Total);
+n([Fun|Rest], Features, Examples, Total, Conf, Choose, Acc) ->
+    n(Rest, Features, Examples, Total, Conf, Choose,
+      [unpack(Fun(Features, Examples, Total, Conf))|Acc]).
+
+%% @doc apply Funs then Choose one
+n(Funs, Choose) ->
+    fun (Features, Examples, Total, Conf) ->
+	    n(Funs, Features, Examples, Total, Conf, Choose, [])
+    end.
+
     
 %% @doc wrap sample-fun Fun to return the number of sampled features
 redo_curry(NoFeatures, Fun) ->

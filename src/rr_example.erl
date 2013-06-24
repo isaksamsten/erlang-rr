@@ -277,22 +277,22 @@ split_feature_value(FeatureValue, Examples, Distribute, DistributeMissing) ->
 			      Left, Right, Missing, [], [], DistributeMissing).    
 
 %% @doc Split Examples into two disjoint subsets according to Feature.
--spec split(feature(), examples(), distribute_fun(), missing_fun(), any()) -> {none | atom(), split()}.
+-spec split(feature(), examples(), distribute_fun(), missing_fun(), any()) -> {'$none' | atom(), split()}.
 split(Feature, Examples, Distribute, DistributeMissing, Sample) ->
     {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples, Distribute, Sample),
     {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 
 				      Left, Right, Missing, [], [], DistributeMissing)}.
 
 %% @doc split examples into two subsets according to feature handle split randomly
--spec split(feature(), examples(), distribute_fun(), missing_fun()) -> {none | atom(), split()}.
+-spec split(feature(), examples(), distribute_fun(), missing_fun()) -> {'$none' | atom(), split()}.
 split(Feature, Examples, Distribute, DistributeMissing) ->
     split(Feature, Examples, Distribute, DistributeMissing, fun sample_split_value/2).
     
 %% @private Split into three disjoint subsets, Left, Right and Missing
 split_with_value(Feature, Examples, Distribute, Sample) ->
     case Sample(Feature, Examples) of
-	none -> 
-	    {none, split_feature(Feature, Examples, Distribute, [], [], [])};
+	'$none' -> 
+	    {'$none', split_feature(Feature, Examples, Distribute, [], [], [])};
 	Value ->
 	    {Value, split_feature({Feature, Value}, Examples, Distribute, [], [], [])}
     end.
@@ -437,7 +437,7 @@ sample_split_value(Feature, Examples) ->
 	 {combined, A, B} ->
 	     sample_combined(A, B, Examples);
 	 _ ->
-	     none
+	    '$none'
      end.
 
 sample_split_value(Feature, Examples, Ex1, Ex2) ->
