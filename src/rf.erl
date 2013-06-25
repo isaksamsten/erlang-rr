@@ -357,35 +357,19 @@ feature_sampling(NoFeatures, TotalNoFeatures, Options) ->
 	"subset" -> 
 	    rf_branch:subset(NoFeatures);
 	"random-chisquare" ->
-	    rf_branch:random_chisquare(NoFeatures, proplists:get_value(weight_factor, Options));
-	"chi-square" ->
-	    F = case proplists:get_value(weight_factor, Options) of
-		    Factor when Factor > 0.2 ->
-			rr:warn("the value of sigma ('weight-factor') > 0.2~n"),
-			Factor;
-		    Factor ->
-			Factor
-		end,
+	    rf_branch:random_chisquare(NoFeatures, NoFeatures, proplists:get_value(weight_factor, Options));
+	"chisquare" ->
+	    F = proplists:get_value(weight_factor, Options),
 	    rf_branch:chisquare(NoFeatures, NoFeatures, F);
 	"resquare" ->
 	    F = proplists:get_value(weight_factor, Options),
 	    rf_branch:randomly_resquare(NoFeatures, 0.5, F);
-	"chi-square-dec" ->
-	    F = case proplists:get_value(weight_factor, Options) of
-		    Factor when Factor > 0.2 ->
-			rr:warn("the value of sigma ('weight-factor') > 0.2~n"),
-			Factor;
-		    Factor ->
-			Factor
-		end,
+	"chisquare-decrease" ->
+	    F =  proplists:get_value(weight_factor, Options),
 	    rf_branch:chisquare_decrease(NoFeatures, 0.5, F);
 	"random-subset" ->
 	    rf_branch:random_subset(NoFeatures, 0);
 	"sample-examples" ->
-	    case proplists:get_value(example_sampling, Options) of
-		"nothing" -> ok;
-		_ -> rr:warn("'sample-examples' should work best with 'example-sampling' set to 'nothing'~n")
-	    end,
 	    Factor = proplists:get_value(weight_factor, Options),
 	    rf_branch:sample_examples(NoFeatures, 0.1, Factor);
 	"depth" ->
