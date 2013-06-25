@@ -104,7 +104,7 @@ build_decision_node([], Examples, Importance, Total, _Error, _, Id) ->
 build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _, Id) ->
     {make_leaf(Id, Examples, {Class, Count}), Importance, Total};
 build_decision_node(Features, Examples, Importance, Total, Error, Conf, Id) ->
-    #rf_tree{prune=Prune, pre_prune = PrePrune, branch=Branch, depth=Depth} = Conf,
+    #rf_tree{prune=Prune, pre_prune = _PrePrune, branch=Branch, depth=Depth} = Conf,
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
 	true ->
@@ -116,8 +116,8 @@ build_decision_node(Features, Examples, Importance, Total, Error, Conf, Id) ->
 		#rr_candidate{split={_, _}} ->
 		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 		#rr_candidate{feature=Feature, 
-			      score={Score, LeftError, RightError} = Sc, 
-			      split={both, LeftExamples, RightExamples} = SS}  ->  %%NOTE: consider PrePrune(Split, Examples, Total) -> true, false
+			      score={Score, LeftError, RightError}, 
+			      split={both, LeftExamples, RightExamples}}  -> 
 		    NewReduction = Error - (LeftError + RightError),
 		    NewImportance = dict:update_counter(rr_example:feature_id(Feature), NewReduction, Importance),
 		    
@@ -155,6 +155,7 @@ laplace(C, N) ->
 random_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing).
 
+%% @doc sample a split-value from examples with values for the feature
 -spec value_split(features(), examples(), distribute_fun(), missing_fun()) -> split().
 value_split(Feature, Examples, Distribute, Missing) ->
     rr_example:split(Feature, Examples, Distribute, Missing,
