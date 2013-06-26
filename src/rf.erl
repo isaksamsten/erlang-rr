@@ -17,7 +17,8 @@
 	 
 	 help/0,
 	 new/1,
-	 kill/1
+	 kill/1,
+	 killer/1
 	]).
 
 %% @headerfile "rf_tree.hrl"
