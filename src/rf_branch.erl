@@ -394,3 +394,10 @@ unpack({Candidate, _Features}) ->
     Candidate;
 unpack(Candidate) ->
     Candidate.
+
+%% @doc 
+%%  oversample NoFeatures * 1+Oversample and calculate their gain, weight a random selection of
+%%  NoFeatures from the Oversample population according to their calculated weight
+%% @end
+oversample(NoFeatures, Oversample) ->
+    ok.
