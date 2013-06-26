@@ -11,20 +11,20 @@
 -export([
 	 init/0,
 	 load/2,
-	 insert_prediction/2,
-	 get_prediction/1,
+	 insert_prediction/3,
+	 get_prediction/2,
 
 	 format_number/1,
 
-	 sample_split_value/2,
-	 find_numeric_split/3,
+	 sample_split_value/3,
+	 find_numeric_split/4,
 	 sample_example_pair/1,
 	 
-	 split/4,
 	 split/5,
-	 split_feature_value/4,
+	 split/6,
+	 split_feature_value/5,
 
-	 distribute/2,
+	 distribute/3,
 	 
 	 exid/1,
 	 count/2,
@@ -36,10 +36,10 @@
 	 random_features/2,
 	 unpack_split/1,
 
-	 vector/1,
-	 feature/2,
+	 vector/2,
+	 feature/3,
 	 feature_id/1,
-	 feature_name/1,
+	 feature_name/2,
 
 	 to_binary/2,
 	 count_exclude/2,
@@ -57,10 +57,10 @@
 	 bootstrap_aggregate/1,
 	 subset_aggregate/1,
 
-	 parse_example_process/5,
+	 parse_example_process/6,
 
-	 best_split/7,
-	 best_split/8
+	 best_split/8,
+	 best_split/9
 	]).
 
 -ifdef(TEST).
@@ -72,12 +72,12 @@
 -include("rr.hrl").
 
 %% @doc insert a prediction into the global table of all predictions
--spec insert_prediction(exid(), any()) -> ok.
-insert_prediction(ExId, Pred) ->
-    ets:insert(predictions, {exid(ExId), Pred}).
+-spec insert_prediction(#rr_example{}, exid(), any()) -> ok.
+insert_prediction(Conf, ExId, Pred) ->
+    ets:insert(Conf#rr_example.predictions, {exid(ExId), Pred}).
 
-get_prediction(ExId) ->
-    hd(ets:lookup(predictions, exid(ExId))).
+get_prediction(Conf, ExId) ->
+    hd(ets:lookup(Conf#rr_example.predictions, exid(ExId))).
 
 %% @doc init ets-tables storing features, examples and predictions
 -spec init() -> ok.
@@ -86,8 +86,16 @@ init() ->
     ets:new(features, [named_table, public]),
     ets:new(predictions, [named_table, public]).
 
+new() ->
+    {
+     ets:new(examples, [public, {read_concurrency, true}]),
+     ets:new(features, [public]),
+     ets:new(predictions, [public])
+    }.
+
 -spec load(string(), number()) -> {features(), examples()}.
 load(File, Cores) ->
+    {ExTable, FeatureTable, PredictionsTable} = new(),
     {ClassId, Types} = case csv:next_line(File) of
 			   {ok, Types0, _} ->
 			       parse_type_declaration(Types0);
@@ -96,29 +104,33 @@ load(File, Cores) ->
 		       end,
     Features = case csv:next_line(File) of
 		   {ok, Features0, _} ->
-		       parse_feature_declaration(Features0, ClassId, Types);
+		       parse_feature_declaration(FeatureTable, Features0, ClassId, Types);
 		   eof ->
 		       throw({error, features_type_error})
 	       end,
-    {Features, parse_examples(File, Cores, ClassId, Types)}.
-
+    Examples = parse_examples(ExTable, File, Cores, ClassId, Types),
+    ExConf = #rr_example{
+		features = FeatureTable,
+		examples =  ExTable,
+		predictions = PredictionsTable},
+    {Features, Examples, ExConf}.
     
 %% @private spawns "Cores" 'parse_example_process' and collects their results
-parse_examples(File, Cores, ClassId, Types) ->
+parse_examples(ExTable, File, Cores, ClassId, Types) ->
     Self = self(),
     lists:foreach(fun (_) ->
-			  spawn_link(?MODULE, parse_example_process, [Self, File, ClassId, Types, dict:new()])
+			  spawn_link(?MODULE, parse_example_process, [Self, ExTable, File, ClassId, Types, dict:new()])
 		  end, lists:seq(1, Cores)),
     collect_parse_example_processes(Self, Cores, dict:new()).
 
 %% @private process that gets a line from the "File" and process each example
-parse_example_process(Parent, File, ClassId, Types, Acc) ->
+parse_example_process(Parent, ExTable, File, ClassId, Types, Acc) ->
     case csv:next_line(File) of
 	{ok, Example, Id0} ->
 	    {Class, Attributes} = take_feature(Example, ClassId),
 	    Id = Id0 - 2, %% NOTE: subtracting headers 
-	    ets:insert(examples, format_features(Attributes, Types, 1, [Id])),
-	    parse_example_process(Parent, File, ClassId, Types, update_class_distribution(Class, Id, Acc));
+	    ets:insert(ExTable, format_features(Attributes, Types, 1, [Id])),
+	    parse_example_process(Parent, ExTable, File, ClassId, Types, update_class_distribution(Class, Id, Acc));
 	eof ->
 	    Parent ! {done, Parent, Acc}
     end.
@@ -202,18 +214,18 @@ parse_type_declaration([Type0|Rest], ClassId, IdId, Id, Acc) ->
     end.
 
 %% @private parse a feature declaration
-parse_feature_declaration(Features0, ClassId, Types) ->
+parse_feature_declaration(FeatureTable, Features0, ClassId, Types) ->
     {_, Features} = take_feature(Features0, ClassId),
     if length(Features) =/= length(Types) ->
 	    throw({error, {invalid_feature_declaration, {length(Features), '/=', length(Types)}}});
        true ->
-	    parse_feature_declaration(Features, Types, 1, [])
+	    parse_feature_declaration(FeatureTable, Features, Types, 1, [])
     end.
-parse_feature_declaration([], [], _, Acc) ->
+parse_feature_declaration(_, [], [], _, Acc) ->
     lists:reverse(Acc);
-parse_feature_declaration([Feature|Features], [Type|Types], Id, Acc) ->
-    ets:insert(features, {Id, Feature}),
-    parse_feature_declaration(Features, Types, Id + 1, [{Type, Id}|Acc]).
+parse_feature_declaration(FeatureTable, [Feature|Features], [Type|Types], Id, Acc) ->
+    ets:insert(FeatureTable, {Id, Feature}),
+    parse_feature_declaration(FeatureTable, Features, Types, Id + 1, [{Type, Id}|Acc]).
 
 %% @private format the left and right distribution
 -spec format_left_right_split([examples()], [examples()]) -> split().
@@ -271,41 +283,41 @@ unpack_split({left, Left}) ->
 unpack_split({right, Right}) ->
     {[], Right}.
 
-split_feature_value(FeatureValue, Examples, Distribute, DistributeMissing) ->
-    {Left, Right, Missing} = split_feature(FeatureValue, Examples, Distribute, [], [], []),
+split_feature_value(Me, FeatureValue, Examples, Distribute, DistributeMissing) ->
+    {Left, Right, Missing} = split_feature(Me, FeatureValue, Examples, Distribute, [], [], []),
     distribute_missing_values(FeatureValue, Examples, count(Left), count(Right), 
 			      Left, Right, Missing, [], [], DistributeMissing).    
 
 %% @doc Split Examples into two disjoint subsets according to Feature.
--spec split(feature(), examples(), distribute_fun(), missing_fun(), any()) -> {'$none' | atom(), split()}.
-split(Feature, Examples, Distribute, DistributeMissing, Sample) ->
-    {Value, {Left, Right, Missing}} = split_with_value(Feature, Examples, Distribute, Sample),
+-spec split(#rr_example{}, feature(), examples(), distribute_fun(), missing_fun(), any()) -> {'$none' | atom(), split()}.
+split(Me, Feature, Examples, Distribute, DistributeMissing, Sample) ->
+    {Value, {Left, Right, Missing}} = split_with_value(Me, Feature, Examples, Distribute, Sample),
     {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 
 				      Left, Right, Missing, [], [], DistributeMissing)}.
 
 %% @doc split examples into two subsets according to feature handle split randomly
--spec split(feature(), examples(), distribute_fun(), missing_fun()) -> {'$none' | atom(), split()}.
-split(Feature, Examples, Distribute, DistributeMissing) ->
-    split(Feature, Examples, Distribute, DistributeMissing, fun sample_split_value/2).
+-spec split(#rr_example{}, feature(), examples(), distribute_fun(), missing_fun()) -> {'$none' | atom(), split()}.
+split(Me, Feature, Examples, Distribute, DistributeMissing) ->
+    split(Me, Feature, Examples, Distribute, DistributeMissing, fun sample_split_value/3).
     
 %% @private Split into three disjoint subsets, Left, Right and Missing
-split_with_value(Feature, Examples, Distribute, Sample) ->
-    case Sample(Feature, Examples) of
+split_with_value(Me, Feature, Examples, Distribute, Sample) ->
+    case Sample(Me, Feature, Examples) of
 	'$none' -> 
-	    {'$none', split_feature(Feature, Examples, Distribute, [], [], [])};
+	    {'$none', split_feature(Me, Feature, Examples, Distribute, [], [], [])};
 	Value ->
-	    {Value, split_feature({Feature, Value}, Examples, Distribute, [], [], [])}
+	    {Value, split_feature(Me, {Feature, Value}, Examples, Distribute, [], [], [])}
     end.
 
 %% @private split the class distribution (i.e. one example())
-split_class_distribution(_, [], _, _, Left, Right, Missing) ->
+split_class_distribution(_Me, _, [], _, _, Left, Right, Missing) ->
     {Left, Right, Missing};
-split_class_distribution(Feature, [ExampleId|Examples], Distribute, Class, 
+split_class_distribution(Me, Feature, [ExampleId|Examples], Distribute, Class, 
 			 {Class, NoLeft, Left} = LeftExamples, 
 			 {Class, NoRight, Right} = RightExamples,
 			 {Class, NoMissing, Missing} = MissingExamples) ->
     {NewLeftExamples, NewRightExamples, NewMissingExamples} = 
-	case Distribute(Feature, ExampleId) of
+	case Distribute(Me, Feature, ExampleId) of
 	    {'?', Count} ->
 		{LeftExamples, RightExamples, {Class, NoMissing + Count, [ExampleId|Missing]}};
 	    {left, Count} ->
@@ -325,25 +337,26 @@ split_class_distribution(Feature, [ExampleId|Examples], Distribute, Class,
 		 {Class, NoRight + NewNoRight, [NewRightEx|Right]},
 		 MissingExamples}
 	end,
-    split_class_distribution(Feature, Examples, Distribute, Class, NewLeftExamples, NewRightExamples, NewMissingExamples).
+    split_class_distribution(Me, Feature, Examples, Distribute, Class, 
+			     NewLeftExamples, NewRightExamples, NewMissingExamples).
 
 %% @doc default function for distributing examples left or right
--spec distribute(Feature::feature(), exid()) -> distribute_example().
-distribute({{categoric, FeatureId}, SplitValue}, ExId) ->
-    {case feature(ExId, FeatureId) of
+-spec distribute(#rr_example{}, Feature::feature(), exid()) -> distribute_example().
+distribute(Me, {{categoric, FeatureId}, SplitValue}, ExId) ->
+    {case feature(Me, ExId, FeatureId) of
 	'?' -> '?';
 	Value when Value == SplitValue -> left;
 	_ -> right
     end, count(ExId)};
-distribute({{numeric, FeatureId}, Threshold}, ExId) ->
-    {case feature(ExId, FeatureId) of
+distribute(Me, {{numeric, FeatureId}, Threshold}, ExId) ->
+    {case feature(Me, ExId, FeatureId) of
 	'?' -> '?';
 	Value when Value >= Threshold -> left;
 	_ -> right
     end, count(ExId)};
-distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}}, ExId) ->
-    {A, _} = distribute({FeatureA, SplitValueA}, ExId),
-    {B, C} = distribute({FeatureB, SplitValueB}, ExId),
+distribute(Me, {{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}}, ExId) ->
+    {A, _} = distribute(Me, {FeatureA, SplitValueA}, ExId),
+    {B, C} = distribute(Me, {FeatureB, SplitValueB}, ExId),
     {case {A, B} of
 	{'?', B} ->
 	    B;
@@ -361,24 +374,24 @@ distribute({{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}
 		    B
 	    end
      end, C};
-distribute({rule, Rule, _Lenght}, ExId) ->
-    {rf_rule:evaluate_rule(Rule, ExId), count(ExId)}.
+distribute(Me, {rule, Rule, _Lenght}, ExId) ->
+    {rf_rule:evaluate_rule(Me, Rule, ExId), count(ExId)}.
 
 %% @private split data set using Feature
-split_feature(_Feature, [], _, Left, Right, Missing) ->
+split_feature(_Me, _Feature, [], _, Left, Right, Missing) ->
     {Left, Right, Missing};
-split_feature(Feature, [{Class, _, ExampleIds}|Examples], Distribute, Left, Right, Missing) ->
-    case split_class_distribution(Feature, ExampleIds, Distribute, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
+split_feature(Me, Feature, [{Class, _, ExampleIds}|Examples], Distribute, Left, Right, Missing) ->
+    case split_class_distribution(Me, Feature, ExampleIds, Distribute, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
 	{LeftSplit, RightSplit, MissingSplit} ->
-	    split_feature(Feature, Examples, Distribute, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
+	    split_feature(Me, Feature, Examples, Distribute, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
     end.
 
 %% @private find the best numeric split point
-find_numeric_split(FeatureId, Examples, Gain) ->
+find_numeric_split(Me, FeatureId, Examples, Gain) ->
     case lists:keysort(1, lists:foldl(
 			    fun ({Class, _, ExIds}, NewIds) ->
 						  lists:foldl(fun(ExId, Acc) ->
-								      case feature(ExId, FeatureId) of
+								      case feature(Me, ExId, FeatureId) of
 									  '?' -> Acc;
 									  Feature -> [{Feature, Class}|Acc]
 								      end
@@ -412,7 +425,7 @@ find_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId,
     end,
     case Class == OldClass of
 	true -> find_numeric_split(Rest, {Value, Class}, FeatureId,
-					    Gain, Total, {OldThreshold, OldGain}, NewDist);
+				   Gain, Total, {OldThreshold, OldGain}, NewDist);
 	false ->
 	    Threshold = (Value + OldValue) / 2,
 	    {NewGain0, _, _} = Gain(NewDist, Total),
@@ -428,50 +441,50 @@ find_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId,
 %% sample a split point. this function is used in split() and can be overriden. 
 %% please use this as the default
 %% @end
-sample_split_value(Feature, Examples) ->
+sample_split_value(Me, Feature, Examples) ->
     case Feature of
 	 {categoric, FeatureId} ->
-	     resample_categoric_split(FeatureId, Examples, 5);
+	     resample_categoric_split(Me, FeatureId, Examples, 5);
 	 {numeric, FeatureId} ->
-	     sample_numeric_split(FeatureId, Examples);
+	     sample_numeric_split(Me, FeatureId, Examples);
 	 {combined, A, B} ->
-	     sample_combined(A, B, Examples);
+	     sample_combined(Me, A, B, Examples);
 	 _ ->
 	    '$none'
      end.
 
-sample_split_value(Feature, Examples, Ex1, Ex2) ->
+sample_split_value(Me, Feature, Examples, Ex1, Ex2) ->
     case Feature of
 	{categoric, FeatureId} ->
-	    feature(Ex1, FeatureId);
+	    feature(Me, Ex1, FeatureId);
 	{numeric, FeatureId} ->
-	    case sample_numeric_split(FeatureId, Ex1, Ex2) of
+	    case sample_numeric_split(Me, FeatureId, Ex1, Ex2) of
 		{'?', '?'} ->
 		    0;
 		X ->
 		    X
 	    end;
 	{combined, A, B} ->
-	    sample_combined(A, B, Examples)
+	    sample_combined(Me, A, B, Examples)
     end.
 
 %% @private sample two features from the same example
-sample_combined(FeatureA, FeatureB, Examples) ->
+sample_combined(Me, FeatureA, FeatureB, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
-    {combined, sample_split_value(FeatureA, Examples, Ex1, Ex2), sample_split_value(FeatureB, Examples, Ex1, Ex2)}.
+    {combined, sample_split_value(Me, FeatureA, Examples, Ex1, Ex2), sample_split_value(Me, FeatureB, Examples, Ex1, Ex2)}.
 
 %% @private sample a numeric split point
-sample_numeric_split(FeatureId, Examples) ->
+sample_numeric_split(Me, FeatureId, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
-    case sample_numeric_split(FeatureId, Ex1, Ex2) of
+    case sample_numeric_split(Me, FeatureId, Ex1, Ex2) of
 	'?' ->
 	   '?';
 	X ->
 	    X
     end.
-sample_numeric_split(FeatureId, Ex1, Ex2) ->
-    Value1 = feature(Ex1, FeatureId),
-    Value2 = feature(Ex2, FeatureId),
+sample_numeric_split(Me, FeatureId, Ex1, Ex2) ->
+    Value1 = feature(Me, Ex1, FeatureId),
+    Value2 = feature(Me, Ex2, FeatureId),
     case {Value1, Value2} of
 	{'?', Value2} ->
 	    Value2;
@@ -484,45 +497,43 @@ sample_numeric_split(FeatureId, Ex1, Ex2) ->
     end.
 
 %% @private resample a random categoric split if a missing value is found
-resample_categoric_split(_, _, 0) ->
+resample_categoric_split(_, _, _, 0) ->
     '?';
-resample_categoric_split(FeatureId, Examples, N) ->
-    case sample_categoric_split(FeatureId, Examples) of	
+resample_categoric_split(Me, FeatureId, Examples, N) ->
+    case sample_categoric_split(Me, FeatureId, Examples) of	
 	'?' ->
-	    resample_categoric_split(FeatureId, Examples, N - 1);
+	    resample_categoric_split(Me, FeatureId, Examples, N - 1);
 	X ->  
 	    X
     end.
 
 %% @private sample a categoric split
-sample_categoric_split(FeatureId, Examples) ->
+sample_categoric_split(Me, FeatureId, Examples) ->
     ExId = sample_example(Examples),
-    feature(ExId, FeatureId).
+    feature(Me, ExId, FeatureId).
 
 %% @doc find the best split from features
-best_split([], _, _, _, _, _, _) ->
+best_split(_, [], _, _, _, _, _, _) ->
     no_features;
-best_split([F|Features], Examples, Total, Score, Split, Distribute, Missing) ->
-    {T, ExSplit} = Split(F, Examples, Distribute, Missing),
+best_split(Me, [F|Features], Examples, Total, Score, Split, Distribute, Missing) ->
+    {T, ExSplit} = Split(Me, F, Examples, Distribute, Missing),
     Cand = #rr_candidate{feature={F, T}, score=Score(ExSplit, Total), split=ExSplit},
-%    io:format("??? ~p ~n", [Cand#rr_candidate.score]),
-    best_split(Features, Examples, Total, Score, Split, Distribute, Missing, Cand).
+    best_split(Me, Features, Examples, Total, Score, Split, Distribute, Missing, Cand).
 
-best_split([], _, _, _, _, _, _, Acc) ->
+best_split(_, [], _, _, _, _, _, _, Acc) ->
     Acc;
-best_split([F|Features], Examples, Total, Score, Split, Distribute, Missing, OldCand) ->
-    Cand = case Split(F, Examples, Distribute, Missing) of
+best_split(Me, [F|Features], Examples, Total, Score, Split, Distribute, Missing, OldCand) ->
+    Cand = case Split(Me, F, Examples, Distribute, Missing) of
 	       {Threshold, ExSplit} ->
 		   #rr_candidate{feature = {F, Threshold}, 
 				 score = Score(ExSplit, Total), 
 				 split = ExSplit}		       
 	   end,
-%    io:format("+++ ~p ~n", [Cand]),
-    best_split(Features, Examples, Total, Score, Split, Distribute, Missing, 
-		   case element(1, Cand#rr_candidate.score) < element(1, OldCand#rr_candidate.score) of
-		       true -> Cand;
-		       false -> OldCand
-		   end).
+    best_split(Me, Features, Examples, Total, Score, Split, Distribute, Missing, 
+	       case element(1, Cand#rr_candidate.score) < element(1, OldCand#rr_candidate.score) of
+		   true -> Cand;
+		   false -> OldCand
+	       end).
 
 take_feature(A, missing) ->
     {'?', A};
@@ -627,12 +638,12 @@ remove_covered(Examples, Covered) ->
 coverage(Examples) ->
     {rr_example:count('+', Examples), rr_example:count('-', Examples)}.
 
--spec feature(feature(), number()) -> ok.
-feature(ExId, At) ->
-    ets:lookup_element(examples, exid(ExId), At + 1).
+-spec feature(#rr_example{}, feature(), number()) -> ok.
+feature(#rr_example{examples=ExTable}, ExId, At) ->
+    ets:lookup_element(ExTable, exid(ExId), At + 1).
 
-vector(ExId) ->
-    hd(ets:lookup(examples, exid(ExId))).
+vector(#rr_example{examples=ExTable}, ExId) ->
+    hd(ets:lookup(ExTable, exid(ExId))).
 
 
 feature_id({{combined, IdA, IdB}, _}) ->
@@ -645,13 +656,13 @@ feature_id({rule, {Rules, _}, _Length}) ->
 feature_id({_, Id}) ->
     Id.
 
-feature_name({IdA, IdB}) ->
-    {feature_name(IdA),
-     feature_name(IdB)};
-feature_name(Rules) when is_list(Rules) ->
-    [feature_name(Rule) || Rule <- Rules];
-feature_name(Id) ->
-    ets:lookup_element(features, Id, 2).
+feature_name(Conf, {IdA, IdB}) ->
+    {feature_name(Conf, IdA),
+     feature_name(Conf, IdB)};
+feature_name(Conf, Rules) when is_list(Rules) ->
+    [feature_name(Conf, Rule) || Rule <- Rules];
+feature_name(#rr_example{examples=ExTable}, Id) ->
+    ets:lookup_element(ExTable, Id, 2).
 
 %% @doc Return a random subset of size "Subset" from Features
 random_features(Features, 1) when length(Features) > 1 ->

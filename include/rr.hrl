@@ -17,12 +17,24 @@
 	  split :: split()
 	 }).
 
+%%
+%%
+%%
 -record(rr_rule, {
 	  branch,
 	  score,
 	  split,
 	  distribute,
 	  missing_values
+	 }).
+
+%%
+%% references to data storages
+%%
+-record(rr_example, {
+	  examples :: number(),
+	  features :: number(),
+	  predictions :: number()
 	 }).
 
 -type exid() :: Id::number() | {Id::number(), Id::number()}.

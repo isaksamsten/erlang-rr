@@ -8,9 +8,9 @@
 -module(rr_eval).
 
 -export([
-	 cross_validation/3,
+	 cross_validation/4,
 	 average_cross_validation/3,
-	 split_validation/3,
+	 split_validation/4,
 
 	 accuracy/1,
 	 auc/2,
@@ -32,8 +32,8 @@
 %% @doc
 %% Do cross-validation on Examples.
 %% @end
--spec cross_validation(features(), examples(), any()) -> result_set().
-cross_validation(Features, Examples, Props) ->
+-spec cross_validation(features(), examples(), #rr_example{}, any()) -> result_set().
+cross_validation(Features, Examples, ExConf, Props) ->
     Build = case proplists:get_value(build, Props) of
 		undefined -> throw({badarg, build});
 		Build0 -> Build0
@@ -49,8 +49,8 @@ cross_validation(Features, Examples, Props) ->
     Total = rr_example:cross_validation(
 	      fun (Train, Test, Fold) ->
 		      Progress(Fold),
-		      Model = Build(Features, Train),
-		      Result = Evaluate(Model, Test),
+		      Model = Build(Features, Train, ExConf),
+		      Result = Evaluate(Model, Test, ExConf),
 		      {{fold, Fold, Model}, Result}
 	      end, NoFolds, Examples),
     Avg = Average(Total, NoFolds),
@@ -83,8 +83,8 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
 
 %% @doc split examples and train and evaluate
--spec split_validation(features(), examples(), any()) -> result_set().
-split_validation(Features, Examples, Props) ->
+-spec split_validation(features(), examples(), #rr_example{}, any()) -> result_set().
+split_validation(Features, Examples, ExConf, Props) ->
     Build = case proplists:get_value(build, Props) of
 		undefined -> throw({badarg, build});
 		Build0 -> Build0
@@ -96,8 +96,8 @@ split_validation(Features, Examples, Props) ->
 
     Ratio = proplists:get_value(ratio, Props, 0.66),
     {Train, Test} = rr_example:split_dataset(Examples, Ratio),
-    Model = Build(Features, Train),
-    Result = Evaluate(Model, Test),
+    Model = Build(Features, Train, ExConf),
+    Result = Evaluate(Model, Test, ExConf),
     {split, {{split, Ratio, Model}, Result}}.
 	
 %% @doc 

@@ -99,7 +99,7 @@ help() ->
 
 %% @doc suspend a random forest model
 kill(Model) ->
-    Model ! {exit, self()}.
+    rr_ensemble:kill(Model).
 
 %% @doc create a new rf-model and evaluator
 new(Props) ->
@@ -117,10 +117,9 @@ new(Props) ->
 
     FeatureSampling = proplists:get_value(feature_sampling, Props, rf_branch:subset(NoFeatures)),
     ExampleSampling = proplists:get_value(example_sampling, Props, fun rr_example:bootstrap_aggregate/1),
-    Distribute = proplists:get_value(distribute, Props, fun rr_example:distribute/2),
+    Distribute = proplists:get_value(distribute, Props, fun rr_example:distribute/3),
     BaseLearner = proplists:get_value(base_learner, Props, rf_tree),
-    Split = proplists:get_value(split, Props, fun rf_tree:random_split/4),
-
+    Split = proplists:get_value(split, Props, fun rf_tree:random_split/5),
     Tree = #rf_tree{
 	      score = Score,
 	      prune = Prune,
@@ -137,20 +136,16 @@ new(Props) ->
 		  cores = Cores
 		 },
 
-    Build = fun (Features, Examples) ->
-		    rr_ensemble:generate_model(Features, Examples, Ensemble)
+    Build = fun (Features, Examples, ExConf) ->
+		    rr_ensemble:generate_model(Features, Examples, ExConf, Ensemble)
 	    end,
-    Evaluate = fun (Model, Test) ->
-		       evaluate(Model, Test, Ensemble)
+    Evaluate = fun (Model, Test, ExConf) ->
+		       evaluate(Model, Test, ExConf, Ensemble)
 	       end,
     {Build, Evaluate, Ensemble}.							     
 
 %% @todo refactor to use proplist
 main(Args) ->
-    rr_example:init(),
-    rr_ensemble:init(),
-    %random:seed(now()),
-
     Options = rr:parse(Args, ?CMD_SPEC),
     case rr:any_opt([help, version, examples], Options) of
 	help ->
@@ -180,7 +175,7 @@ main(Args) ->
     rr_log:info("loading '~s' on ~p core(s)", [InputFile, Cores]),
     LoadingTime = now(),
     Csv = csv:binary_reader(InputFile), %% todo fix error!
-    {Features, Examples0} = rr_example:load(Csv, Cores),
+    {Features, Examples0, ExConf} = rr_example:load(Csv, Cores),
     Examples = rr_example:randomize(Examples0),
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
 
@@ -214,27 +209,37 @@ main(Args) ->
     ExperimentTime = now(),
     case proplists:get_value(mode, Options) of
 	split ->
-	    Res = rr_eval:split_validation(Features, Examples, [{build, Build}, 
-								{evaluate, Evaluate}, 
-								{ratio, proplists:get_value(ratio, Options)}]),
+	    Res = rr_eval:split_validation(Features, Examples, ExConf,
+					   [{build, Build}, 
+					    {evaluate, killer(Evaluate)}, 
+					    {ratio, proplists:get_value(ratio, Options)}]),
 	    Output(Res);
 	cv ->
-	    Res = rr_eval:cross_validation(Features, Examples, [{build, Build}, 
-								{evaluate, Evaluate}, 
-								{progress, fun (Fold) -> io:format(standard_error, "fold ~p ", [Fold]) end},
-								{folds, proplists:get_value(folds, Options)}]),
+	    Res = rr_eval:cross_validation(Features, Examples, ExConf,
+					   [{build, Build}, 
+					    {evaluate, killer(Evaluate)}, 
+					    {progress, fun (Fold) -> io:format(standard_error, "fold ~p ", [Fold]) end},
+					    {folds, proplists:get_value(folds, Options)}]),
 	    Output(Res);
 	Other ->
 	    rr:illegal_option("mode", Other)
     end,
+    csv:kill(Csv),
     rr_log:info("experiment took '~p' second(s)", [rr:seconds(ExperimentTime)]),
     rr_log:stop().
 
-evaluate(Model, Test, Conf) ->
+killer(Evaluate) ->
+    fun (Model, Test, ExConf) ->
+	    Result = Evaluate(Model, Test, ExConf),
+	    kill(Model),
+	    Result
+    end.
+
+evaluate(Model, Test, ExConf, Conf) ->
     NoTestExamples = rr_example:count(Test),
-    Dict = rr_ensemble:evaluate_model(Model, Test, Conf),
+    Dict = rr_ensemble:evaluate_model(Model, Test, ExConf, Conf),
     OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
-    {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Model, Test, Conf),
+    {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Model, Test, ExConf, Conf),
     
     Strength = rr_eval:strength(Dict, NoTestExamples),
     Variance = rr_eval:variance(Dict, NoTestExamples),
@@ -275,8 +280,8 @@ example_sampling(Options) ->
 
 distribute(Options) ->	
     case proplists:get_value(distribute, Options) of
-	default -> fun rr_example:distribute/2;
-	rulew -> fun rr_rule:distribute_weighted/2;
+	default -> fun rr_example:distribute/3;
+	rulew -> fun rr_rule:distribute_weighted/3;
 	Other -> rr:illegal_option("distribute", Other)
     end.
 

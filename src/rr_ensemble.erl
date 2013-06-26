@@ -12,40 +12,23 @@
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
 
-init() ->
-    ets:new(models, [public, named_table]).
+kill(Model) ->
+    Model ! {exit, self()}.
 
-% @todo collect models and then insert em' into a ets table for saving..
-save_model(Model, File) ->
-    Model ! {exit, self()},
-    receive
-	{done, Model} ->
-	    ets:tab2file(models, File)
-    end.
-
-load_model(File) ->
-    ets:file2tab(File),
-    load_model().
-
-load_model() ->
-    throw({error, not_implemented}).
-
-%%
-%% Generate an ensamble of models from of #rr_conf.base_learners
-%%
-generate_model(Features, Examples, #rr_ensemble{cores = Cores, no_classifiers = Classifiers} = Conf) ->
-    Model = spawn_base_classifiers(Classifiers, Cores, Features, Examples, Conf),
+%% @doc generate an ensamble of models from of #rr_conf.base_learners
+generate_model(Features, Examples, ExConf, Conf) ->
+    #rr_ensemble{cores = Cores, no_classifiers = Classifiers} = Conf,
+    Model = spawn_base_classifiers(Classifiers, Cores, Features, Examples, ExConf, Conf),
     receive
 	{done, Model} ->
 	    Model
     end.
-    
 
 %% @doc evaluate the performance of Model on Examples
-evaluate_model(Models, Examples, Conf) ->
+evaluate_model(Models, Examples, ExConf, Conf) ->
     lists:foldl(fun ({Class, _, ExampleIds}, Acc) ->
-			predict_all(Class, ExampleIds, Models, Conf, Acc)
-		end, dict:new(), Examples). %% TODO: Model ! {exit, self()}
+			predict_all(Class, ExampleIds, Models, ExConf, Conf, Acc)
+		end, dict:new(), Examples).
 
 %% @doc get the variable importance
 variable_importance(Model, #rr_ensemble{no_classifiers=Classifiers}) ->
@@ -68,8 +51,9 @@ oob_accuracy(Model, Conf) ->
 %% on the (public) ets-table (predictions) to be filled o/w Second will contain [0.0,...], which
 %% inhibits correct calucultation 
 %% @end
--spec base_accuracy(any(), examples(), #rr_ensemble{}) -> {Average::float(), [{BaseAccuracy::float(), Second::float()},...]}.
-base_accuracy(Model, Test, Conf) ->
+-spec base_accuracy(any(), examples(), #rr_example{}, #rr_ensemble{}) -> 
+			   {Average::float(), [{BaseAccuracy::float(), Second::float()},...]}.
+base_accuracy(Model, Test, ExConf, Conf) ->
     SecondBestTest = lists:map(
 		       fun ({Class, ExIds}) ->
 			       {Class, length(ExIds), ExIds}
@@ -85,7 +69,7 @@ base_accuracy(Model, Test, Conf) ->
 				  fun ({_Class, _, ExIds}, Acc) ->
 					  [lists:foldl(
 					     fun (ExId, New) ->
-						     {_, Preds} = rr_example:get_prediction(ExId),
+						     {_, Preds} = rr_example:get_prediction(ExConf, ExId),
 						     dict:update(
 						       if length(Preds) > 1 ->
 							       {R, _} = lists:nth(2, Preds),
@@ -100,8 +84,8 @@ base_accuracy(Model, Test, Conf) ->
 				  end, [], Test)))),
     TreeFun = fun(BaseModels, #rr_ensemble{base_learner={Base, BaseConf}}) ->
 		      lists:foldl(fun({_, BaseModel, _}, Acc) ->
-					  Pred = Base:evaluate_model(BaseModel, Test, BaseConf),
-					  PredSecond = Base:evaluate_model(BaseModel, SecondBestTest, BaseConf),
+					  Pred = Base:evaluate_model(BaseModel, Test, ExConf, BaseConf),
+					  PredSecond = Base:evaluate_model(BaseModel, SecondBestTest, ExConf, BaseConf),
 					  [{rr_eval:accuracy(Pred), rr_eval:accuracy(PredSecond)}|Acc]
 				  end, [], BaseModels)
 	      end,
@@ -117,12 +101,12 @@ perform(Model, Conf, {Method, TreeFun, CollectFun}) ->
     end.
 
 %% @doc predict the class all examples
-predict_all(_, [], _, _, Dict) ->
+predict_all(_, [], _, _ExConf, _Conf, Dict) ->
     Dict;
-predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
+predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
     {Prediction, Probs} = predict_majority(Model, Example, Conf),
-    rr_example:insert_prediction(Example, Probs),
-    predict_all(Actual, Rest, Model, Conf, dict:update(Actual, fun(Predictions) ->
+    rr_example:insert_prediction(ExConf, Example, Probs),
+    predict_all(Actual, Rest, Model, ExConf, Conf, dict:update(Actual, fun(Predictions) ->
 								 [{Prediction, Probs}|Predictions]
 							 end, [{Prediction, Probs}], Dict)).
 %% @doc predict the class for Example
@@ -146,10 +130,10 @@ get_prediction_probabilities(Acc, N) ->
 			   end, [], dict:to_list(Dict))).
 
 %% @doc Spaws classification and evaluator process
-spawn_base_classifiers(Sets, Cores, Features, Examples, Conf) ->
+spawn_base_classifiers(Sets, Cores, Features, Examples, ExConf, Conf) ->
     Self = self(),
     Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores) end),
-    [spawn_link(fun() -> base_build_process(Coordinator, Features, Examples, Conf) end) 
+    [spawn_link(fun() -> base_build_process(Coordinator, Features, Examples, ExConf, Conf) end) 
 		 || _ <- lists:seq(1, Cores)],
     Coordinator.
     
@@ -190,7 +174,8 @@ evaluation_coordinator(Parent, Coordinator, Processes) ->
 	    Parent ! {importance, Coordinator, Importance},
 	    evaluation_coordinator(Parent, Coordinator, Processes);
 	{exit, Parent} ->
-	    Parent ! {done, self()}; %% TODO: lists:foreach(fun(Process) -> Process ! {exit, Coordinator} end, Processes)
+	    lists:foreach(fun(Process) -> Process ! {exit, Coordinator, Process} end, Processes),
+	    Parent ! {done, self()};
 	{q, Method, TreeFun, CollectFun, Parent}  ->
 	    Result = submit_query(Method, TreeFun, CollectFun, Processes, Coordinator),
 	    Parent ! {q, Method, Coordinator, Result},
@@ -227,23 +212,23 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores) ->
     end.
 
 %% @doc transision into 'base_evaluator_process', at {completed, Coordinator}
-base_build_process(Coordinator, Features, Examples, Conf) ->
+base_build_process(Coordinator, Features, Examples, ExConf, Conf) ->
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A,B,C}),
-    base_build_process(Coordinator, Features, Examples, Conf, dict:new(), []).
+    base_build_process(Coordinator, Features, Examples, ExConf, Conf, dict:new(), []).
 
-base_build_process(Coordinator, Features, Examples, Conf, VariableImportance, Models) ->
+base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImportance, Models) ->
     #rr_ensemble{no_classifiers = T, base_learner={Base, BaseConf}, progress=Progress, bagging=Bagger} = Conf,
     Coordinator ! {build, Coordinator, self()},
     receive
 	{build, Id} ->
 	    {Bag, OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
-	    {Model, TreeVariableImportance, ImportanceSum} = Base:generate_model(Features, Bag, BaseConf),
+	    {Model, TreeVariableImportance, ImportanceSum} = Base:generate_model(Features, Bag, ExConf, BaseConf),
 	    
 	    NewVariableImportance = update_variable_importance(TreeVariableImportance, VariableImportance, ImportanceSum),
 	    OOBAccuracy = case OutBag of
 			      [] -> 0.0;
-			      _ -> rr_eval:accuracy(Base:evaluate_model(Model, OutBag, BaseConf))
+			      _ -> rr_eval:accuracy(Base:evaluate_model(Model, OutBag, ExConf, BaseConf))
 			  end,
 	    Rem = if T > 10 -> round(T/10); true -> 1 end,
 	    case Id rem Rem of
@@ -252,36 +237,38 @@ base_build_process(Coordinator, Features, Examples, Conf, VariableImportance, Mo
 		_ ->
 		    ok
 	    end,
-	    base_build_process(Coordinator, Features, Examples, Conf, NewVariableImportance, [{Id, Model, OOBAccuracy}|Models]);
+	    base_build_process(Coordinator, Features, Examples, ExConf, 
+			       Conf, NewVariableImportance, [{Id, Model, OOBAccuracy}|Models]);
 	{completed, Coordinator} ->
-	    base_evaluator_process(Coordinator, self(), Conf, VariableImportance, Models)
+	    base_evaluator_process(Coordinator, self(), ExConf, Conf, VariableImportance, Models)
     end.
 
 %% @doc enable inspection of generated models
-base_evaluator_process(Coordinator, Self, #rr_ensemble{base_learner={Base, BaseConf}} = Conf, VariableImportance, Models)->
+base_evaluator_process(Coordinator, Self, ExConf, Conf, VariableImportance, Models)->
+    #rr_ensemble{base_learner={Base, BaseConf}} = Conf,
     receive
 	{evaluate, Coordinator, Self, ExId} ->
-	    Coordinator ! {prediction, Coordinator, Self, make_prediction(Models, Base, ExId, BaseConf)},
-	    base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models);
+	    Coordinator ! {prediction, Coordinator, Self, make_prediction(Models, Base, ExId, ExConf, BaseConf)},
+	    base_evaluator_process(Coordinator, Self, ExConf, Conf, VariableImportance, Models);
 	{importance, Coordinator, Self} ->
 	    Coordinator ! {importance, Coordinator, Self, dict:to_list(VariableImportance)},
-	    base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models);
+	base_evaluator_process(Coordinator, Self, ExConf, Conf, VariableImportance, Models);
 	{exit, Coordinator, Self} ->
 	    done;  
 	{q, Method, TreeFun, Coordinator, Self} ->
 	    Coordinator ! {{q, Method}, Coordinator, Self, TreeFun(Models, Conf)},
-	    base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models)
+	    base_evaluator_process(Coordinator, Self, ExConf, Conf, VariableImportance, Models)
     end.
 
 %% @private use models built using "Base" to predict the class of "ExId"
-make_prediction(Models, Base, ExId, Conf) ->
-    make_prediction(Models, Base, ExId, Conf, []).
+make_prediction(Models, Base, ExId, ExConf, Conf) ->
+    make_prediction(Models, Base, ExId, ExConf, Conf, []).
 
-make_prediction([], _Base, _ExId, _Conf, Acc) ->
+make_prediction([], _Base, _ExId, _ExConf, _Conf, Acc) ->
     Acc;
-make_prediction([{ModelNr, Model, _}|Models], Base, ExId, Conf, Acc) ->
-    {Prediction, NodeNr} = Base:predict(ExId, Model, Conf, []),
-    make_prediction(Models, Base, ExId, Conf, [{Prediction, [ModelNr|NodeNr]}|Acc]).
+make_prediction([{ModelNr, Model, _}|Models], Base, ExId, ExConf, Conf, Acc) ->
+    {Prediction, NodeNr} = Base:predict(ExId, Model, ExConf, Conf, []),
+    make_prediction(Models, Base, ExId, ExConf, Conf, [{Prediction, [ModelNr|NodeNr]}|Acc]).
 
 % @private update the variable mportance
 update_variable_importance([], Acc, _) ->

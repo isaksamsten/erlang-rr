@@ -9,14 +9,14 @@
 -author('isak-kar@dsv.su.se').
 -export([
 	 %% model
-	 generate_model/3,
-	 evaluate_model/3,
-	 predict/4,
+	 generate_model/4,
+	 evaluate_model/4,
+	 predict/5,
 	 
 	 %% split strategies
-	 random_split/4,
-	 deterministic_split/4,
-	 value_split/4,
+	 random_split/5,
+	 deterministic_split/5,
+	 value_split/5,
 
 	 %% prune
 	 example_depth_stop/2,
@@ -46,71 +46,72 @@ chisquare_prune(Sigma) ->
     end.
 
 %% @doc generate a decision tree
--spec generate_model(features(), examples(), #rf_tree{}) -> #rf_node{}.
-generate_model(Features, Examples, Conf) ->
+-spec generate_model(features(), examples(), #rr_example{}, #rf_tree{}) -> #rf_node{}.
+generate_model(Features, Examples, ExConf, Conf) ->
     Info = rr_estimator:info(Examples, rr_example:count(Examples)),
-    build_decision_node(Features, Examples, dict:new(), 0, Info, Conf, 1).
+    build_decision_node(Features, Examples, dict:new(), 0, Info, ExConf, Conf, 1).
 
--spec evaluate_model(#rf_node{}, examples(), #rf_tree{}) -> dict().
-evaluate_model(Model, Examples, Conf) ->
+-spec evaluate_model(#rf_node{}, examples(), #rr_example{}, #rf_tree{}) -> dict().
+evaluate_model(Model, Examples, ExConf, Conf) ->
     lists:foldl(fun({Class, _, ExampleIds}, Acc) ->
-			predict_all(Class, ExampleIds, Model, Conf, Acc)
+			predict_all(Class, ExampleIds, Model, ExConf, Conf, Acc)
 		end, dict:new(), Examples).
 
 %% @private
-predict_all(_, [], _, _, Dict) ->
+predict_all(_, [], _, _ExConf, _Conf, Dict) ->
     Dict;
-predict_all(Actual, [Example|Rest], Model, Conf, Dict) ->
-    {Prediction, _NodeNr} = predict(Example, Model, Conf, []),
-    predict_all(Actual, Rest, Model, Conf,
+predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
+    {Prediction, _NodeNr} = predict(Example, Model, ExConf, Conf, []),
+    predict_all(Actual, Rest, Model, ExConf, Conf,
 		dict:update(Actual, fun (Predictions) ->
 					    [{Prediction, 0}|Predictions] 
 				    end, [{Prediction, 0}], Dict)). %% note: no other prob (fix?)
 
 %% @doc predict an example according to a decision tree
--spec predict(ExId::exid(), tree(), #rf_tree{}, []) -> prediction().
-predict(_, #rf_leaf{id=NodeNr, class=Class, score=Score}, _Conf, Acc) ->
+-spec predict(ExId::exid(), tree(), #rr_example{},  #rf_tree{}, []) -> prediction().
+predict(_, #rf_leaf{id=NodeNr, class=Class, score=Score}, _ExConf, _Conf, Acc) ->
     {{Class, Score}, [NodeNr|Acc]};
 predict(ExId, #rf_node{id=NodeNr, 
 		       feature=F, 
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
 		       left=Left, 
-		       right=Right}, #rf_tree{distribute=Distribute, %% TODO: fix me
-					      missing_values=Missing} = Conf, Acc) ->
+		       right=Right}, 
+	ExConf, Conf, Acc) ->
+    #rf_tree{distribute=Distribute, missing_values=Missing} = Conf,
     NewAcc = [NodeNr|Acc],
-    case Distribute(F, ExId) of
+    case Distribute(ExConf, F, ExId) of
 	{'?', _} ->
 	    case Missing(predict, F, ExId, LeftExamples, RightExamples) of
 		{left, _} ->
-		    predict(ExId, Left, Conf, NewAcc);
+		    predict(ExId, Left, ExConf, Conf, NewAcc);
 		{right, _} ->
-		    predict(ExId, Right, Conf, NewAcc);
+		    predict(ExId, Right, ExConf, Conf, NewAcc);
 		ignore ->
 		    {{Majority, laplace(Count, LeftExamples+RightExamples)}, NewAcc}
 	    end;
 	{left, _} ->
-	    predict(ExId, Left, Conf, NewAcc);
+	    predict(ExId, Left, ExConf, Conf, NewAcc);
 	{right, _} ->
-	    predict(ExId, Right, Conf, NewAcc)
+	    predict(ExId, Right, ExConf, Conf, NewAcc)
     end.
 	    
 %% @private induce a decision tree
 -spec build_decision_node(Features::features(), Examples::examples(), Importance::dict(), Total::number(), 
-			  Error::number(), #rf_tree{}, []) -> {tree(), dict(), number()}.
-build_decision_node([], [], Importance, Total, _Error, _, Id) ->
+			  Error::number(), #rr_example{}, #rf_tree{}, []) -> {tree(), dict(), number()}.
+build_decision_node([], [], Importance, Total, _Error, _ExConf, _Conf, Id) ->
     {make_leaf(Id, [], error), Importance, Total};
-build_decision_node([], Examples, Importance, Total, _Error, _, Id) ->
+build_decision_node([], Examples, Importance, Total, _Error, _ExConf, _Conf, Id) ->
     {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
-build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _, Id) ->
+build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, ExConf, _Conf, Id) ->
     {make_leaf(Id, Examples, {Class, Count}), Importance, Total};
-build_decision_node(Features, Examples, Importance, Total, Error, Conf, Id) ->
+build_decision_node(Features, Examples, Importance, Total, Error, ExConf, Conf, Id) ->
     #rf_tree{prune=Prune, pre_prune = _PrePrune, branch=Branch, depth=Depth} = Conf,
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
 	true ->
 	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 	false ->
-	    case rf_branch:unpack(Branch(Features, Examples, NoExamples, Conf)) of
+	    case rf_branch:unpack(Branch(Features, Examples, NoExamples, ExConf, Conf)) of
 		no_information ->
 		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
 		#rr_candidate{split={_, _}} ->
@@ -123,11 +124,11 @@ build_decision_node(Features, Examples, Importance, Total, Error, Conf, Id) ->
 		    
 		    {LeftNode, LeftImportance, TotalLeft} = 
 			build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError, 
-					    Conf#rf_tree{depth=Depth + 1}, Id + 1),
+					    ExConf, Conf#rf_tree{depth=Depth + 1}, Id + 1),
 		    
 		    {RightNode, RightImportance, TotalRight} = 
 			build_decision_node(Features, RightExamples, LeftImportance, TotalLeft, RightError, 
-					    Conf#rf_tree{depth=Depth + 1}, Id + 2),
+					    ExConf, Conf#rf_tree{depth=Depth + 1}, Id + 2),
 		    Distribution = {rr_example:count(LeftExamples), rr_example:count(RightExamples), rr_example:majority(Examples)},
 		    {make_node(Id, Feature, Distribution, Score, LeftNode, RightNode), RightImportance, TotalRight}
 	    end	   
@@ -151,31 +152,31 @@ laplace(C, N) ->
     (C+1)/(N+2). %% NOTE: no classes?
 
 %% @doc randomly split data set
--spec random_split(features(), examples(), distribute_fun(), missing_fun()) -> split().
-random_split(Feature, Examples, Distribute, Missing) ->
-    rr_example:split(Feature, Examples, Distribute, Missing).
+-spec random_split(#rr_example{}, features(), examples(), distribute_fun(), missing_fun()) -> split().
+random_split(ExConf, Feature, Examples, Distribute, Missing) ->
+    rr_example:split(ExConf, Feature, Examples, Distribute, Missing).
 
 %% @doc sample a split-value from examples with values for the feature
--spec value_split(features(), examples(), distribute_fun(), missing_fun()) -> split().
-value_split(Feature, Examples, Distribute, Missing) ->
-    rr_example:split(Feature, Examples, Distribute, Missing,
-		     fun ({numeric, _FeatureId}, _Ex) ->
+-spec value_split(#rr_example{}, features(), examples(), distribute_fun(), missing_fun()) -> split().
+value_split(ExConf, Feature, Examples, Distribute, Missing) ->
+    rr_example:split(ExConf, Feature, Examples, Distribute, Missing,
+		     fun (_, {numeric, _FeatureId}, _Ex) ->
 			     none; %% TODO: sample from those with value
-			 ({categoric, _FeatureId}, _Ex) ->
+			 (_, {categoric, _FeatureId}, _Ex) ->
 			     none; %% TODO: same..
-			 (Ff, Ex) ->
-			     rr_example:sample_split_value(Ff, Ex)
+			 (Me, Ff, Ex) ->
+			     rr_example:sample_split_value(Me, Ex)
 		     end).
 
 
 %% @doc make a determinisc split in the numeric data set
--spec deterministic_split(features(), examples(), distribute_fun(), missing_fun()) -> split().
-deterministic_split(Feature, Examples, Distribute, Missing) ->
-    rr_example:split(Feature, Examples, Distribute, Missing, 
-		     fun ({numeric, FeatureId}, Ex) ->
-			     rr_example:find_numeric_split(FeatureId, Ex, info());
-			 (Ff, Ex) ->
-			     rr_example:sample_split_value(Ff, Ex)
+-spec deterministic_split(#rr_example{}, features(), examples(), distribute_fun(), missing_fun()) -> split().
+deterministic_split(ExConf, Feature, Examples, Distribute, Missing) ->
+    rr_example:split(ExConf, Feature, Examples, Distribute, Missing, 
+		     fun (Me, {numeric, FeatureId}, Ex) ->
+			     rr_example:find_numeric_split(Me, FeatureId, Ex, info());
+			 (Me, Ff, Ex) ->
+			     rr_example:sample_split_value(Me, Ff, Ex)
 		     end).
 
 %% @doc random choice between gini-impurity and entropy
