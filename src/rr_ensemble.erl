@@ -132,7 +132,7 @@ get_prediction_probabilities(Acc, N) ->
 %% @doc Spaws classification and evaluator process
 spawn_base_classifiers(Sets, Cores, Features, Examples, ExConf, Conf) ->
     Self = self(),
-    Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores) end),
+    Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores, Conf) end),
     [spawn_link(fun() -> base_build_process(Coordinator, Features, Examples, ExConf, Conf) end) 
 		 || _ <- lists:seq(1, Cores)],
     Coordinator.
@@ -163,52 +163,53 @@ submit_query(Method, TreeFun, CollectFun, Processes, Coordinator) ->
     collect_task({q, Method}, CollectFun, Processes, Coordinator, []).
 			   
 %% @doc coordinating the model evaluation
-evaluation_coordinator(Parent, Coordinator, Processes) ->
+evaluation_coordinator(Parent, Coordinator, Processes, Conf) ->
     receive 
 	{evaluate, Parent, ExId} ->
 	    Prediction = submit_prediction(Processes, Coordinator, ExId),
 	    Parent ! {prediction, Coordinator, Prediction},
-	    evaluation_coordinator(Parent, Coordinator, Processes);
+	    evaluation_coordinator(Parent, Coordinator, Processes, Conf);
 	{importance, Parent} ->
 	    Importance = submit_importance(Processes, Coordinator),
 	    Parent ! {importance, Coordinator, Importance},
-	    evaluation_coordinator(Parent, Coordinator, Processes);
+	    evaluation_coordinator(Parent, Coordinator, Processes, Conf);
 	{exit, Parent} ->
 	    lists:foreach(fun(Process) -> Process ! {exit, Coordinator, Process} end, Processes),
 	    Parent ! {done, self()};
 	{q, Method, TreeFun, CollectFun, Parent}  ->
 	    Result = submit_query(Method, TreeFun, CollectFun, Processes, Coordinator),
 	    Parent ! {q, Method, Coordinator, Result},
-	    evaluation_coordinator(Parent, Coordinator, Processes)		
+	    evaluation_coordinator(Parent, Coordinator, Processes, Conf)		
     end.
 
 %% @doc Transition every build process into an evaluator process
-transition_coordinator(Parent, Coordinator, 0, Acc) ->
-    io:format(standard_error, "~n", []), % NOTE: separate progress (sorry)
+transition_coordinator(Parent, Coordinator, 0, Acc, Conf) ->
+    Progress = Conf#rr_ensemble.progress,
+    Progress(done, done),
     Parent ! {done, Coordinator},
-    evaluation_coordinator(Parent, Coordinator, Acc);
-transition_coordinator(Parent, Coordinator, Cores, Acc) ->
+    evaluation_coordinator(Parent, Coordinator, Acc, Conf);
+transition_coordinator(Parent, Coordinator, Cores, Acc, Conf) ->
     receive
 	{build, Coordinator, Pid} ->
 	    Pid ! {completed, Coordinator},
-	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid|Acc])
+	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid|Acc], Conf)
     end.
 
 %% @doc coordinating the build process
-build_coordinator(Parent, Sets, Cores) ->
-    build_coordinator(Parent, self(), 1, Sets, Cores).
+build_coordinator(Parent, Sets, Cores, Conf) ->
+    build_coordinator(Parent, self(), 1, Sets, Cores, Conf).
 
-build_coordinator(Parent, Coordinator, Counter, Sets, Cores) when Sets < Counter->
+build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Conf) when Sets < Counter->
     receive
 	{build, Coordinator, Pid} ->
 	    Pid ! {completed, Coordinator},
-	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid])
+	    transition_coordinator(Parent, Coordinator, Cores - 1, [Pid], Conf)
     end;
-build_coordinator(Parent, Coordinator, Counter, Sets, Cores) ->
+build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Conf) ->
     receive 
 	{build, Coordinator, Pid} ->
 	    Pid ! {build, Counter},
-	    build_coordinator(Parent, Coordinator, Counter + 1, Sets, Cores)
+	    build_coordinator(Parent, Coordinator, Counter + 1, Sets, Cores, Conf)
     end.
 
 %% @doc transision into 'base_evaluator_process', at {completed, Coordinator}
@@ -230,7 +231,7 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
 			      [] -> 0.0;
 			      _ -> rr_eval:accuracy(Base:evaluate_model(Model, OutBag, ExConf, BaseConf))
 			  end,
-	    Rem = if T > 10 -> round(T/10); true -> 1 end,
+	    Rem = if T > 10 -> round(T/10); true -> 1 end, %% todo: refactor (let progress decide)
 	    case Id rem Rem of
 		0 ->
 		    Progress(Id, T);

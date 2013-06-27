@@ -309,8 +309,14 @@ output(Options) ->
 
 progress(Options) ->
     case proplists:get_value(progress, Options) of
-	dots -> fun(_, _) -> io:format(standard_error, "..", []) end;
-	numeric -> fun(Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T]) end;
+	dots -> fun
+		    (done, done) -> io:format(standard_error, "~n", []);
+		    (_, _) -> io:format(standard_error, "..", [])
+		end;
+	numeric -> fun
+		       (done, done) -> io:format(standard_error, "~n", []);
+		       (Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T])
+		   end;
 	none -> fun(_, _) -> ok end;
 	Other -> rr:illegal_option("progress", Other)
     end.
