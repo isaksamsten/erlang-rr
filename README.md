@@ -11,14 +11,38 @@ algorithm).
 Generally, the application can be used in two ways, either as a
 stand-alone application compiled as:
 
-    ./rebar compile escriptize
+    ./rebar get-deps compile escriptize
+    
+Then run as:
 
-or as a framework in another application:
+    ./rr rf -i data/iris.txt -n 100 -x cv --folds 10
 
-    File = csv:binary_reader("data.txt"),
-    {Features, Examples} = rr_example:load(File, 4) %% on four cores
+'erlang-rr' can also be used as a framework in another application. 
+For example, a file can be read and loaded and a model be
+built and evaluated:
+
+    File = csv:binary_reader("iris.txt"),
+    {Features, Examples, Dataset} = rr_example:load(File, 4) %% on four cores
     {Build, Evaluate, _} = rf:new([{no_features, math:log(length(Features))/math:log(2)}])
-    Res = rr_eval:cross_validation(Features, Examples, [{build, Build},
-                                                        {evaluate, Evaluate},
-							{folds, 10}]),
+    {Result, Models} = rr_eval:cross_validation(Features, Examples, Dataset,
+                                                [{build, Build},
+                                                {evaluate, Evaluate},
+                                                {folds, 10}]),
+    csv:kill(File), % clean up memory
+    rr_example:kill(Dataset),
+    lists:foreach(fun (Model) -> rf:kill(Model) end, Models),
     io:format("~p~n", [Res]).
+    
+To not fill up memory while doing cross-validation, models can be discarded as
+they are generated.  To do this, wrap the evaluate-fun (from rf:new/1), in
+another fun. For example,
+
+    {Result, Models} = rr_eval:cross_validation(Features, Examples, Dataset,
+                                                [{build, Build},
+                                                {evaluate, fun (Model, Examples, ExConf) ->
+                                                                Tmp = Evaluate(Model, Examples, ExConf),
+                                                                rf:kill(Model),
+                                                                Tmp
+                                                           end},
+                                                {folds, 10}]),
+    %.....
