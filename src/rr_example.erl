@@ -10,7 +10,7 @@
 
 -export([
 	 new/0,
-	 kill/0,
+	 kill/1,
 	 
 	 load/2,
 	 insert_prediction/3,

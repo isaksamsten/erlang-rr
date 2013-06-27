@@ -231,7 +231,7 @@ main(Args) ->
     end,
     case proplists:get_value(observer, Options) of
 	true -> rr_log:info("press ^c to exit"), receive wait -> wait end;
-	false -> ok
+	undefined -> ok
     end,
     csv:kill(Csv),
     rr_example:kill(ExConf),
