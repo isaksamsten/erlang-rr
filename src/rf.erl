@@ -24,6 +24,10 @@
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(CMD_SPEC,
 	[{help,           $h,           "help",         undefined,
 	  "Show this usage information."},
@@ -179,7 +183,7 @@ main(Args) ->
 
     rr_log:info("loading '~s' on ~p core(s)", [InputFile, Cores]),
     LoadingTime = now(),
-    Csv = csv:binary_reader(InputFile), %% todo fix error!
+    Csv = csv:binary_reader(InputFile),
     {Features, Examples0, ExConf} = rr_example:load(Csv, Cores),
     Examples = rr_example:randomize(Examples0),
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
@@ -229,13 +233,14 @@ main(Args) ->
 	Other ->
 	    rr:illegal_option("mode", Other)
     end,
+    rr_log:info("experiment took '~p' second(s)", [rr:seconds(ExperimentTime)]),
     case proplists:get_value(observer, Options) of
 	true -> rr_log:info("press ^c to exit"), receive wait -> wait end;
 	undefined -> ok
     end,
     csv:kill(Csv),
+    rr_config:exit(),
     rr_example:kill(ExConf),
-    rr_log:info("experiment took '~p' second(s)", [rr:seconds(ExperimentTime)]),
     rr_log:stop().
 
 killer(Evaluate) ->
@@ -455,3 +460,34 @@ show_information() ->
 Copyright (C) 2013+ ~s
 
 Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
+
+
+-ifdef(TEST).
+-ifdef(PROFILE).
+profile_test_() ->
+    profile_tests().
+
+profile_tests() -> 
+    [
+     {"Profile car dataset", {timeout, 60, profile("../data/car.txt", "PROFILE_CAR.txt")}},
+     {"Profile iris dataset", {timeout, 60, profile("../data/iris.txt", "PROFILE_IRIS.txt")}},
+     {"Profile spambase dataset", {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE.txt")}}
+    ].
+
+profile(In, Out) ->
+    fun() ->
+	    File = csv:binary_reader(In),
+	    {Features, Examples, Dataset} = rr_example:load(File, 4),
+	    {Build, _Evaluate, _} = rf:new([{no_features, trunc(math:log(length(Features))/math:log(2))}]),
+	    eprof:start(),
+	    eprof:log(Out),
+	    eprof:profile(
+	      fun() ->
+		      Build(Features, Examples, Dataset)
+	      end),
+	    eprof:analyze(total),
+	    eprof:stop()
+    end.
+
+-endif.
+-endif.

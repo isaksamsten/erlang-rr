@@ -133,8 +133,14 @@ get_prediction_probabilities(Acc, N) ->
 spawn_base_classifiers(Sets, Cores, Features, Examples, ExConf, Conf) ->
     Self = self(),
     Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores, Conf) end),
-    [spawn_link(fun() -> base_build_process(Coordinator, Features, Examples, ExConf, Conf) end) 
-		 || _ <- lists:seq(1, Cores)],
+    lists:foreach(
+      fun(_) ->
+	      spawn_link(
+		fun() ->
+			base_build_process(Coordinator, Features, Examples, ExConf, Conf)
+		end)
+      end, lists:seq(1, Cores)),
+
     Coordinator.
     
 

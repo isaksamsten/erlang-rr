@@ -3,7 +3,8 @@
 	  bagging :: any(),
 	  base_learner :: {Module::atom(), Conf::any()},
 	  no_classifiers = 100 :: integer(),
-	  cores = 1 :: integer()
+	  cores = 1 :: integer(),
+	  seed = {0,0,0} :: {integer(), integer(), integer()}
 	 }).
 
 %%

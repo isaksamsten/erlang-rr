@@ -10,3 +10,4 @@ doc/
 *.DS_STORE
 erl_crash.dump
 rr
+profile_result.txt

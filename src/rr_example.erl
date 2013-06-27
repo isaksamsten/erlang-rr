@@ -559,7 +559,6 @@ count(Examples) ->
     lists:foldl(fun({_, Count, _}, Old) ->
 			Count + Old
 		end, 0, Examples).
-
 clone(ExId) ->
     {exid(ExId), exid(ExId)}.
 
