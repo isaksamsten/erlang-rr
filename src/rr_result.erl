@@ -59,7 +59,7 @@ csv_output({split, Split}, Header) ->
 
 csv_output_cv([], _) ->
     done;
-csv_output_cv([{{_, Fold, _}, Measures}|Rest], Header) ->
+csv_output_cv([{{_, Fold}, Measures}|Rest], Header) ->
     io:format("fold ~p,", [Fold]),
     csv_output_measures(Measures, Header),
     csv_output_cv(Rest, Header).
@@ -100,7 +100,7 @@ default_output({cv, _, Data}, Header) ->
 
 default_output_cv([], _, _) -> 
     done;
-default_output_cv([{{_, Fold, _}, Measures}|Rest], OutputFolds, Header) ->
+default_output_cv([{{_, Fold}, Measures}|Rest], OutputFolds, Header) ->
     if OutputFolds == true ->
 	    default_output_measures(Fold, Measures, Header),
 	    io:format("~n"),

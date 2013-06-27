@@ -31,6 +31,8 @@
 	  "Show the program version."},
 	 {examples,       undefined,    "examples",     undefined,
 	  "View example usages"},
+	 {observer,        undefined,    "observer",     undefined,
+	  "Observe the execution (cpu/memory etc.)"},
 	 {input,          $i,           "input",        string, 
 	  "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
 	 {cores,          $c,           "cores",        {integer, erlang:system_info(schedulers)},
@@ -148,7 +150,7 @@ new(Props) ->
 %% @todo refactor to use proplist
 main(Args) ->
     Options = rr:parse(Args, ?CMD_SPEC),
-    case rr:any_opt([help, version, examples], Options) of
+    case rr:any_opt([help, version, examples, observer], Options) of
 	help ->
 	    help(),
 	    halt();
@@ -158,6 +160,8 @@ main(Args) ->
 	examples ->
 	    io:format(show_examples()),
 	    halt();
+	observer ->
+	    observer:start();
 	false ->
 	    ok
     end,
@@ -210,22 +214,27 @@ main(Args) ->
     ExperimentTime = now(),
     case proplists:get_value(mode, Options) of
 	split ->
-	    Res = rr_eval:split_validation(Features, Examples, ExConf,
-					   [{build, Build}, 
-					    {evaluate, killer(Evaluate)}, 
-					    {ratio, proplists:get_value(ratio, Options)}]),
+	    {Res, _Models} = rr_eval:split_validation(Features, Examples, ExConf,
+						     [{build, Build}, 
+						      {evaluate, killer(Evaluate)}, 
+						      {ratio, proplists:get_value(ratio, Options)}]),
 	    Output(Res);
 	cv ->
-	    Res = rr_eval:cross_validation(Features, Examples, ExConf,
-					   [{build, Build}, 
-					    {evaluate, killer(Evaluate)}, 
-					    {progress, fun (Fold) -> io:format(standard_error, "fold ~p ", [Fold]) end},
-					    {folds, proplists:get_value(folds, Options)}]),
+	    {Res, _Models} = rr_eval:cross_validation(Features, Examples, ExConf,
+						     [{build, Build}, 
+						      {evaluate, killer(Evaluate)}, 
+						      {progress, fun (Fold) -> io:format(standard_error, "fold ~p ", [Fold]) end},
+						      {folds, proplists:get_value(folds, Options)}]),
 	    Output(Res);
 	Other ->
 	    rr:illegal_option("mode", Other)
     end,
+    case proplists:get_value(observer, Options) of
+	true -> rr_log:info("press ^c to exit"), receive wait -> wait end;
+	false -> ok
+    end,
     csv:kill(Csv),
+    rr_example:kill(ExConf),
     rr_log:info("experiment took '~p' second(s)", [rr:seconds(ExperimentTime)]),
     rr_log:stop().
 

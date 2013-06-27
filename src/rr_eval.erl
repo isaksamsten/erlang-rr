@@ -46,15 +46,16 @@ cross_validation(Features, Examples, ExConf, Props) ->
     Average = proplists:get_value(average, Props, fun average_cross_validation/2),
     Progress = proplists:get_value(progress, Props, fun (_) -> ok end),
 
-    Total = rr_example:cross_validation(
+    Total0 = rr_example:cross_validation(
 	      fun (Train, Test, Fold) ->
 		      Progress(Fold),
 		      Model = Build(Features, Train, ExConf),
 		      Result = Evaluate(Model, Test, ExConf),
-		      {{fold, Fold, Model}, Result}
+		      {{{fold, Fold}, Result}, Model}
 	      end, NoFolds, Examples),
+    {Total, Models} = lists:unzip(Total0),
     Avg = Average(Total, NoFolds),
-    {cv, NoFolds, Total ++ [Avg]}.
+    {{cv, NoFolds, Total ++ [Avg]}, Models}.
 
 
 %% @private default method for averaging the results of cross-validation
@@ -68,7 +69,7 @@ average_cross_validation(Result, Folds, Inputs) ->
 
 %% @private average cross-validation
 average_cross_validation(_, _, [], Acc) ->
-    {{fold, average, undefined}, lists:reverse(Acc)};
+    {{fold, average}, lists:reverse(Acc)};
 average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
     A = lists:foldl(fun ({_, Measures}, Sum) ->
 			    case lists:keyfind(H, 1, Measures) of
@@ -98,7 +99,7 @@ split_validation(Features, Examples, ExConf, Props) ->
     {Train, Test} = rr_example:split_dataset(Examples, Ratio),
     Model = Build(Features, Train, ExConf),
     Result = Evaluate(Model, Test, ExConf),
-    {split, {{split, Ratio, Model}, Result}}.
+    {{split, {{split, Ratio}, Result}}, Model}.
 	
 %% @doc 
 %% Calculate the accuracy (i.e. the percentage of correctly

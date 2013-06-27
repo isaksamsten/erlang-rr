@@ -9,7 +9,9 @@
 -module(rr_example).
 
 -export([
-	 init/0,
+	 new/0,
+	 kill/0,
+	 
 	 load/2,
 	 insert_prediction/3,
 	 get_prediction/2,
@@ -79,23 +81,33 @@ insert_prediction(Conf, ExId, Pred) ->
 get_prediction(Conf, ExId) ->
     hd(ets:lookup(Conf#rr_example.predictions, exid(ExId))).
 
-%% @doc init ets-tables storing features, examples and predictions
--spec init() -> ok.
-init() ->
-    ets:new(examples, [named_table, public, {read_concurrency, true}]),
-    ets:new(features, [named_table, public]),
-    ets:new(predictions, [named_table, public]).
 
+%% @doc create new example dataset
 new() ->
-    {
-     ets:new(examples, [public, {read_concurrency, true}]),
-     ets:new(features, [public]),
-     ets:new(predictions, [public])
-    }.
+    #rr_example{
+       examples = ets:new(examples, [public, {read_concurrency, true}]),
+       features = ets:new(features, [public]),
+       predictions = ets:new(predictions, [public])
+      }.
 
--spec load(string(), number()) -> {features(), examples()}.
-load(File, Cores) ->
-    {ExTable, FeatureTable, PredictionsTable} = new(),
+%% @doc delete a dataset
+kill(Dataset) ->
+    #rr_example{features = FeatureTable, examples = ExTable, predictions = PredictionsTable} = Dataset,
+    ets:delete(FeatureTable),
+    ets:delete(ExTable),
+    ets:delete(PredictionsTable).
+
+%% @doc a dataset from File using Core cores (creates a new dataset)
+-spec load(string(), number()) -> {features(), examples(), #rr_example{}}.
+load(File, Core) ->
+    ExConf = new(),
+    {Features, Examples} = load(File, Core, ExConf),
+    {Features, Examples, ExConf}.
+
+%% @doc load a dataset from file using Core cores to Dataset 
+-spec load(string(), number(), #rr_example{}) -> {features(), examples()}.
+load(File, Cores, Dataset) ->
+    #rr_example{features = FeatureTable, examples = ExTable, predictions = PredictionsTable} = Dataset,
     {ClassId, Types} = case csv:next_line(File) of
 			   {ok, Types0, _} ->
 			       parse_type_declaration(Types0);
@@ -109,11 +121,7 @@ load(File, Cores) ->
 		       throw({error, features_type_error})
 	       end,
     Examples = parse_examples(ExTable, File, Cores, ClassId, Types),
-    ExConf = #rr_example{
-		features = FeatureTable,
-		examples =  ExTable,
-		predictions = PredictionsTable},
-    {Features, Examples, ExConf}.
+    {Features, Examples}.
     
 %% @private spawns "Cores" 'parse_example_process' and collects their results
 parse_examples(ExTable, File, Cores, ClassId, Types) ->
