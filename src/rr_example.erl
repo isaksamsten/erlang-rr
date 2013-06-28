@@ -562,14 +562,13 @@ count(Examples) ->
 clone(ExId) ->
     {exid(ExId), exid(ExId)}.
 
-exid(ExId) when is_number(ExId) ->
+%% @doc return the id of an example (unpacks an example with its count)
+exid({ExId, _}) ->
     ExId;
-exid({ExId, _}) when is_number(ExId) ->
+exid(ExId) ->
     ExId.
 
-%%
-%% Count the occurences of "Class" in "Examples"
-%%
+%% @doc count the occurences of "Class" in "Examples"
 count(Class, Examples) ->
     case lists:keysearch(Class, 1, Examples) of
 	{value, {_, N, _}} ->
@@ -578,6 +577,8 @@ count(Class, Examples) ->
 	    0
     end.
 
+%% @doc return the majority class and its count
+-spec majority(examples()) -> {Class::atom(), Count::number()}.
 majority(Examples) ->
     {Class, Count, _} = lists:foldl(fun({Class, Count, _}, {_OldClass, OldCount, _} = Old) ->
 					    case Count > OldCount of 
@@ -587,21 +588,21 @@ majority(Examples) ->
 				    end, hd(Examples), tl(Examples)),
     {Class, Count}.
 
+%% @doc get examples with Class
 get_class(Class, Examples) ->
     lists:keyfind(Class, 1, Examples).
 
+%% @doc get the number of classes
 classes(Examples) ->
     length(Examples).
 
+%% @doc flatten the examples (i.e. make one list)
 flatten(Examples) ->
     lists:foldl(fun ({_, _, Ex}, Acc) ->
 			Ex ++ Acc
 		end, [], Examples).
 
-%%
-%% Count the number of examples in "Examples" excluding examples with
-%% class Class
-%%
+%% @doc Count the number of examples in "Examples" excluding examples with Class
 count_exclude(Class, Examples) ->
     lists:foldl(fun({Cls, _, _}, Old) when Class =:= Cls->
 			Old;
@@ -609,10 +610,7 @@ count_exclude(Class, Examples) ->
 			Old + Count
 		end, 0, Examples).
 
-%%
-%% Transform the examples into a form where we have a set of positive
-%% and a set of negative examples
-%%
+%% @doc transform the examples into a form where we have a set of positive and a set of negative examples
 to_binary(Positive, Examples) ->
     case lists:keytake(Positive, 1, Examples) of
 	{value, {_, Pc, Positives}, Negatives0} ->
@@ -623,9 +621,7 @@ to_binary(Positive, Examples) ->
 	    throw({error, cannot_split})
     end.
 
-%%
-%% Remove Examples from "Examples" that are covered by "Covered"
-%%
+%% @doc Remove Examples from "Examples" that are covered by "Covered"
 remove_covered(Examples, Covered) ->
     lists:map(fun({Class, Count, Ids}) ->
 		      case rr_example:get_class(Class, Covered) of
@@ -638,21 +634,22 @@ remove_covered(Examples, Covered) ->
 		      end
 	      end, Examples).
 
-%%
-%% Return a tuple {Pos, Neg} with the number of Positive and negative examples
-%% covered by "Example"
-%%
+%% @doc Return a tuple {Pos, Neg} with the number of Positive and negative examples
+-spec coverage(examples()) -> {Pos::number(), Neg::number()}.
 coverage(Examples) ->
     {rr_example:count('+', Examples), rr_example:count('-', Examples)}.
 
--spec feature(#rr_example{}, feature(), number()) -> ok.
+%% @doc return the value for ExId at positition At
+-spec feature(#rr_example{}, exid(), number()) -> ok.
 feature(#rr_example{examples=ExTable}, ExId, At) ->
     ets:lookup_element(ExTable, exid(ExId), At + 1).
 
+%% @doc return the entire feature vector for ExId
+-spec vector(#rr_example{}, exid()) -> tuple().
 vector(#rr_example{examples=ExTable}, ExId) ->
     hd(ets:lookup(ExTable, exid(ExId))).
 
-
+%% @doc unpack the feature id
 feature_id({{combined, IdA, IdB}, _}) ->
     list_to_tuple(lists:sort([feature_id(IdA), feature_id(IdB)]));
 feature_id({{_, Id}, _}) ->
@@ -663,13 +660,14 @@ feature_id({rule, {Rules, _}, _Length}) ->
 feature_id({_, Id}) ->
     Id.
 
+%% @doc get the name of a feature id as returned by feature_id/1
 feature_name(Conf, {IdA, IdB}) ->
     {feature_name(Conf, IdA),
      feature_name(Conf, IdB)};
 feature_name(Conf, Rules) when is_list(Rules) ->
     [feature_name(Conf, Rule) || Rule <- Rules];
-feature_name(#rr_example{examples=ExTable}, Id) ->
-    ets:lookup_element(ExTable, Id, 2).
+feature_name(#rr_example{features=FeatureTable}, Id) ->
+    ets:lookup_element(FeatureTable, Id, 2).
 
 %% @doc Return a random subset of size "Subset" from Features
 random_features(Features, 1) when length(Features) > 1 ->
@@ -738,6 +736,7 @@ generate_folds([{Class, _, ExIds}|Rest], Folds, CurrentFold, Acc) ->
     NewAcc = dict:merge(fun (_, A, B) -> A ++ B end, ClassFolds, Acc),
     generate_folds(Rest, Folds, NewCurrentFold, NewAcc).
 
+%% @private
 make_default_folds(0, _, Acc) ->
     Acc;
 make_default_folds(Fold, Class, Acc) ->
@@ -752,6 +751,7 @@ generate_folds_for_class(Class, [Id|ExIds], Folds, CurrentFold, Acc) ->
 			     dict:update(Current, fun ([{C, N, Ids}]) ->
 							  [{C, N+1, [Id|Ids]}]
 						  end, Acc)).
+%% @private
 init_folds(Folds, Init, Test) ->
     Init0 = dict:fetch(Init, Folds),
     TestSet0 = dict:fetch(Test, Folds),
@@ -780,6 +780,7 @@ cross_validation(Fun, NoFolds, Examples) ->
     Folds = generate_folds(Examples, NoFolds),
     cross_validation(Fun, Folds, NoFolds, NoFolds, []).
 
+%% @private
 cross_validation(_Fun, _Folds, _NoFolds, 0, Acc) -> 
     lists:reverse(Acc);
 cross_validation(Fun, Folds, NoFolds, CurrentFold, Acc) -> 
@@ -787,30 +788,29 @@ cross_validation(Fun, Folds, NoFolds, CurrentFold, Acc) ->
     Result = Fun(Train, Test, NoFolds - CurrentFold + 1),
     cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, [Result|Acc]).
 
-%%
-%% Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag}
-%% examples.
-%%
+%% @doc Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag} examples.
 bootstrap_aggregate(Examples) ->
     MaxId = count(Examples),
     Bootstrap = generate_bootstrap(MaxId),
     select_bootstrap_examples(Examples, 1, Bootstrap, {[], []}).
 
+%% @private
 generate_bootstrap(MaxId) ->
     lists:foldl(fun(_, Bootstrap) ->
 			dict:update(random:uniform(MaxId), fun (Count) -> Count + 1 end, 1, Bootstrap)
 		end, dict:new(), lists:seq(1, MaxId)).
 
-
+%% @doc generate a subset aggregate (of size total no. examples / 2)
 subset_aggregate(Examples) ->
     MaxId = count(Examples),
     {Bootstrap, _Ignore} = lists:split(MaxId div 2, generate_substrap(MaxId)),
     select_bootstrap_examples(Examples, 1, lists:foldl(fun(N, D) -> dict:store(N, 1, D) end, dict:new(), Bootstrap), {[], []}).
 
+%% @private
 generate_substrap(MaxId) ->
     shuffle_list(lists:seq(1, MaxId)).
     
-
+%% @private
 select_bootstrap_examples([], _N, _Bootstrap, Acc) ->
     Acc;
 select_bootstrap_examples([{Class, Count, Ids}|Examples], N, Bootstrap, {InBags, OutBags}) ->
@@ -821,6 +821,7 @@ select_bootstrap_examples([{Class, Count, Ids}|Examples], N, Bootstrap, {InBags,
 	    select_bootstrap_examples(Examples, N+Count, Bootstrap, {[InBag|InBags], [OutBag|OutBags]})
     end.
 
+%% @private
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, [], _, {InBag, OutBag}) ->
     {{Class, InBagCount, InBag}, {Class, OutBagCount, OutBag}};
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
@@ -834,30 +835,36 @@ select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|R
 						N+1, Rest, Bootstrap, {InBag, [ExId|OutBag]})
     end.
 
+%% @private
 duplicate_example({ExId, _}, N, Acc) ->
     [{ExId, N}|Acc];
 duplicate_example(ExId, N, Acc) ->
     [{ExId, N}|Acc].
 
+%% @doc sample one example from all examples
 sample_example([{_Class, _, ExIds}]) ->
     lists:nth(random:uniform(length(ExIds)), ExIds);
 sample_example(Examples) ->
     sample_example([lists:nth(random:uniform(length(Examples)), Examples)]).
 
+%% @doc sample two examples from different classes
 sample_example_pair([{_, _, ExId1}, {_, _, ExId2}]) ->
     sample_example_pair(ExId1, ExId2);
 sample_example_pair(Examples) ->
     sample_example_pair(sample_class_pair(Examples)).
 
+%% @private
 sample_example_pair(ExId1, ExId2) ->
     {lists:nth(random:uniform(length(ExId1)), ExId1),
      lists:nth(random:uniform(length(ExId2)), ExId2)}.
 
+%% @private
 sample_class_pair(Examples) ->
     NoEx = length(Examples),
     Random = random:uniform(NoEx),
     sample_class_pair(Examples, Random, NoEx, [lists:nth(Random, Examples)]).
 
+%% @private
 sample_class_pair(Examples, Random, NoEx, Acc) ->
     case random:uniform(NoEx) of
 	Random ->

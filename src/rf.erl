@@ -239,10 +239,11 @@ main(Args) ->
 	undefined -> ok
     end,
     csv:kill(Csv),
-    rr_config:exit(),
     rr_example:kill(ExConf),
+    rr_config:stop(),
     rr_log:stop().
 
+%% @doc kill (to clean up unused models) after evaluation (to reduce memory footprint during cross validation)
 killer(Evaluate) ->
     fun (Model, Test, ExConf) ->
 	    Result = Evaluate(Model, Test, ExConf),
@@ -250,6 +251,7 @@ killer(Evaluate) ->
 	    Result
     end.
 
+%% @private evaluate Model using som well knonw evaluation metrics
 evaluate(Model, Test, ExConf, Conf) ->
     NoTestExamples = rr_example:count(Test),
     Dict = rr_ensemble:evaluate_model(Model, Test, ExConf, Conf),

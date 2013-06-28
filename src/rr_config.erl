@@ -7,7 +7,7 @@
 -module(rr_config).
 -export([
 	 init/1,
-	 exit/0,
+	 stop/0,
 	 loop/1,
 
 	 get_value/1,
@@ -18,7 +18,7 @@ init(Props) ->
     Pid = spawn_link(?MODULE, loop, [Props]),
     register(config, Pid).
 
-exit() ->
+stop() ->
     Ref = monitor(process, config),
     config ! {exit, Ref, self()},
     receive 
