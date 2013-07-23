@@ -27,13 +27,13 @@
 	 illegal_option/2,
 	 seconds/1,
 	 
-
+	 read_config/1,
 	 get_opt_name/2,
 	 any_opt/2
 	]).
 
 main(Args) ->
-    Props = read_config(),
+    Props = read_config("rr.config"),
     initialize(Props),
     case Args of
 	["km"|Cmd] ->
@@ -62,17 +62,16 @@ main(Args) ->
 	    show_help()
     end.
 
-read_config() ->
-    Default = [{'log.level', info}, {'log.target', std_err}],
-    case file:consult("rr.config") of
+read_config(File) ->
+    case file:consult(File) of
 	{ok, Prop} ->
 	    Prop;
 	{error, {Line, _, Term}} ->
 	    io:format("malformed configuration file: \"~s\" (line: ~p). ~n", [Term, Line]),
-	    Default;
+	    halt();
 	{error, Reason} ->
 	    io:format("could not read 'rr.config': '~p'. ~n", [Reason]),
-	    Default
+	    halt()
     end.
 
 initialize(Props) ->
