@@ -88,12 +88,12 @@ predictions(Conf, Examples) ->
     predictions(Conf#rr_example.predictions, Examples, []).
 
 predictions(_, [], Acc) -> Acc;
-predictions(Table, [{_, _, Ids}|Rest], Acc) ->
+predictions(Table, [{Real, _, Ids}|Rest], Acc) ->
     predictions(Table, Rest,
 		lists:foldl(
 		  fun (ExId, NewAcc) ->
 			  Predictions = ets:lookup_element(Table, exid(ExId), 2),
-			  [{exid(ExId), Predictions}|NewAcc]
+			  [{exid(ExId), Real, Predictions}|NewAcc]
 		  end, Acc, Ids)).
 
 
