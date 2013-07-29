@@ -229,6 +229,7 @@ main(Args) ->
 						      {evaluate, killer(Evaluate)}, 
 						      {progress, fun (Fold) -> io:format(standard_error, "fold ~p ", [Fold]) end},
 						      {folds, proplists:get_value(folds, Options)}]),
+%	    io:format("~p ~n", [rr_example:predictions(ExConf, Examples)]),					  
 	    Output(Res);
 	Other ->
 	    rr:illegal_option("mode", Other)

@@ -15,6 +15,7 @@
 	 load/2,
 	 insert_prediction/3,
 	 get_prediction/2,
+	 predictions/2,
 
 	 format_number/1,
 
@@ -80,6 +81,20 @@ insert_prediction(Conf, ExId, Pred) ->
 
 get_prediction(Conf, ExId) ->
     hd(ets:lookup(Conf#rr_example.predictions, exid(ExId))).
+
+%% @doc get predictions for all examples in Examples
+-spec predictions(#rr_example{}, examples()) -> [{exid(), [{Class::atom(), Probability::number()},...]},...].
+predictions(Conf, Examples) ->
+    predictions(Conf#rr_example.predictions, Examples, []).
+
+predictions(_, [], Acc) -> Acc;
+predictions(Table, [{_, _, Ids}|Rest], Acc) ->
+    predictions(Table, Rest,
+		lists:foldl(
+		  fun (ExId, NewAcc) ->
+			  Predictions = ets:lookup_element(Table, exid(ExId), 2),
+			  [{exid(ExId), Predictions}|NewAcc]
+		  end, Acc, Ids)).
 
 
 %% @doc create new example dataset
