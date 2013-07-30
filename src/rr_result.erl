@@ -73,6 +73,8 @@ csv_output_measures(Measures, Header) ->
     [{_, Last}|NewHeader] = lists:reverse(Header),
     lists:foreach(fun ({_, Key}) ->
 			  case lists:keyfind(Key, 1, Measures) of
+			      {Key, {Auc, _}} ->
+				  io:format("~p,", [Auc]);
 			      {Key, Value} ->
 				  io:format("~p,", [Value]);
 			      {Key, _, Value} ->
@@ -123,8 +125,14 @@ default_output_measures(Fold, Measures, Header) ->
 			      {Key, Value} when is_list(Value)->
 				  io:format("~s:~n", [Name]),
 				  lists:foreach(fun({Class, P}) ->
-						io:format("  ~s: ~p ~n", [Class, P])
+						io:format(" - ~s: ~p ~n", [Class, P])
 					end, Value);
+			      {Key, {Auc, Value}} ->
+				  io:format("area under ROC~n"),
+				  lists:foreach(fun({Class, _, P}) ->
+						io:format(" - ~s: ~p ~n", [Class, P])
+					end, Value),
+				  io:format(" average: ~p~n", [Auc]);			      
 			      {Key, Value} ->
 				  io:format("~s: ~p~n", [Name, Value]);
 			      {Key, Auc, Value} ->
@@ -132,7 +140,7 @@ default_output_measures(Fold, Measures, Header) ->
 				  lists:foreach(fun({Class, _, A}) ->
 							io:format("  ~s: ~p ~n", [Class, A])
 						end, Auc),
-				  io:format("average: ~p~n", [Value]);
+				  io:format(" average: ~p~n", [Value]);
 			      _ ->
 				  ok
 			  end
