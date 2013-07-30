@@ -256,12 +256,16 @@ killer(Evaluate) ->
 evaluate(Model, Test, ExConf, Conf) ->
     NoTestExamples = rr_example:count(Test),
     Dict = rr_ensemble:evaluate_model(Model, Test, ExConf, Conf),
+    Matrix = rr_eval:confusion_matrix(Dict),
+
     OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
     {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Model, Test, ExConf, Conf),
     
     Strength = rr_eval:strength(Dict, NoTestExamples),
     Variance = rr_eval:variance(Dict, NoTestExamples),
     Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, Conf#rr_ensemble.no_classifiers),
+
+
 
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
@@ -271,7 +275,8 @@ evaluate(Model, Test, ExConf, Conf) ->
 			     ({_, No, A}, Sum) -> 
 				 Sum + No/NoTestExamples*A			     
 			 end, 0, Auc),
-    Precision = rr_eval:precision(Dict),
+    Precision = rr_eval:precision(Matrix),
+    Recall = rr_eval:recall(Matrix),
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy},
      {auc, Auc, AvgAuc}, 
@@ -279,7 +284,8 @@ evaluate(Model, Test, ExConf, Conf) ->
      {correlation, Correlation},
      {variance, Variance},
      {c_s2, Correlation/math:pow(Strength, 2)},
-     {precision, Precision}, 
+     {precision, Precision},
+     {recall, Recall},
      {oob_base_accuracy, OOBAccuracy},
      {base_accuracy, BaseAccuracy},
      {brier, Brier}].

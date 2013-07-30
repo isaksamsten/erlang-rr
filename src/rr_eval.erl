@@ -16,9 +16,12 @@
 	 auc/2,
 	 brier/2,
 	 precision/1,
+	 recall/1,
 	 strength/2,
 	 variance/2,
-	 correlation/4
+	 correlation/4,
+
+	 confusion_matrix/1
 	]).
 
 %% @headerfile "rr.hrl"
@@ -60,7 +63,7 @@ cross_validation(Features, Examples, ExConf, Props) ->
 
 %% @private default method for averaging the results of cross-validation
 average_cross_validation(Result, Folds) ->
-    average_cross_validation(Result, Folds, [accuracy, auc, strength, correlation, c_s2,
+    average_cross_validation(Result, Folds, [accuracy, auc, strength, correlation, c_s2, precision, recall,
 					     variance, oob_base_accuracy, base_accuracy, brier]).
 
 %% @doc average the cross-validation (for the results specified in Inputs)
@@ -74,14 +77,24 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
     A = lists:foldl(fun ({_, Measures}, Sum) ->
 			    case lists:keyfind(H, 1, Measures) of
 				{H, _, Auc} ->
-				    Sum + Auc;
+				    Sum + Auc/Folds;
+				{H, List} when is_list(List) ->
+				    average_list_item(List, Folds, Sum);
 				{H, O} ->
-				    Sum + O;
+				    Sum + O/Folds;
 				false ->
 				    Sum 
 			    end
-		    end, 0, Avg) / Folds,
+		    end, 0, Avg),
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
+
+average_list_item(List, Folds, 0) ->
+    average_list_item(List, Folds, lists:map(fun ({Class, _}) -> {Class, 0} end, List));
+average_list_item(List, Folds, Acc) ->
+    lists:zipwith(fun ({Class, A}, {Class, B}) ->
+			  {Class, B + A/Folds}
+		  end, List, Acc).
+
 
 %% @doc split examples and train and evaluate
 -spec split_validation(features(), examples(), #rr_example{}, any()) -> result_set().
@@ -270,18 +283,63 @@ calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
 
 %% @doc Calculate the precision when predicting each class
 -spec precision(dict()) -> [{Class::atom(), Precision::float()}].
-precision(Predictions) ->
-    precision_for_classes(dict:fetch_keys(Predictions), Predictions, []).
+precision(Matrix) ->
+    Classes = dict:fetch_keys(Matrix),
+    lists:foldl(fun (Class, Acc) ->
+			[{Class, precision_for_class(Class, Matrix)}|Acc]
+		end, [], Classes).
+    
+precision_for_class(Class, Matrix) ->
+    Row = dict:fetch(Class, Matrix),
+    Tp = dict:fetch(Class, Row),
+    Rest = dict:fold(fun (_K, Value, Acc) -> Value + Acc end, 0, Row),
+    Tp / Rest.
 
-precision_for_classes([], _, Acc) ->
-    Acc;
-precision_for_classes([Actual|Rest], Predictions, Acc) ->
-    {Tp, Fp} = lists:foldl(fun ({{Pred, _}, _}, {Tp, Fp}) ->
-				   if Pred == Actual ->
-					   {Tp + 1, Fp};
-				      true -> 
-					   {Tp, Fp + 1}
-				   end
-			   end, {0, 0}, dict:fetch(Actual, Predictions)),
-    precision_for_classes(Rest, Predictions, [{Actual, Tp / (Tp + Fp)}|Acc]).
+recall(Matrix) ->
+    Classes = dict:fetch_keys(Matrix),
+    lists:foldl(fun (Class, Acc) ->
+			[{Class, recall_for_class(Class, Matrix)}|Acc]
+		end, [], Classes).
 
+recall_for_class(Class, Matrix) ->
+    dict:fetch(Class, dict:fetch(Class, Matrix)) /
+	dict:fold(fun (_, Dict, Value) ->
+			  dict:fetch(Class, Dict) + Value
+		  end, 0, Matrix).
+			     
+
+
+confusion_matrix(Predictions) ->
+    Classes = dict:fetch_keys(Predictions),
+    Dict = lists:foldl(fun (ClassA, Dict) ->
+			       lists:foldl(fun (ClassB, Dict2) ->
+						   dict:update(ClassA,
+							       fun (Dict3) ->
+								       dict:store(ClassB, 0, Dict3)
+							       end, dict:store(ClassB, 0, dict:new()), Dict2)
+					   end, Dict, Classes)
+		       end, dict:new(), Classes),
+    confusion_matrix(Classes, Predictions, Dict).
+
+confusion_matrix(Classes, Predictions, Acc) ->
+    lists:foldl(
+      fun (_, Acc0) ->
+	      lists:foldl(
+		fun (Search, Acc1) ->
+			lists:foldl(
+			  fun ({{Pred, _}, _}, Acc2) ->
+				  dict:update(Search,
+					      fun (SearchDict) ->
+						      dict:update_counter(Pred, 1, SearchDict)
+					      end, Acc2)			      
+			  end, Acc1, dict:fetch(Search, Predictions))
+		end, Acc0, Classes)
+      end, Acc, Classes).
+			
+    
+    
+
+%% for true in classes:
+%%   for pred in classes:
+%%      for p in predictions[pred]
+%%         update[true][pred] += 1

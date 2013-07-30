@@ -32,6 +32,8 @@
 			  {"strength", strength}, 
 			  {"variance", variance}, 
 			  {"correlation", correlation},
+			  {"precision", precision},
+			  {"recall", recall},
 			  {"c/s^2", c_s2}, 
 			  {"brier", brier}]).
 
@@ -118,8 +120,8 @@ default_output_measures(Fold, Measures, Header) ->
     io:format("fold ~p ~n", [Fold]),
     lists:foreach(fun ({Name, Key}) ->
 			  case lists:keyfind(Key, 1, Measures) of
-			      {precision, Value} ->
-				  io:format("precision~n"),
+			      {Key, Value} when is_list(Value)->
+				  io:format("~s:~n", [Name]),
 				  lists:foreach(fun({Class, P}) ->
 						io:format("  ~s: ~p ~n", [Class, P])
 					end, Value);
