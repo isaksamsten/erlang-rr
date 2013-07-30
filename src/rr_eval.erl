@@ -302,10 +302,13 @@ recall(Matrix) ->
 		end, [], Classes).
 
 recall_for_class(Class, Matrix) ->
-    dict:fetch(Class, dict:fetch(Class, Matrix)) /
-	dict:fold(fun (_, Dict, Value) ->
-			  dict:fetch(Class, Dict) + Value
-		  end, 0, Matrix).
+    case dict:fetch(Class, dict:fetch(Class, Matrix)) of
+	0 -> 0;
+	Value ->
+	    Value / dict:fold(fun (_, Dict, Value) ->
+				      dict:fetch(Class, Dict) + Value
+			      end, 0, Matrix)
+    end.
 			     
 
 
