@@ -192,7 +192,7 @@ evaluation_coordinator(Parent, Coordinator, Processes, Conf) ->
 transition_coordinator(Parent, Coordinator, 0, Acc, Conf) ->
     Progress = Conf#rr_ensemble.progress,
     Progress(done, done),
-    Parent ! {done, Coordinator},
+    Parent ! {done, Coordinator}, %% signal that generate_model/3 can return
     evaluation_coordinator(Parent, Coordinator, Acc, Conf);
 transition_coordinator(Parent, Coordinator, Cores, Acc, Conf) ->
     receive
