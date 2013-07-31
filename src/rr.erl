@@ -63,9 +63,9 @@ main(Args) ->
     end.
 
 read_config(File) ->
-    case file:consult(File) of
-	{ok, Prop} ->
-	    Prop;
+    case rr_config:read_config_file(File) of
+	{ok, Props} ->
+	    Props;
 	{error, {Line, _, Term}} ->
 	    io:format("malformed configuration file: \"~s\" (line: ~p). ~n", [Term, Line]),
 	    halt();
