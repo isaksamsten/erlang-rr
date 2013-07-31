@@ -93,14 +93,41 @@ average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
 		    end, 0, Avg),
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
 
+%% @doc average a list of items
 average_list_item(List, Folds, 0) ->
-    average_list_item(List, Folds, lists:map(fun ({Class, _}) -> {Class, 0}; ({Class, _, _}) -> {Class, 0, 0} end, List));
-average_list_item(List, Folds, Acc) ->
-    lists:zipwith(fun ({Class, A}, {Class, B}) ->
-			  {Class, B + A/Folds};
-		      ({Class, _, A}, {Class, _, B}) ->
-			  {Class, 0, B+A/Folds}
-		  end, List, Acc).
+    average_list_item(List, Folds, 
+		      lists:map(fun ({Class, _}) -> {Class, 0}; 
+				    ({Class, _, _}) -> {Class, 0, 0} 
+
+				end, List));
+average_list_item([], _, Acc) -> Acc;
+average_list_item([Item|Rest], Folds, Acc) ->
+    NewAcc = case Item of
+		 {Key, A} ->
+		     case lists:keytake(Key, 1, Acc) of
+			 {value, {Key, B}, AccRest} ->
+			     [{Key, B + A / Folds}|AccRest];
+			 false ->
+			     [{Key, A/Folds}|Acc]
+		     end;
+		 {Key, _, A} ->
+		     case lists:keytake(Key, 1, Acc) of
+			 {value, {Key, _, B}, AccRest} ->
+			     [{Key, 0, B + A / Folds}|AccRest];
+			 false ->
+			     [{Key, 0,  A/Folds}|Acc]
+		     end
+	     end,
+    average_list_item(Rest, Folds, NewAcc).
+
+    
+
+%    rr_log:info("~p ~p", [List, Acc]),
+ %   lists:zipwith(fun ({Class, A}, {Class, B}) ->
+%			  {Class, B + A/Folds};
+%		      ({Class, _, A}, {Class, _, B}) ->
+%			  {Class, 0, B+A/Folds}
+%		  end, List, Acc).
 
 
 %% @doc split examples and train and evaluate
