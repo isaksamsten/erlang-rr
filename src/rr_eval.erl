@@ -4,12 +4,10 @@
 %%%
 %%% @end
 %%% Created : 12 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
-
 -module(rr_eval).
 
 -export([
 	 cross_validation/4,
-	 average_cross_validation/3,
 	 split_validation/4,
 
 	 accuracy/1,
@@ -25,129 +23,16 @@
 	]).
 
 %% @headerfile "rr.hrl"
--include("rr.hrl"). %% note: for specs
+-include("rr.hrl").
 
-
--type result_list() :: {atom(), any()} | {atom(), any(), any()}.
--type result() :: {{atom(), atom(), Model::any()}, [result_list(),...]}.
--type result_set() :: {cv, Folds::integer(), [result(),...]} | {split, result()}.
-
-%% @doc
-%% Do cross-validation on Examples.
-%% @end
--spec cross_validation(features(), examples(), #rr_example{}, any()) -> result_set().
 cross_validation(Features, Examples, ExConf, Props) ->
-    Build = case proplists:get_value(build, Props) of
-		undefined -> throw({badarg, build});
-		Build0 -> Build0
-	    end,
-    Evaluate = case proplists:get_value(evaluate, Props) of
-		   undefined -> throw({badarg, evaluate});
-		   Evaluate0 -> Evaluate0
-	       end,
-    NoFolds = proplists:get_value(folds, Props, 10),
-    Average = proplists:get_value(average, Props, fun average_cross_validation/2),
-    Progress = proplists:get_value(progress, Props, fun (_) -> ok end),
-
-    Total0 = rr_example:cross_validation(
-	      fun (Train, Test, Fold) ->
-		      Progress(Fold),
-		      Model = Build(Features, Train, ExConf),
-		      Result = Evaluate(Model, Test, ExConf),
-		      {{{fold, Fold}, Result}, Model}
-	      end, NoFolds, Examples),
-    {Total, Models} = lists:unzip(Total0),
-    Avg = Average(Total, NoFolds),
-    {{cv, NoFolds, Total ++ [Avg]}, Models}.
-
-
-%% @private default method for averaging the results of cross-validation
-average_cross_validation(Result, Folds) ->
-    average_cross_validation(Result, Folds, [accuracy, auc, strength, correlation, c_s2, precision, recall,
-					     variance, oob_base_accuracy, base_accuracy, brier]).
-
-%% @doc average the cross-validation (for the results specified in Inputs)
-average_cross_validation(Result, Folds, Inputs) ->
-        average_cross_validation(Result, Folds, Inputs, []).
-
-%% @private average cross-validation
-average_cross_validation(_, _, [], Acc) ->
-    {{fold, average}, lists:reverse(Acc)};
-average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
-    A = lists:foldl(fun ({_, Measures}, Sum) ->
-			    case lists:keyfind(H, 1, Measures) of
-				{H, List, Auc} ->
-				    case Sum of
-					0 ->
-					    {Sum + Auc/Folds, average_list_item(List, Folds, Sum)};
-					{AvgSum, ListSum} ->
-					    {AvgSum + Auc/Folds, average_list_item(List, Folds, ListSum)}
-				    end;
-				{H, List} when is_list(List) ->
-				    average_list_item(List, Folds, Sum);
-				{H, O} ->
-				    Sum + O/Folds;
-				false ->
-				    Sum 
-			    end
-		    end, 0, Avg),
-    average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
-
-%% @doc average a list of items
-average_list_item(List, Folds, 0) ->
-    average_list_item(List, Folds, 
-		      lists:map(fun ({Class, _}) -> {Class, 0}; 
-				    ({Class, _, _}) -> {Class, 0, 0} 
-
-				end, List));
-average_list_item([], _, Acc) -> Acc;
-average_list_item([Item|Rest], Folds, Acc) ->
-    NewAcc = case Item of
-		 {Key, A} ->
-		     case lists:keytake(Key, 1, Acc) of
-			 {value, {Key, B}, AccRest} ->
-			     [{Key, B + A / Folds}|AccRest];
-			 false ->
-			     [{Key, A/Folds}|Acc]
-		     end;
-		 {Key, _, A} ->
-		     case lists:keytake(Key, 1, Acc) of
-			 {value, {Key, _, B}, AccRest} ->
-			     [{Key, 0, B + A / Folds}|AccRest];
-			 false ->
-			     [{Key, 0,  A/Folds}|Acc]
-		     end
-	     end,
-    average_list_item(Rest, Folds, NewAcc).
-
-    
-
-%    rr_log:info("~p ~p", [List, Acc]),
- %   lists:zipwith(fun ({Class, A}, {Class, B}) ->
-%			  {Class, B + A/Folds};
-%		      ({Class, _, A}, {Class, _, B}) ->
-%			  {Class, 0, B+A/Folds}
-%		  end, List, Acc).
-
+    cross_validation:evaluate(Features, Examples, ExConf, Props).
 
 %% @doc split examples and train and evaluate
 -spec split_validation(features(), examples(), #rr_example{}, any()) -> result_set().
 split_validation(Features, Examples, ExConf, Props) ->
-    Build = case proplists:get_value(build, Props) of
-		undefined -> throw({badarg, build});
-		Build0 -> Build0
-	    end,
-    Evaluate = case proplists:get_value(evaluate, Props) of
-		   undefined -> throw({badarg, evaluate});
-		   Evaluate0 -> Evaluate0
-	       end,
-
-    Ratio = proplists:get_value(ratio, Props, 0.66),
-    {Train, Test} = rr_example:split_dataset(Examples, Ratio),
-    Model = Build(Features, Train, ExConf),
-    Result = Evaluate(Model, Test, ExConf),
-    {{split, {{split, Ratio}, Result}}, Model}.
-	
+    split_validation:evaluate(Features, Examples, ExConf, Props).
+    
 %% @doc 
 %% Calculate the accuracy (i.e. the percentage of correctly
 %% classified examples) 
@@ -194,11 +79,11 @@ calculate_auc_for_classes([Pos|Rest], Predictions, NoExamples, Auc) ->
     NoPosEx = length(PosEx),
     if NoPosEx > 0 ->
 	    calculate_auc_for_classes(Rest, Predictions, NoExamples, 
-				      [{Pos, NoPosEx, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
-								    NoPosEx, NoExamples - NoPosEx, 0)}|Auc]);
+				      [{Pos, {NoPosEx, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
+								    NoPosEx, NoExamples - NoPosEx, 0)}}|Auc]);
        true ->
 	    calculate_auc_for_classes(Rest, Predictions, NoExamples,
-				      [{Pos, NoPosEx, 'n/a'}|Auc])
+				      [{Pos, {NoPosEx, 'n/a'}}|Auc])
     end.
 
 %% @private calculate auc

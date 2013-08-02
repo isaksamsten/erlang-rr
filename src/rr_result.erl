@@ -122,14 +122,14 @@ default_output_measures(Fold, Measures, Header) ->
     io:format("fold ~p ~n", [Fold]),
     lists:foreach(fun ({Name, Key}) ->
 			  case lists:keyfind(Key, 1, Measures) of
-			      {Key, Value} when is_list(Value)->
+			      {Key, Value} when is_list(Value)-> %% note: precision/recall
 				  io:format("~s:~n", [Name]),
 				  lists:foreach(fun({Class, P}) ->
 						io:format(" - ~s: ~p ~n", [Class, P])
 					end, Value);
-			      {Key, {Auc, Value}} ->
+			      {Key, {Value, Auc}} -> 
 				  io:format("area under ROC~n"),
-				  lists:foreach(fun({Class, _, P}) ->
+				  lists:foreach(fun({Class, {_, P}}) ->
 						io:format(" - ~s: ~p ~n", [Class, P])
 					end, Value),
 				  io:format(" average: ~p~n", [Auc]);			      
@@ -146,40 +146,6 @@ default_output_measures(Fold, Measures, Header) ->
 			  end
 		  end, Header).
 
-
-    %% lists:foreach(fun ({accuracy, Accuracy}) ->
-    %% 			  io:format("accuracy: ~p ~n", [Accuracy]);
-    %% 		      ({auc, Auc, Avg}) ->
-    %% 			  io:format("area under ROC~n"),
-    %% 			  lists:foreach(fun({Class, _, A}) ->
-    %% 						io:format("  ~s: ~p ~n", [Class, A])
-    %% 					end, Auc),
-    %% 			  io:format(" average: ~p ~n", [Avg]);
-    %% 		      ({oob_accuracy, OOB}) ->
-    %% 			  io:format("base oob-accuracy: ~p ~n", [OOB]);
-    %% 		      ({base_accuracy, Base}) ->
-    %% 			  io:format("base accuracy: ~p ~n", [Base]);
-    %% 		      ({strength, Margin}) ->
-    %% 			  io:format("strength: ~p ~n", [Margin]);
-    %% 		      ({correlation, C}) ->
-    %% 			  io:format("correlation: ~p ~n", [C]);
-    %% 		      ({c_s2, Cs2}) ->
-    %% 			  io:format("c/s^2: ~p ~n", [Cs2]);
-    %% 		      ({variance, A}) ->
-    %% 			  io:format("variance: ~p ~n", [A]);
-    %% 		      ({auc, Auc}) ->
-    %% 			  io:format("auc: ~p ~n", [Auc]);
-    %% 		      ({precision, Precision}) ->
-    %% 			  io:format("precision~n"),
-    %% 			  lists:foreach(fun({Class, P}) ->
-    %% 						io:format("  ~s: ~p ~n", [Class, P])
-    %% 					end, Precision);
-    %% 		      ({brier, Brier}) ->
-    %% 			  io:format("brier: ~p ~n", [Brier]);
-    %% 		      (_) ->
-    %% 			  ok
-    %% 		  end, Measures).
-    
 output_variable_importance([], _, _) ->
     ok;
 output_variable_importance([{FeatureId, Score}|Rest], N, No) ->

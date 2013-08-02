@@ -3,7 +3,7 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 12 May 2013 by Isak Karlsson <>
+%%% Created : 12 May 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rf).
 
 -define(DATE, "2013-05-16").
@@ -270,16 +270,16 @@ evaluate(Model, Test, ExConf, Conf) ->
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
-			     ({_, 'n/a', _}, Sum) -> 
+			     ({_, {'n/a', _}}, Sum) -> 
 				 Sum;
-			     ({_, No, A}, Sum) -> 
+			     ({_, {No, A}}, Sum) -> 
 				 Sum + No/NoTestExamples*A			     
 			 end, 0, Auc),
     Precision = rr_eval:precision(Matrix),
     Recall = rr_eval:recall(Matrix),
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy},
-     {auc, Auc, AvgAuc}, 
+     {auc, {Auc, AvgAuc}}, 
      {strength, Strength},
      {correlation, Correlation},
      {variance, Variance},

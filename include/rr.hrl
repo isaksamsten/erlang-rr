@@ -61,3 +61,7 @@
 
 -type distribute_fun() :: fun((feature(), exid()) -> distribute_example()).
 -type missing_fun() :: fun((predict | build, feature(), exid(), Left::number(), Right::number()) -> missing_example()).
+
+-type result_list() :: {atom(), any()} | {atom(), any(), any()}.
+-type result() :: {{atom(), atom(), Model::any()}, [result_list(),...]}.
+-type result_set() :: {cv, Folds::integer(), [result(),...]} | {split, result()} | {atom(), tuple()}.
