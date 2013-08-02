@@ -111,7 +111,7 @@ get_opt_name(Name, [{RealName, _, Long, _Default, _Descr}|Rest]) ->
 any_opt([], _) ->
     false;
 any_opt([O|Rest], Options) ->
-    case proplists:is_defined(O, Options) of
+    case lists:member(O, Options) of
 	true ->
 	    O;
 	false ->
