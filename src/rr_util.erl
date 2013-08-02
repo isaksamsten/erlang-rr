@@ -9,7 +9,9 @@
 -export([
 	 weighted_random/1,
 	 weighted_random/2,
-	 weighted_random/3
+	 weighted_random/3,
+
+	 safe_iolist_to_binary/1
 	]).
 
 -ifdef(TEST).
@@ -36,6 +38,11 @@ weighted_random1([{Weight, Item}|_], Rnd) when Rnd < Weight ->
     Item;
 weighted_random1([{Weight, _}|Rest], Rnd) ->
     weighted_random1(Rest, Rnd - Weight).
+
+safe_iolist_to_binary(List) when is_list(List) ->
+    iolist_to_binary(List);
+safe_iolist_to_binary(Value) ->
+    Value.
 
 -ifdef(TEST).
 

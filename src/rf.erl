@@ -326,7 +326,7 @@ evaluate(Model, Test, ExConf, Conf) ->
      {brier, Brier}].
 
 example_sampling(Value, Error) ->
-    case iolist_to_binary(Value) of
+    case rr_util:safe_iolist_to_binary(Value) of
 	<<"subagging">> ->
 	    fun rr_example:subset_aggregate/1;
 	<<"bagging">> ->
@@ -338,14 +338,14 @@ example_sampling(Value, Error) ->
     end.
 
 distribute(Value, Error) ->	
-    case iolist_to_binary(Value) of
+    case rr_util:safe_iolist_to_binary(Value) of
 	<<"default">> -> fun rr_example:distribute/3;
 	<<"rulew">> -> fun rr_rule:distribute_weighted/3;
 	Other -> Error("distribute", Other)
     end.
 
 missing_values(Value, Error) ->
-    case iolist_to_binary(Value) of
+    case rr_util:safe_iolist_to_binary(Value) of
 	<<"random">> -> fun rf_missing:random/5;
 	<<"randomw">> -> fun rf_missing:random_weighted/5;
 	<<"weighted">> -> fun rf_missing:weighted/5;
@@ -366,7 +366,7 @@ output(Options) ->
     end.
 
 progress(Value, Error) ->
-    case iolist_to_binary(Value) of
+    case rr_util:safe_iolist_to_binary(Value) of
 	<<"dots">> -> fun
 			  (done, done) -> io:format(standard_error, "~n", []);
 			  (_, _) -> io:format(standard_error, "..", [])
@@ -381,7 +381,7 @@ progress(Value, Error) ->
 
 score(Value, Error, Options) ->
     WeightFactor = proplists:get_value(weight_factor, Options, 0.5),
-    case iolist_to_binary(Value) of
+    case rr_util:safe_iolist_to_binary(Value) of
 	<<"info">> -> rf_tree:info();
 	<<"gini">> -> rf_tree:gini();
 	<<"gini-info">> -> rf_tree:gini_info(WeightFactor);	
@@ -403,7 +403,7 @@ no_features(TotalNoFeatures, Options) ->
 
 feature_sampling(Value, Error, Options, Prior) ->
     NoFeatures = proplists:get_value(no_features, Prior),
-    case iolist_to_binary(Value) of
+    case rr_util:safe_iolist_to_binary(Value) of
 	<<"weka">> ->
 	    rf_branch:weka(NoFeatures);
 	<<"resample">> ->
