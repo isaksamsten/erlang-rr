@@ -290,6 +290,8 @@ killer(Evaluate) ->
 %% @private evaluate Model using som well knonw evaluation metrics
 evaluate(Model, Test, ExConf, Conf) ->
     NoTestExamples = rr_example:count(Test),
+    ClassesInTest = lists:map(fun ({Class, _, _}) -> Class end, Test),
+
     Dict = rr_ensemble:evaluate_model(Model, Test, ExConf, Conf),
     Matrix = rr_eval:confusion_matrix(Dict),
 
@@ -303,15 +305,15 @@ evaluate(Model, Test, ExConf, Conf) ->
 
 
     Accuracy = rr_eval:accuracy(Dict),
-    Auc = rr_eval:auc(Dict, NoTestExamples),
+    Auc = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
     AvgAuc = lists:foldl(fun
-			     ({_, {'n/a', _}}, Sum) -> 
+			     ({_, {_, 'n/a'}}, Sum) -> 
 				 Sum;
 			     ({_, {No, A}}, Sum) -> 
-				 Sum + No/NoTestExamples*A			     
+				 Sum + No/NoTestExamples*A
 			 end, 0, Auc),
-    Precision = rr_eval:precision(Matrix),
-    Recall = rr_eval:recall(Matrix),
+    Precision = rr_eval:precision(ClassesInTest, Matrix),
+    Recall = rr_eval:recall(ClassesInTest, Matrix),
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy},
      {auc, {Auc, AvgAuc}}, 
