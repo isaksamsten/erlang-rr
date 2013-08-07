@@ -92,7 +92,7 @@
 	 
 	 {<<"no_features">>,    undefined,    "no-features", {string, <<"default">>},
 	  "Number of features to inspect at each split. If set to log log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
-	 {<<"no_rules">>,       undefined,    "no-rules",    {atom, ss},
+	 {<<"no_rules">>,       undefined,    "no-rules",    {string, <<"ss">>},
 	  "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used otherwise n is used."},
 
 	 {<<"output_predictions">>, $y,       "output-predictions", {boolean, false},
@@ -209,7 +209,6 @@ args(Rest, Prior) ->
 %% @todo refactor to use proplist
 main(Args) ->
     Options = rr:parse(Args, ?CMD_SPEC),
-    rr_log:info("~p", [Options]),
     case rr:any_opt([<<"help">>, <<"version">>, <<"examples">>, <<"observer">>], Options) of
 	<<"help">> ->
 	    help(),
@@ -225,7 +224,6 @@ main(Args) ->
 	false ->
 	    ok
     end,
-    rr_log:info("~p", [Options]),
     InputFile = case proplists:get_value(<<"input">>, Options) of
 		    undefined ->
 			rr:illegal("no input file defined"),
@@ -455,27 +453,26 @@ feature_sampling(Value, Error, Options, Prior) ->
 %% @todo rename and fix
 no_rules(Value, Error, Options) ->
     NoFeatures = proplists:get_value(no_features, Options),
-    case proplists:get_value(no_rules, Options) of
-	sh -> {NoFeatures, NoFeatures div 2};
-	ss -> {NoFeatures, NoFeatures};
-	sd -> {NoFeatures, NoFeatures * 2};
-	ds -> {NoFeatures * 2, NoFeatures};
-	dd -> {NoFeatures * 2, NoFeatures * 2};
-	dh -> {NoFeatures * 2, NoFeatures div 2};
-	hh -> {NoFeatures div 2, NoFeatures div 2};
-	hs -> {NoFeatures div 2, NoFeatures};
-	hd -> {NoFeatures div 2, NoFeatures * 2};	
-	Other -> rr:illegal_option("no-rules", Other)
+    case rr_util:safe_iolist_to_binary(Value) of
+	<<"sh">> -> {NoFeatures, NoFeatures div 2};
+	<<"ss">> -> {NoFeatures, NoFeatures};
+	<<"sd">> -> {NoFeatures, NoFeatures * 2};
+	<<"ds">> -> {NoFeatures * 2, NoFeatures};
+	<<"dd">> -> {NoFeatures * 2, NoFeatures * 2};
+	<<"dh">> -> {NoFeatures * 2, NoFeatures div 2};
+	<<"hh">> -> {NoFeatures div 2, NoFeatures div 2};
+	<<"hs">> -> {NoFeatures div 2, NoFeatures};
+	<<"hd">> -> {NoFeatures div 2, NoFeatures * 2};	
+	Other -> Error("no-rules", Other)
     end.
     
 rule_score(Value, Error) ->
-    case Value of
-	laplace -> fun rf_rule:laplace/2;
-	m -> fun rf_rule:m_estimate/2;
-	purity -> fun rf_rule:purity/2;
+    case rr_util:safe_iolist_to_binary(Value) of
+	<<"laplace">> -> fun rf_rule:laplace/2;
+	<<"m">> -> fun rf_rule:m_estimate/2;
+	<<"purity">> -> fun rf_rule:purity/2;
 	Other -> Error("rule-score", Other)					  
     end.
-
 
 show_examples() ->
     "Example 1: 10-fold cross validation 'car' dataset:
