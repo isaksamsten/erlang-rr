@@ -11,10 +11,10 @@
 	 split_validation/4,
 
 	 accuracy/1,
-	 auc/2,
+	 auc/3,
 	 brier/2,
-	 precision/1,
-	 recall/1,
+	 precision/2,
+	 recall/2,
 	 strength/2,
 	 variance/2,
 	 correlation/4,
@@ -57,33 +57,34 @@ correct(Predictions) ->
 %% Calculate the area under ROC for predictions (i.e. the ability of
 %% the model to rank true positives ahead of false positives)
 %% @end
--spec auc(dict(), integer()) -> [{Class::atom(), NoExamples::integer(), Auc::float()}].
-auc(Predictions, NoExamples) ->
-    calculate_auc_for_classes(dict:fetch_keys(Predictions), Predictions, NoExamples, []).
+-spec auc(any(), dict(), integer()) -> [{Class::atom(), NoExamples::integer(), Auc::float()}].
+auc(Classes, Predictions, NoExamples) ->
+    calculate_auc_for_classes(Classes, Predictions, NoExamples, []).
 
 calculate_auc_for_classes([], _, _, Acc) ->
     Acc;
 calculate_auc_for_classes([Pos|Rest], Predictions, NoExamples, Auc) ->
-    PosEx = dict:fetch(Pos, Predictions),
-    Sorted = sorted_predictions(
-	       lists:map(fun ({_, P}) -> {pos, find_prob(Pos, P)} end, PosEx), 
-	       dict:fold(fun(Class, Values, Acc) ->
-				 if Class /= Pos ->
-					 lists:foldl(fun({_, P}, Acc0) ->
-							     [{neg, find_prob(Pos, P)}|Acc0] 
-						     end, Acc, Values);
-				    true ->
-					 Acc
-				 end
-			 end, [], Predictions)),
-    NoPosEx = length(PosEx),
-    if NoPosEx > 0 ->
+    case dict:find(Pos, Predictions) of
+	{ok, PosEx} -> 
+	    Sorted = sorted_predictions(
+		       lists:map(fun ({_, P}) -> {pos, find_prob(Pos, P)} end, PosEx), 
+		       dict:fold(fun(Class, Values, Acc) ->
+					 if Class /= Pos ->
+						 lists:foldl(fun({_, P}, Acc0) ->
+								     [{neg, find_prob(Pos, P)}|Acc0] 
+							     end, Acc, Values);
+					    true ->
+						 Acc
+					 end
+				 end, [], Predictions)),
+	    NoPosEx = length(PosEx),
+	    true = NoPosEx > 0,
 	    calculate_auc_for_classes(Rest, Predictions, NoExamples, 
 				      [{Pos, {NoPosEx, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
-								    NoPosEx, NoExamples - NoPosEx, 0)}}|Auc]);
-       true ->
+								     NoPosEx, NoExamples - NoPosEx, 0)}}|Auc]);
+	error -> 
 	    calculate_auc_for_classes(Rest, Predictions, NoExamples,
-				      [{Pos, {NoPosEx, 'n/a'}}|Auc])
+				      [{Pos, {0, 'n/a'}}|Auc])
     end.
 
 %% @private calculate auc
@@ -201,32 +202,42 @@ calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
 
 
 %% @doc Calculate the precision when predicting each class
--spec precision(dict()) -> [{Class::atom(), Precision::float()}].
-precision(Matrix) ->
-    Classes = dict:fetch_keys(Matrix),
+-spec precision([atom(),...], dict()) -> [{Class::atom(), Precision::float()}].
+precision(Classes, Matrix) ->
     lists:foldl(fun (Class, Acc) ->
 			[{Class, precision_for_class(Class, Matrix)}|Acc]
 		end, [], Classes).
     
 precision_for_class(Class, Matrix) ->
-    Row = dict:fetch(Class, Matrix),
-    Tp = dict:fetch(Class, Row),
-    Rest = dict:fold(fun (_K, Value, Acc) -> Value + Acc end, 0, Row),
-    Tp / Rest.
+    case dict:find(Class, Matrix) of
+	error -> 'n/a';
+	{ok, Row} ->
+	    Tp = dict:fetch(Class, Row),
+	    Rest = dict:fold(fun (_K, Value, Acc) -> Value + Acc end, 0, Row),
+	    Tp / Rest
+    end.
 
-recall(Matrix) ->
-    Classes = dict:fetch_keys(Matrix),
+recall(Classes, Matrix) ->
     lists:foldl(fun (Class, Acc) ->
 			[{Class, recall_for_class(Class, Matrix)}|Acc]
 		end, [], Classes).
 
 recall_for_class(Class, Matrix) ->
-    case dict:fetch(Class, dict:fetch(Class, Matrix)) of
-	0 -> 0;
-	Value ->
-	    Value / dict:fold(fun (_, Dict, Value) ->
-				      dict:fetch(Class, Dict) + Value
-			      end, 0, Matrix)
+    case dict:find(Class, Matrix) of
+	error -> 'n/a';
+	{ok, Column} ->
+	    case dict:find(Class, Column) of
+		error -> 'n/a';
+		{ok, Value} ->
+		    case dict:fold(fun (_, Dict, Value) ->
+						   ValueB = dict:fetch(Class, Dict),
+					   Value + ValueB
+				   end, 0, Matrix) of
+			0 -> 'n/a';
+			ValueB ->
+			    Value / ValueB
+		    end				
+	    end
     end.
 			     
 

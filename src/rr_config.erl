@@ -28,14 +28,16 @@ read_config_file(File) ->
 
 init(Props) when is_list(Props) ->
     Pid = spawn_link(?MODULE, loop, [undefined, [], Props]),
-    register(config, Pid).
+    register(config, Pid),
+    ok.
 
 %% @doc if initialized with a file, the config will be reloaded if the config is updated
 init(File, _Props) ->
     case read_config_file(File) of
 	{ok, Value} ->
 	    Pid = spawn_link(?MODULE, loop, [File, last_modified(File), Value]),
-	    register(config, Pid);
+	    register(config, Pid),
+	    ok;
 	Error ->
 	    throw(Error)
     end.
