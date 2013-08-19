@@ -38,9 +38,8 @@ random_partition() ->
 random_partition(build, _, ExId, _, _) ->
     partition(ExId, 0.5);
 random_partition(predict, _, ExId, _, _) ->
-    {direction(random:uniform()) =< 0.5, 
+    {direction(random:uniform() =< 0.5), 
      {rr_example:exid(ExId), rr_example:count(ExId)}}.
-
 weighted_partition(build, _, ExId, NoLeft, NoRight) -> 
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     partition(ExId, LeftFraction);
