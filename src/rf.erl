@@ -119,25 +119,32 @@ new(Props) ->
 		     X -> X
 		 end,
 
-    Cores = proplists:get_value(no_cores, Props, erlang:system_info(schedulers)),
-    Missing = proplists:get_value(missing_values, Props, fun rf_missing:weighted/5),
+    Cores = proplists:get_value(no_cores, Props, 
+				erlang:system_info(schedulers)),
+    Missing = proplists:get_value(missing_values, Props, 
+				  fun rf_missing:weighted/5),
     Progress = proplists:get_value(progress, Props, fun (_, _) -> ok end),
     Score = proplists:get_value(score, Props, rf_tree:info()),
     NoTrees = proplists:get_value(no_trees, Props, 100),
-    Prune = proplists:get_value(pre_prune, Props, rf_tree:example_depth_stop(2, 1000)),
+    Prune = proplists:get_value(pre_prune, Props, 
+				rf_tree:example_depth_stop(2, 1000)),
 
-    FeatureSampling = proplists:get_value(feature_sampling, Props, rf_branch:subset(NoFeatures)),
-    ExampleSampling = proplists:get_value(example_sampling, Props, fun rr_example:bootstrap_aggregate/1),
-    Distribute = proplists:get_value(distribute, Props, fun rr_example:distribute/3),
+    FeatureSampling = proplists:get_value(feature_sampling, Props,
+					  rf_branch:subset(NoFeatures)),
+    ExampleSampling = proplists:get_value(example_sampling, Props,
+					  fun rr_example:bootstrap_aggregate/1),
+    Distribute = proplists:get_value(distribute, Props,
+				     fun rr_example:distribute/3),
     BaseLearner = proplists:get_value(base_learner, Props, rf_tree),
     Split = proplists:get_value(split, Props, fun rf_tree:random_split/5),
     Tree = #rf_tree{
 	      score = Score,
 	      prune = Prune,
 	      branch = FeatureSampling,
-	      split = Split, %fun rf_tree:random_split/4,
+	      split = Split,
 	      distribute = Distribute,
-	      missing_values = Missing
+	      missing_values = Missing,
+	      no_features = fun (T) -> trunc(math:log(T)/math:log(2)) end
 	     },
     Ensemble = #rr_ensemble {
 		  progress = Progress,
@@ -148,12 +155,16 @@ new(Props) ->
 		 },
 
     Build = fun (Features, Examples, ExConf) ->
-		    rr_ensemble:generate_model(Features, Examples, ExConf, Ensemble)
+		    {BaseLearner, Tree0} = Ensemble#rr_ensemble.base_learner,
+		    NewEnsemble = Ensemble#rr_ensemble{base_learner={BaseLearner,
+								     Tree0#rf_tree{no_features=length(Features)}}},
+		    rr_ensemble:generate_model(Features, Examples, 
+					       ExConf, NewEnsemble)
 	    end,
     Evaluate = fun (Model, Test, ExConf) ->
 		       evaluate(Model, Test, ExConf, Ensemble)
 	       end,
-    {Build, Evaluate, Ensemble}.							     
+    {Build, Evaluate, Ensemble}.
 
 %% @doc convert key from arguments to a function for the rf agorithm
 %% Proplist must contain: {no_features, NoFeatures}
@@ -210,7 +221,8 @@ args(Rest, Prior) ->
 main(Args) ->
     Options = rr:parse(Args, ?CMD_SPEC),
     rr_log:info("~p", [Options]),
-    case rr:any_opt([<<"help">>, <<"version">>, <<"examples">>, <<"observer">>], Options) of
+    case rr:any_opt([<<"help">>, <<"version">>, 
+		     <<"examples">>, <<"observer">>], Options) of
 	<<"help">> ->
 	    help(),
 	    halt();
@@ -249,22 +261,30 @@ main(Args) ->
     rr_log:debug("arguments: ~p", [RfArgs]),
 
     {Build, Evaluate, _} = rf:new([{base_learner, rf_tree},
-				   {progress, args(<<"progress">>, Options, ArgProps)}|RfArgs]),
+				   {progress, args(<<"progress">>, 
+						   Options, ArgProps)}|RfArgs]),
 
     ExperimentTime = now(),
     case proplists:get_value(<<"mode">>, Options) of
 	split ->
-	    {Res, _Models} = rr_eval:split_validation(Features, Examples, ExConf,
-						     [{build, Build}, 
-						      {evaluate, killer(Evaluate)}, 
-						      {ratio, proplists:get_value(<<"ratio">>, Options)}]),
+	    Ratio = proplists:get_value(<<"ratio">>, Options),
+	    {Res, _Models} = 
+		rr_eval:split_validation(Features, Examples, ExConf,
+					 [{build, Build}, 
+					  {evaluate, killer(Evaluate)}, 
+					  {ratio, Ratio}]),
 	    Output(Res);
 	cv ->
-	    {Res, _Models} = rr_eval:cross_validation(Features, Examples, ExConf,
-						     [{build, Build}, 
-						      {evaluate, killer(Evaluate)}, 
-						      {progress, fun (Fold) -> io:format(standard_error, "fold ~p ", [Fold]) end},
-						      {folds, proplists:get_value(<<"folds">>, Options)}]),
+	    CvProgress = fun (Fold) -> 
+				 io:format(standard_error, "fold ~p ", [Fold])
+			 end,
+	    Folds = proplists:get_value(<<"folds">>, Options),
+	    {Res, _Models} = 
+		rr_eval:cross_validation(Features, Examples, ExConf,
+					 [{build, Build}, 
+					  {evaluate, killer(Evaluate)}, 
+					  {progress, CvProgress},
+					  {folds, Folds}]),
 	    Output(Res);
 	Other ->
 	    rr:illegal_option("mode", Other)
@@ -279,7 +299,8 @@ main(Args) ->
     rr_config:stop(),
     rr_log:stop().
 
-%% @doc kill (to clean up unused models) after evaluation (to reduce memory footprint during cross validation)
+%% @doc kill (to clean up unused models) after evaluation (to reduce
+%% memory footprint during cross validation)
 killer(Evaluate) ->
     fun (Model, Test, ExConf) ->
 	    Result = Evaluate(Model, Test, ExConf),
@@ -300,7 +321,8 @@ evaluate(Model, Test, ExConf, Conf) ->
     
     Strength = rr_eval:strength(Dict, NoTestExamples),
     Variance = rr_eval:variance(Dict, NoTestExamples),
-    Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, Conf#rr_ensemble.no_classifiers),
+    Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, 
+				      Conf#rr_ensemble.no_classifiers),
 
 
 
@@ -374,8 +396,10 @@ progress(Value, Error) ->
 			  (_, _) -> io:format(standard_error, "..", [])
 		      end;
 	<<"numeric">> -> fun
-			     (done, done) -> io:format(standard_error, "~n", []);
-			     (Id, T) -> io:format(standard_error, "~p/~p.. ", [Id, T])
+			     (done, done) -> 
+				 io:format(standard_error, "~n", []);
+			     (Id, T) -> 
+				 io:format(standard_error, "~p/~p.. ", [Id, T])
 			 end;
 	<<"none">> -> fun(_, _) -> ok end;
 	Other -> Error("progress", Other)
@@ -397,7 +421,9 @@ no_features(TotalNoFeatures, Options) ->
 	X ->
 	    case rr_example:format_number(X) of
 		{true, Number} when Number > 0 -> Number;
-		_ -> rr:illegal(io_lib:format("invalid number to argument '~s'", ["no-features"]))
+		_ -> rr:illegal(
+		       io_lib:format("invalid number to argument '~s'", 
+				     ["no-features"]))
 	    end;
 	Other ->
 	    rr:illegal_option("no-features", Other)
@@ -429,9 +455,10 @@ feature_sampling(Value, Error, Options, Prior) ->
 	    RuleScore = args(<<"rule_score">>, Options, Prior),
 	    rf_branch:choose_rule(NewNoFeatures, NoRules, RuleScore);
 	<<"subset">> -> 
-	    rf_branch:subset(NoFeatures);
+	    rf_branch:subset();
 	<<"random-chisquare">> ->
-	    rf_branch:random_chisquare(NoFeatures, NoFeatures, proplists:get_value(weight_factor, Options));
+	    Weight = proplists:get_value(weight_factor, Options),
+	    rf_branch:random_chisquare(NoFeatures, NoFeatures, Weight);
 	<<"chisquare">> ->
 	    F = proplists:get_value(weight_factor, Options),
 	    rf_branch:chisquare(NoFeatures, NoFeatures, F);
@@ -501,14 +528,15 @@ are listed.
 
 Example 5: 0.7 percent training examples, for multiple dataset and output
 evaluations csv-formated. This could be achieved using a bash-script:
-  > for f in data/*.txt; do ./rr -i \"$f\" -s -r 0.7 -o csv >> result.csv; done~n".
+  > for f in data/*.txt; do ./rr -i \"$f\" -s -r 0.7 -o csv >> result.csv; 
+done~n".
 
 show_information() -> 
     io_lib:format("rf (Random Forest Learner) ~s.~s.~s (build date: ~s)
 Copyright (C) 2013+ ~s
 
-Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR, ?AUTHOR]).
-
+Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, 
+		    ?DATE, ?AUTHOR, ?AUTHOR]).
 
 -ifdef(TEST).
 -ifdef(PROFILE).
@@ -517,16 +545,20 @@ profile_test_() ->
 
 profile_tests() -> 
     [
-     {"Profile car dataset", {timeout, 60, profile("../data/car.txt", "PROFILE_CAR.txt")}},
-     {"Profile iris dataset", {timeout, 60, profile("../data/iris.txt", "PROFILE_IRIS.txt")}},
-     {"Profile spambase dataset", {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE.txt")}}
+     {"Profile car dataset", 
+      {timeout, 60, profile("../data/car.txt", "PROFILE_CAR.txt")}},
+     {"Profile iris dataset", 
+      {timeout, 60, profile("../data/iris.txt", "PROFILE_IRIS.txt")}},
+     {"Profile spambase dataset", 
+      {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE.txt")}}
     ].
 
 profile(In, Out) ->
     fun() ->
 	    File = csv:binary_reader(In),
 	    {Features, Examples, Dataset} = rr_example:load(File, 4),
-	    {Build, _Evaluate, _} = rf:new([{no_features, trunc(math:log(length(Features))/math:log(2))}]),
+	    NoFeatures = trunc(math:log(length(Features))/math:log(2)),
+	    {Build, _Evaluate, _} = rf:new([{no_features, NoFeatures}]),
 	    eprof:start(),
 	    eprof:log(Out),
 	    eprof:profile(

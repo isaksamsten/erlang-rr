@@ -10,7 +10,7 @@
 	 %% standard approaches
 	 random/0,
 	 all/0,
-	 subset/1,
+	 subset/0,
 	 random_subset/2,
 
 	 %% multi-feature approaches
@@ -50,12 +50,21 @@
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
 
+subset(_) ->
+    10.
+
 %% @doc evaluate a subset of n random features
--spec subset(integer()) -> branch_fun().
-subset(NoFeatures) ->
+-spec subset() -> branch_fun().
+subset() ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
-	    NewFeatures = rr_example:random_features(Features, NoFeatures),
+	    #rf_tree{
+	       score = Score, 
+	       split = Split, 
+	       distribute = Distribute, 
+	       missing_values = Missing,
+	       no_features = NoFeatures
+	      } = Conf,
+	    NewFeatures = rr_example:random_features(Features, NoFeatures(length(Features))),
 	    {rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing), NewFeatures}
     end.
 

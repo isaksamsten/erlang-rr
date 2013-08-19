@@ -9,7 +9,7 @@
 	  split :: any(),
 	  distribute :: distribute_fun(),
 	  missing_values :: missing_fun(),
-	  no_features = 0
+	  no_features :: no_features_fun()
 	 }).
 
 %%
@@ -22,7 +22,9 @@
 -record(rf_node, {id, 
 		  score, 
 		  feature, 
-		  distribution :: {LeftCount::number(), RightCount::number(), Class::atom()},
+		  distribution :: {LeftCount::number(), 
+				   RightCount::number(), 
+				   Class::atom()},
 		  left, 
 		  right}).
 
@@ -40,5 +42,8 @@
 -type tree() :: #rf_node{} | #rf_leaf{}.
 -type prune_fun() :: fun((examples(), Depth::number()) -> boolean()).
 -type pre_prune_fun() :: fun((split(), examples(), number()) -> boolean()).
--type branch_fun() :: fun((features(), examples(), number(), #rf_tree{}) -> #rr_candidate{}). 
+-type branch_fun() :: fun((features(), examples(), number(), #rf_tree{}) -> 
+				 #rr_candidate{}). 
 -type score_fun() :: fun((split(), Total::number()) -> score()).
+-type no_features_fun() :: fun((TotalNoFeatures::number()) -> 
+				NewNoFeatures::number()).

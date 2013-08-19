@@ -102,7 +102,7 @@ build_decision_node([], [], Importance, Total, _Error, _ExConf, _Conf, Id) ->
     {make_leaf(Id, [], error), Importance, Total};
 build_decision_node([], Examples, Importance, Total, _Error, _ExConf, _Conf, Id) ->
     {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
-build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, ExConf, _Conf, Id) ->
+build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _ExConf, _Conf, Id) ->
     {make_leaf(Id, Examples, {Class, Count}), Importance, Total};
 build_decision_node(Features, Examples, Importance, Total, Error, ExConf, Conf, Id) ->
     #rf_tree{prune=Prune, pre_prune = _PrePrune, branch=Branch, depth=Depth} = Conf,
