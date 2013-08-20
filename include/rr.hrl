@@ -19,8 +19,6 @@
 	 }).
 
 %%
-%%
-%%
 -record(rr_rule, {
 	  branch,
 	  score,
@@ -29,22 +27,33 @@
 	  missing_values
 	 }).
 
-%%
 %% references to data storages
-%%
 -record(rr_example, {
 	  examples :: number(),
 	  features :: number(),
 	  predictions :: number()
 	 }).
 
--type exid() :: Id::number() | {Id::number(), Id::number()}.
+%% record of examples of class class
+-record(examples, {
+	  class :: atom(),
+	  count :: number(),
+	  exids :: [exid(),...]
+	 }.
+
+%% a particular example (with id)
+-record(exid, {
+	  id :: integer(),
+	  count = 1 :: number() %% note: add 
+	 }.
+
+-type exid() :: Id::number() | {Id::number(), Id::number()} | #exid{}.
 -type feature() :: {Type::atom(), Id::number()} | 
 		   {rule, rule(), Lengt::number()} |
 		   tuple().
 -type features() :: [feature()].
 
--type example() :: {Class::atom(), Count::number(), Examples::[exid(),...]}.
+-type example() :: {Class::atom(), Count::number(), Examples::[exid(),...]} | #examples{}.
 -type examples() :: [example()].
 
 -type prediction() :: {{Class::atom(), Score::number()}, NodeId::[number(),...]}.

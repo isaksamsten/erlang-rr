@@ -122,7 +122,7 @@ load(File, Core) ->
 %% @doc load a dataset from file using Core cores to Dataset 
 -spec load(string(), number(), #rr_example{}) -> {features(), examples()}.
 load(File, Cores, Dataset) ->
-    #rr_example{features = FeatureTable, examples = ExTable, predictions = PredictionsTable} = Dataset,
+    #rr_example{features = FeatureTable, examples = ExTable} = Dataset,
     {ClassId, Types} = case csv:next_line(File) of
 			   {ok, Types0, _} ->
 			       parse_type_declaration(Types0);
