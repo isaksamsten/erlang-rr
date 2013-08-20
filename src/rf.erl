@@ -9,7 +9,7 @@
 -define(DATE, "2013-05-16").
 -define(MAJOR_VERSION, "1").
 -define(MINOR_VERSION, "0").
--define(REVISION, "0.0").
+-define(REVISION, "0.1").
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 -export([
@@ -248,11 +248,9 @@ main(Args) ->
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
 
     RfArgs = args(Options, fun rr:illegal_option/2),
-    rr_log:debug("arguments: ~p", [RfArgs]),
-
-    {Build, Evaluate, _} = rf:new([{base_learner, rf_tree},
-				   {progress, args(<<"progress">>, 
-						   Options, fun rr:illegal_option/2)}|RfArgs]),
+    {Build, Evaluate, Config} = rf:new([{base_learner, rf_tree},
+					{progress, args(<<"progress">>, 
+							Options, fun rr:illegal_option/2)}|RfArgs]),
 
     ExperimentTime = now(),
     case proplists:get_value(<<"mode">>, Options) of
@@ -275,6 +273,14 @@ main(Args) ->
 					  {evaluate, killer(Evaluate)}, 
 					  {progress, CvProgress},
 					  {folds, Folds}]),
+	    Output(Res);
+	build ->
+	    Model = Build(Features, Examples, ExConf),
+	    rr_ensemble:save(Model, Config, proplists:get_value(<<"model_file">>, Options, "undefined-model.rr"));
+	eval ->
+	    Model = rr_ensemble:load(proplists:get_value(<<"model_file">>, Options),
+				     ExConf, proplists:get_value(<<"cores">>, Options, 4)),
+	    Res = evaluate(Model, Examples, ExConf, Config),
 	    Output(Res);
 	Other ->
 	    rr:illegal_option("mode", Other)

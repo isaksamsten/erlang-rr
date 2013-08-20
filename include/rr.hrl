@@ -38,7 +38,7 @@
 -record(exid, {
 	  id :: integer(),
 	  count = 1 :: number() %% note: add weight etc.
-	 }.
+	 }).
 
 -type exid() :: Id::number() | {Id::number(), Id::number()} | #exid{}.
 -type feature() :: {Type::atom(), Id::number()} | 
@@ -46,7 +46,7 @@
 		   tuple().
 -type features() :: [feature()].
 
--type example() :: {Class::atom(), Count::number(), Examples::[exid(),...]} | #examples{}.
+-type example() :: {Class::atom(), Count::number(), Examples::[exid(),...]}.
 -type examples() :: [example()].
 
 -type prediction() :: {{Class::atom(), Score::number()}, NodeId::[number(),...]}.

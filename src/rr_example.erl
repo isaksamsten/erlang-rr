@@ -419,8 +419,8 @@ split_feature(_Me, _Feature, [], _, Left, Right, Missing) ->
     {Left, Right, Missing};
 split_feature(Me, Feature, [{Class, _, ExampleIds}|Examples], 
 	      Distribute, Left, Right, Missing) ->
-    DefaultDist = {Class, 0, []}, {Class, 0, []}, {Class, 0, []},
-    case split_class_distribution(Me, Feature, ExampleIds, Distribute, Class, DefaultDist) of
+    case split_class_distribution(Me, Feature, ExampleIds, Distribute, Class, 
+				  {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
 	{LeftSplit, RightSplit, MissingSplit} ->
 	    split_feature(Me, Feature, Examples, Distribute, 
 			  [LeftSplit|Left], 
