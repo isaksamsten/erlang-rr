@@ -343,16 +343,28 @@ split_class_distribution(Me, Feature, [ExampleId|Examples], Distribute, Class,
     {NewLeftExamples, NewRightExamples, NewMissingExamples} = 
 	case Distribute(Me, Feature, ExampleId) of
 	    {'?', Count} ->
-		{LeftExamples, RightExamples, {Class, NoMissing + Count, [ExampleId|Missing]}};
+		{LeftExamples, 
+		 RightExamples, 
+		 {Class, NoMissing + Count, [ExampleId|Missing]}};
 	    {left, Count} ->
-		{{Class, NoLeft + Count, [ExampleId|Left]}, RightExamples, MissingExamples};
+		{{Class, NoLeft + Count, [ExampleId|Left]}, 
+		 RightExamples, 
+		 MissingExamples};
 	    {right, Count} ->
-		{LeftExamples, {Class, NoRight + Count, [ExampleId|Right]}, MissingExamples};
+		{LeftExamples, 
+		 {Class, NoRight + Count, [ExampleId|Right]}, 
+		 MissingExamples};
 	    {left, {_, NewNo} = NewEx, {_, NewNoMissing} = NewMissingEx} ->
-		{{Class, NoLeft + NewNo, [NewEx|Left]}, RightExamples, {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
+		{{Class, NoLeft + NewNo, [NewEx|Left]}, 
+		 RightExamples, 
+		 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
 	    {right, {_, NewNo} = NewEx, {_, NewNoMissing} = NewMissingEx} ->
-		{LeftExamples, {Class, NoLeft + NewNo, [NewEx|Right]}, {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
-	    {all, {_, NewNoLeft} = NewLeftEx, {_, NewNoRight} = NewRightEx, {_, NewNoMissing} = NewMissingEx} ->
+		{LeftExamples, {Class, NoLeft + NewNo, [NewEx|Right]}, 
+		 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
+	    {all, 
+	     {_, NewNoLeft} = NewLeftEx, 
+	     {_, NewNoRight} = NewRightEx, 
+	     {_, NewNoMissing} = NewMissingEx} ->
 		{{Class, NoLeft + NewNoLeft, [NewLeftEx|Left]}, 
 		 {Class, NoRight + NewNoRight, [NewRightEx|Right]},
 		 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
@@ -378,7 +390,8 @@ distribute(Me, {{numeric, FeatureId}, Threshold}, ExId) ->
 	Value when Value >= Threshold -> left;
 	_ -> right
     end, count(ExId)};
-distribute(Me, {{combined, FeatureA, FeatureB}, {combined, SplitValueA, SplitValueB}}, ExId) ->
+distribute(Me, {{combined, FeatureA, FeatureB}, 
+		{combined, SplitValueA, SplitValueB}}, ExId) ->
     {A, _} = distribute(Me, {FeatureA, SplitValueA}, ExId),
     {B, C} = distribute(Me, {FeatureB, SplitValueB}, ExId),
     {case {A, B} of
@@ -404,22 +417,27 @@ distribute(Me, {rule, Rule, _Lenght}, ExId) ->
 %% @private split data set using Feature
 split_feature(_Me, _Feature, [], _, Left, Right, Missing) ->
     {Left, Right, Missing};
-split_feature(Me, Feature, [{Class, _, ExampleIds}|Examples], Distribute, Left, Right, Missing) ->
-    case split_class_distribution(Me, Feature, ExampleIds, Distribute, Class, {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
+split_feature(Me, Feature, [{Class, _, ExampleIds}|Examples], 
+	      Distribute, Left, Right, Missing) ->
+    DefaultDist = {Class, 0, []}, {Class, 0, []}, {Class, 0, []},
+    case split_class_distribution(Me, Feature, ExampleIds, Distribute, Class, DefaultDist) of
 	{LeftSplit, RightSplit, MissingSplit} ->
-	    split_feature(Me, Feature, Examples, Distribute, [LeftSplit|Left], [RightSplit|Right], [MissingSplit|Missing])
+	    split_feature(Me, Feature, Examples, Distribute, 
+			  [LeftSplit|Left], 
+			  [RightSplit|Right], 
+			  [MissingSplit|Missing])
     end.
 
 %% @private find the best numeric split point
 find_numeric_split(Me, FeatureId, Examples, Gain) ->
     case lists:keysort(1, lists:foldl(
 			    fun ({Class, _, ExIds}, NewIds) ->
-						  lists:foldl(fun(ExId, Acc) ->
-								      case feature(Me, ExId, FeatureId) of
-									  '?' -> Acc;
-									  Feature -> [{Feature, Class}|Acc]
-								      end
-							      end, NewIds, ExIds)
+				    lists:foldl(fun(ExId, Acc) ->
+							case feature(Me, ExId, FeatureId) of
+							    '?' -> Acc;
+							    Feature -> [{Feature, Class}|Acc]
+							end
+						end, NewIds, ExIds)
 			    end, [], Examples)) of
 	[{Value, Class}|ClassIds] ->
 	    Gt = lists:map(fun({C, Num, _}) -> {C, Num, []} end, Examples),
@@ -429,7 +447,7 @@ find_numeric_split(Me, FeatureId, Examples, Gain) ->
 	    Total = rr_example:count(Examples),
 	    find_numeric_split(ClassIds, First, FeatureId, Gain, Total, {Value/2, inf}, Dist);
 	[] ->
-	    0.0 %% All values were missing. We have to guess....
+	    0.0 %% note: all values are missing
     end.
 
 find_numeric_split([], _, _, _, _, {Threshold, _}, _) ->
@@ -495,7 +513,9 @@ sample_split_value(Me, Feature, Examples, Ex1, Ex2) ->
 %% @private sample two features from the same example
 sample_combined(Me, FeatureA, FeatureB, Examples) ->
     {Ex1, Ex2} = sample_example_pair(Examples),
-    {combined, sample_split_value(Me, FeatureA, Examples, Ex1, Ex2), sample_split_value(Me, FeatureB, Examples, Ex1, Ex2)}.
+    {combined, 
+     sample_split_value(Me, FeatureA, Examples, Ex1, Ex2), 
+     sample_split_value(Me, FeatureB, Examples, Ex1, Ex2)}.
 
 %% @private sample a numeric split point
 sample_numeric_split(Me, FeatureId, Examples) ->

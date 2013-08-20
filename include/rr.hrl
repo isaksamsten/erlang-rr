@@ -34,17 +34,10 @@
 	  predictions :: number()
 	 }).
 
-%% record of examples of class class
--record(examples, {
-	  class :: atom(),
-	  count :: number(),
-	  exids :: [exid(),...]
-	 }.
-
 %% a particular example (with id)
 -record(exid, {
 	  id :: integer(),
-	  count = 1 :: number() %% note: add 
+	  count = 1 :: number() %% note: add weight etc.
 	 }.
 
 -type exid() :: Id::number() | {Id::number(), Id::number()} | #exid{}.
@@ -60,9 +53,13 @@
 
 -type split() ::  {left | right, examples()} | {both, examples(), examples()}.
 -type missing_example() :: {left, exid()} | {right, exid()} | {both, exid(), exid()}.
--type distribute_example() :: {'?', Count::number()} | {left, Count::number()} | {right, Count::number()} |
-			      {left, exid(), exid()} | {right, exid(), exid()} |
-			      {both, exid(), exid()} | {all, exid(), exid(), exid()}.
+-type distribute_example() :: {'?', Count::number()} | 
+			      {left, Count::number()} | 
+			      {right, Count::number()} |
+			      {left, Left::exid(), Missing::exid()} | 
+			      {right, Rigth::exid(), Missing::exid()} |
+			      {both, Left::exid(), Right::exid()} | 
+			      {all, Left::exid(), Right::exid(), Missing::exid()}.
 			   
 -type score() :: {Total::number(), Left::number(), Right::number()}.
 -type classifier() :: {No::number(), Base::atom()}.
