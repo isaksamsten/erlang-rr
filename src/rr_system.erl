@@ -8,14 +8,14 @@
 -module(rr_system).
 
 -export([
-	 save/3,
-	 save/2,
-	 load/1
+	 save_model/3,
+	 save_model/2,
+	 load_model/1
 	]).
 
 -define(VERSION, '1.0').
 
-save(Model, File, Opts) ->
+save_model(Model, File, Opts) ->
     Compress = proplists:get_value(compress, Opts, true),
     ModelDump = [{file_version, ?VERSION},
 		 {model, Model}],
@@ -27,10 +27,10 @@ save(Model, File, Opts) ->
     file:write_file(File, Dump),
     ok.
 
-save(Model, File) ->
-    save(Model, File, []).
+save_model(Model, File) ->
+    save_model(Model, File, []).
 
-load(File) ->
+load_model(File) ->
     case file:read_file(File) of
 	{ok, Binary} ->
 	    load_file(Binary);

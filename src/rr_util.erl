@@ -11,6 +11,8 @@
 	 weighted_random/2,
 	 weighted_random/3,
 
+	 partition/2,
+
 	 safe_iolist_to_binary/1
 	]).
 
@@ -43,6 +45,13 @@ safe_iolist_to_binary(List) when is_list(List) ->
     iolist_to_binary(List);
 safe_iolist_to_binary(Value) ->
     Value.
+
+%% @doc parttion elements from List evenly over each list in Parts
+-spec partition(List::[], Parts::[[]]) -> [[]].
+partition([], Parts) ->
+    Parts;				     
+partition([Model|Models], [Part|Parts]) ->
+    partition(Models, Parts ++ [[Model|Part]]).
 
 -ifdef(TEST).
 

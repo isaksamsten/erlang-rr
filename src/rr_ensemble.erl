@@ -17,46 +17,45 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+%% @doc exit an ensemble builder set in evaluator state
 kill(Model) ->
     Model ! {exit, self()}.
 
-save(Model, Conf, File) ->
+%% @doc collect the base learners and save them to a file
+save(File, Model, Conf) ->
     Collect = fun (BaseModels, _) -> BaseModels end,
     Models = perform(Model, {collect_models, Collect, fun lists:append/2}),
     ModelDump = [{version, ?VERSION},
 		 {base_models, Models},
 		 {config, Conf}],
-    rr_system:save(ModelDump, File).
+    rr_system:save_model(ModelDump, File).
 
-load(File, ExConf, Cores) ->
-    Model = rr_system:load(File),
+%% @doc load model from file and return a model in evaluator state
+load(File, Cores) -> % todo: refactor away ExConf
+    Model = rr_system:load_model(File),
     case proplists:get_value(version, Model) of
 	?VERSION ->
 	    Models = proplists:get_value(base_models, Model),
 	    Conf = proplists:get_value(config, Model),
-	    load_evaluation_coordinator(Models, Cores, ExConf, Conf);
+	    load_evaluation_coordinator(Models, Cores, Conf);
 	_ ->
-	    {error, invalid_version}
+	    throw({error, invalid_version})
     end.
 
-load_evaluation_coordinator(Models, Cores, ExConf, Conf) ->
+%% @doc load a set of base learners and put an ensemble in evaluator state
+load_evaluation_coordinator(Models, Cores, Conf) ->
     Self = self(),
     Coordinator = spawn_link(fun() -> evaluation_coordinator(Self, self(), Conf) end),
-    Partitions = partition(Models, lists:map(fun(_) -> [] end, lists:seq(1, Cores))),
+    Partitions = rr_util:partition(Models, lists:map(fun(_) -> [] end, lists:seq(1, Cores))),
     Processes = lists:map(
 		  fun (Part) ->
 			  spawn_link(
 			    fun() ->
-				    base_evaluator_process(Coordinator, self(), ExConf, Conf, undefined, Part)
+				    base_evaluator_process(Coordinator, self(), Conf, undefined, Part)
 			    end)
 		  end, Partitions),
     Coordinator ! {start, Processes},
     Coordinator.
-
-partition([], Parts) ->
-    Parts;				     
-partition([Model|Models], [Part|Parts]) ->
-    partition(Models, Parts ++ [[Model|Part]]).
 
 %% @doc generate an ensamble of models from of #rr_conf.base_learners
 generate_model(Features, Examples, ExConf, Conf) ->
@@ -147,14 +146,14 @@ perform(Model, {Method, TreeFun, CollectFun}) ->
 predict_all(_, [], _, _ExConf, _Conf, Dict) ->
     Dict;
 predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
-    {Prediction, Probs} = predict_majority(Model, Example, Conf),
+    {Prediction, Probs} = predict_majority(Model, Example, ExConf, Conf),
     rr_example:insert_prediction(ExConf, Example, Probs),
     predict_all(Actual, Rest, Model, ExConf, Conf, dict:update(Actual, fun(Predictions) ->
 								 [{Prediction, Probs}|Predictions]
 							 end, [{Prediction, Probs}], Dict)).
 %% @doc predict the class for Example
-predict_majority(Model, Example, #rr_ensemble{no_classifiers=N}) ->
-    Model ! {evaluate, self(), Example},
+predict_majority(Model, Example, ExConf, #rr_ensemble{no_classifiers=N}) ->
+    Model ! {evaluate, self(), Example, ExConf},
     receive
 	{prediction, Model, Predictions} ->
 	    Probs = get_prediction_probabilities(Predictions, N),
@@ -196,8 +195,8 @@ collect_task(Task, Collect, Processes, Coordinator, Acc) ->
     end.
 
 %% @doc submit a prediction task all the model evaluation process
-submit_prediction(Processes, Coordinator, ExId) ->
-    lists:foreach(fun(Process) -> Process ! {evaluate, Coordinator, Process, ExId} end, Processes),
+submit_prediction(Processes, Coordinator, ExId, ExConf) ->
+    lists:foreach(fun(Process) -> Process ! {evaluate, Coordinator, Process, ExId, ExConf} end, Processes),
     collect_task(prediction, fun lists:append/2, Processes, Coordinator, []).
 
 %% @doc submit a process for collecting the variable importance from each model
@@ -221,8 +220,8 @@ evaluation_coordinator(Parent, Coordinator, Conf) ->
 %% @doc coordinating the model evaluation
 evaluation_coordinator(Parent, Coordinator, Processes, Conf) ->
     receive 
-	{evaluate, Parent, ExId} ->
-	    Prediction = submit_prediction(Processes, Coordinator, ExId),
+	{evaluate, Parent, ExId, ExConf} ->
+	    Prediction = submit_prediction(Processes, Coordinator, ExId, ExConf),
 	    Parent ! {prediction, Coordinator, Prediction},
 	    evaluation_coordinator(Parent, Coordinator, Processes, Conf);
 	{importance, Parent} ->
@@ -297,24 +296,24 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
 	    base_build_process(Coordinator, Features, Examples, ExConf, 
 			       Conf, NewVariableImportance, [{Id, Model, OOBAccuracy}|Models]);
 	{completed, Coordinator} ->
-	    base_evaluator_process(Coordinator, self(), ExConf, Conf, VariableImportance, Models)
+	    base_evaluator_process(Coordinator, self(), Conf, VariableImportance, Models)
     end.
 
 %% @doc enable inspection of generated models
-base_evaluator_process(Coordinator, Self, ExConf, Conf, VariableImportance, Models)->
+base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models)->
     #rr_ensemble{base_learner={Base, BaseConf}} = Conf,
     receive
-	{evaluate, Coordinator, Self, ExId} -> %note: send ExConf här
+	{evaluate, Coordinator, Self, ExId, ExConf} -> 
 	    Coordinator ! {prediction, Coordinator, Self, make_prediction(Models, Base, ExId, ExConf, BaseConf)},
-	    base_evaluator_process(Coordinator, Self, ExConf, Conf, VariableImportance, Models);
+	    base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models);
 	{importance, Coordinator, Self} ->
 	    Coordinator ! {importance, Coordinator, Self, dict:to_list(VariableImportance)},
-	base_evaluator_process(Coordinator, Self, ExConf, Conf, VariableImportance, Models);
+	base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models);
 	{exit, Coordinator, Self} ->
 	    done;  
 	{q, Method, TreeFun, Coordinator, Self} ->
 	    Coordinator ! {{q, Method}, Coordinator, Self, TreeFun(Models, Conf)},
-	    base_evaluator_process(Coordinator, Self, ExConf, Conf, VariableImportance, Models)
+	    base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models)
     end.
 
 %% @private use models built using "Base" to predict the class of "ExId"

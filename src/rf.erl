@@ -13,15 +13,19 @@
 
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 -export([
-	 main/1, %% note: run as standalone
+	 main/1,
 	 
-	 help/0, %% note: print help
-	 new/1,  %% note: create new random forest function
+	 help/0, 
+	 new/1,  
+	 build/4,
+	 evaluate/4,
+	 save/3,
+	 load/2,
 	 
 	 args/2,
 
-	 kill/1, %% note: kill a running model
-	 killer/1 %% note: kill and evaluate (for cv)
+	 kill/1, 
+	 killer/1
 	]).
 
 %% @headerfile "rf_tree.hrl"
@@ -107,18 +111,66 @@
 help() ->
     rr:show_help(options, ?CMD_SPEC, "rf").
 
-
 %% @doc suspend a random forest model
 kill(Model) ->
     rr_ensemble:kill(Model).
 
-%% @doc create a new rf-model and evaluator
-new(Props) ->
-    NoFeatures = case proplists:get_value(no_features, Props) of
-		     undefined -> throw({badarg, no_features});
-		     X -> X
-		 end,
+%% @doc build a model
+build(Rf, Features, Examples, ExConf) ->
+    rr_ensemble:generate_model(Features, Examples, ExConf, Rf).
 
+%% @private evaluate Model using som well knonw evaluation metrics
+evaluate(Conf, Model, Test, ExConf) ->
+    NoTestExamples = rr_example:count(Test),
+    ClassesInTest = lists:map(fun ({Class, _, _}) -> Class end, Test),
+
+    Dict = rr_ensemble:evaluate_model(Model, Test, ExConf, Conf),
+    Matrix = rr_eval:confusion_matrix(Dict),
+
+    OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
+    {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Model, Test, ExConf, Conf),
+    
+    Strength = rr_eval:strength(Dict, NoTestExamples),
+    Variance = rr_eval:variance(Dict, NoTestExamples),
+    Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, 
+				      Conf#rr_ensemble.no_classifiers),
+
+    Accuracy = rr_eval:accuracy(Dict),
+    Auc = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
+    AvgAuc = lists:foldl(fun
+			     ({_, {_, 'n/a'}}, Sum) -> 
+				 Sum;
+			     ({_, {No, A}}, Sum) -> 
+				 Sum + No/NoTestExamples*A
+			 end, 0, Auc),
+    Precision = rr_eval:precision(ClassesInTest, Matrix),
+    Recall = rr_eval:recall(ClassesInTest, Matrix),
+    Brier = rr_eval:brier(Dict, NoTestExamples),
+    [{accuracy, Accuracy},
+     {auc, {Auc, AvgAuc}}, 
+     {strength, Strength},
+     {correlation, Correlation},
+     {variance, Variance},
+     {c_s2, Correlation/math:pow(Strength, 2)},
+     {precision, Precision},
+     {recall, Recall},
+     {oob_base_accuracy, OOBAccuracy},
+     {base_accuracy, BaseAccuracy},
+     {brier, Brier}].
+
+save(File, Rf, Model) ->
+    rr_ensemble:save(File, Model, Rf).
+
+load(File, Cores) ->
+    rr_ensemble:load(File, Cores).
+
+%% @doc create a new rf-model
+new(Props) ->
+    NoFeatures = proplists:get_value(
+		   no_features, Props,
+		   fun (T) -> 
+			   trunc(math:log(T)/math:log(2)) + 1 
+		   end),
     Cores = proplists:get_value(no_cores, Props, 
 				erlang:system_info(schedulers)),
     Missing = proplists:get_value(missing_values, Props, 
@@ -144,73 +196,15 @@ new(Props) ->
 	      split = Split,
 	      distribute = Distribute,
 	      missing_values = Missing,
-	      no_features = NoFeatures % note: fun (T) -> trunc(math:log(T)/math:log(2)) end
+	      no_features = NoFeatures
 	     },
-    Ensemble = #rr_ensemble {
-		  progress = Progress,
-		  bagging = ExampleSampling,
-		  no_classifiers = NoTrees,
-		  base_learner = {BaseLearner, Tree},
-		  cores = Cores
-		 },
-
-    Build = fun (Features, Examples, ExConf) ->
-		    rr_ensemble:generate_model(Features, Examples, 
-					       ExConf, Ensemble)
-	    end,
-    Evaluate = fun (Model, Test, ExConf) ->
-		       evaluate(Model, Test, ExConf, Ensemble)
-	       end,
-    {Build, Evaluate, Ensemble}.
-
-%% @doc convert key from arguments to a function for the rf agorithm
-%% Proplist must contain: {no_features, NoFeatures}
-%% @end
-args(Key, Rest, Error) ->
-    Value = proplists:get_value(Key, Rest),
-    case Key of
-	<<"example_sampling">> ->
-	    example_sampling(Value, Error);
-	<<"feature_sampling">> ->
-	    feature_sampling(Value, Error, Rest);
-	<<"score">> ->
-	    score(Value, Error, Rest);
-	<<"progress">> ->
-	    progress(Value, Error);
-	<<"no_features">> ->
-	    no_features(Value, Error);
-	<<"missing">> ->
-	    missing_values(Value, Error);
-	<<"distribute">> ->
-	    distribute(Value, Error);
-	<<"no_rules">> ->
-	    no_rules(Value, Error); %todo: refactor prior
-	<<"rule_score">> ->
-	    rule_score(Value, Error);
-	O when O == <<"cores">>;
-	       O == <<"min_examples">>;
-	       O == <<"max_depth">>;
-	       O == <<"no_trees">> ->
-	    Value;
-	_ ->
-	    undefined
-    end.
-
-args(Rest, Prior) ->
-    NoFeatures = args(<<"no_features">>, Rest, Prior),
-    MinEx = args(<<"min_examples">>, Rest, Prior),
-    MaxDepth = args(<<"max_depth">>, Rest, Prior),
-    Args = [{no_features, NoFeatures},
-	    {no_cores, args(<<"cores">>, Rest, Prior)},
-	    {no_trees, args(<<"no_trees">>, Rest, Prior)},
-	    {score, args(<<"score">>, Rest, Prior)},
-	    {missing_values, args(<<"missing">>, Rest, Prior)},
-	    {pre_prune, rf_tree:example_depth_stop(MinEx, MaxDepth)},
-	    {feature_sampling, args(<<"feature_sampling">>, Rest, Prior)},
-	    {example_sampling, args(<<"example_sampling">>, Rest, Prior)},
-	    {distribute, args(<<"distribute">>, Rest, Prior)},
-	    {base_learner, rf_tree}],
-    lists:filter(fun ({_Key, Value}) -> Value =/= undefined end, Args).
+    #rr_ensemble {
+       progress = Progress,
+       bagging = ExampleSampling,
+       no_classifiers = NoTrees,
+       base_learner = {BaseLearner, Tree},
+       cores = Cores
+      }.
 
 %% @todo refactor to use proplist
 main(Args) ->
@@ -248,10 +242,16 @@ main(Args) ->
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
 
     RfArgs = args(Options, fun rr:illegal_option/2),
-    {Build, Evaluate, Config} = rf:new([{base_learner, rf_tree},
-					{progress, args(<<"progress">>, 
-							Options, fun rr:illegal_option/2)}|RfArgs]),
-
+    Progress = args(<<"progress">>, Options, fun rr:illegal_option/2),
+    Rf = rf:new([{base_learner, rf_tree}, {progress, Progress}|RfArgs]),
+    
+    Build = fun (Features, Examples, ExConf) ->
+		    build(Rf, Features, Examples, ExConf)
+	    end,
+    Evaluate = fun (Model, Examples, ExConf) ->
+		       evaluate(Rf, Model, Examples, ExConf)
+	       end,
+    
     ExperimentTime = now(),
     case proplists:get_value(<<"mode">>, Options) of
 	split ->
@@ -276,17 +276,19 @@ main(Args) ->
 	    Output(Res);
 	build ->
 	    Model = Build(Features, Examples, ExConf),
-	    rr_ensemble:save(Model, Config, proplists:get_value(<<"model_file">>, Options, "undefined-model.rr"));
-	eval ->
-	    Model = rr_ensemble:load(proplists:get_value(<<"model_file">>, Options),
-				     ExConf, proplists:get_value(<<"cores">>, Options, 4)),
-	    Res = evaluate(Model, Examples, ExConf, Config),
+	    File = proplists:get_value(<<"model_file">>, Options, "undefined-model.rr"),
+	    save(File, Model, Rf);
+	evaluate ->
+	    File = proplists:get_value(<<"model_file">>, Options),
+	    Cores = proplists:get_value(<<"cores">>, Options, 4),
+	    Model = load(File, Cores),				     
+	    Res = evaluate(Rf, Model, Examples, ExConf),
 	    Output(Res);
 	Other ->
 	    rr:illegal_option("mode", Other)
     end,
     rr_log:info("experiment took '~p' second(s)", [rr:seconds(ExperimentTime)]),
-    case proplists:get_value(observer, Options) of
+    case proplists:get_value(<<"observer">>, Options) of
 	true -> rr_log:info("press ^c to exit"), receive wait -> wait end;
 	undefined -> ok
     end,
@@ -304,46 +306,55 @@ killer(Evaluate) ->
 	    Result
     end.
 
-%% @private evaluate Model using som well knonw evaluation metrics
-evaluate(Model, Test, ExConf, Conf) ->
-    NoTestExamples = rr_example:count(Test),
-    ClassesInTest = lists:map(fun ({Class, _, _}) -> Class end, Test),
+%% @doc convert key from arguments to a function for the rf agorithm
+%% Proplist must contain: {no_features, NoFeatures}
+%% @end
+args(Key, Rest, Error) ->
+    Value = proplists:get_value(Key, Rest),
+    case Key of
+	<<"example_sampling">> ->
+	    example_sampling(Value, Error);
+	<<"feature_sampling">> ->
+	    feature_sampling(Value, Error, Rest);
+	<<"score">> ->
+	    score(Value, Error, Rest);
+	<<"progress">> ->
+	    progress(Value, Error);
+	<<"no_features">> ->
+	    no_features(Value, Error);
+	<<"missing">> ->
+	    missing_values(Value, Error);
+	<<"distribute">> ->
+	    distribute(Value, Error);
+	<<"no_rules">> ->
+	    no_rules(Value, Error); %todo: refactor prior
+	<<"rule_score">> ->
+	    rule_score(Value, Error);
+	O when O == <<"cores">>;
+	       O == <<"min_examples">>;
+	       O == <<"max_depth">>;
+	       O == <<"no_trees">> ->
+	    Value;
+	_ ->
+	    undefined
+    end.
 
-    Dict = rr_ensemble:evaluate_model(Model, Test, ExConf, Conf),
-    Matrix = rr_eval:confusion_matrix(Dict),
-
-    OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
-    {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Model, Test, ExConf, Conf),
-    
-    Strength = rr_eval:strength(Dict, NoTestExamples),
-    Variance = rr_eval:variance(Dict, NoTestExamples),
-    Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, 
-				      Conf#rr_ensemble.no_classifiers),
-
-
-
-    Accuracy = rr_eval:accuracy(Dict),
-    Auc = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
-    AvgAuc = lists:foldl(fun
-			     ({_, {_, 'n/a'}}, Sum) -> 
-				 Sum;
-			     ({_, {No, A}}, Sum) -> 
-				 Sum + No/NoTestExamples*A
-			 end, 0, Auc),
-    Precision = rr_eval:precision(ClassesInTest, Matrix),
-    Recall = rr_eval:recall(ClassesInTest, Matrix),
-    Brier = rr_eval:brier(Dict, NoTestExamples),
-    [{accuracy, Accuracy},
-     {auc, {Auc, AvgAuc}}, 
-     {strength, Strength},
-     {correlation, Correlation},
-     {variance, Variance},
-     {c_s2, Correlation/math:pow(Strength, 2)},
-     {precision, Precision},
-     {recall, Recall},
-     {oob_base_accuracy, OOBAccuracy},
-     {base_accuracy, BaseAccuracy},
-     {brier, Brier}].
+%% @doc get all important args
+args(Rest, Prior) ->
+    NoFeatures = args(<<"no_features">>, Rest, Prior),
+    MinEx = args(<<"min_examples">>, Rest, Prior),
+    MaxDepth = args(<<"max_depth">>, Rest, Prior),
+    Args = [{no_features, NoFeatures},
+	    {no_cores, args(<<"cores">>, Rest, Prior)},
+	    {no_trees, args(<<"no_trees">>, Rest, Prior)},
+	    {score, args(<<"score">>, Rest, Prior)},
+	    {missing_values, args(<<"missing">>, Rest, Prior)},
+	    {pre_prune, rf_tree:example_depth_stop(MinEx, MaxDepth)},
+	    {feature_sampling, args(<<"feature_sampling">>, Rest, Prior)},
+	    {example_sampling, args(<<"example_sampling">>, Rest, Prior)},
+	    {distribute, args(<<"distribute">>, Rest, Prior)},
+	    {base_learner, rf_tree}],
+    lists:filter(fun ({_Key, Value}) -> Value =/= undefined end, Args).
 
 example_sampling(Value, Error) ->
     case rr_util:safe_iolist_to_binary(Value) of

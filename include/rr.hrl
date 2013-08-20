@@ -1,3 +1,12 @@
+%% a model have the following functions
+-record(rr_model, {
+	  build,
+	  evaluate,
+	  config,
+	  kill,
+	  save
+	 }).
+
 -record(rr_ensemble, {
 	  progress,
 	  bagging :: any(),
