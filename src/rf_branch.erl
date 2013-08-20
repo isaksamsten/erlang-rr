@@ -14,28 +14,27 @@
 	 random_subset/2,
 
 	 %% multi-feature approaches
-	 correlation/1,
-	 random_correlation/2,
-	 rule/3,
-	 random_rule/4,
-	 choose_rule/3,
+	 correlation/0,
+	 random_correlation/1,
+	 rule/2,
+	 random_rule/3,
+	 choose_rule/2,
 
 	 %% example sampling approaches
 	 sample_examples/3,
 
 	 %% increased strength approaches
-	 depth/1,
-	 depth_rule/3,
+%	 depth_rule/2,
 
 	 %% resampling approahces
-	 weka/1,
-	 resample/3,
+	 weka/0,
+	 resample/2,
 
 	 %% significance approaches
-	 random_chisquare/3,
-	 randomly_resquare/3,
-	 chisquare/3,
-	 chisquare_decrease/3,
+	 random_chisquare/1,
+	 randomly_resquare/2,
+	 chisquare/1,
+	 chisquare_decrease/2,
 
 	 %% util
 	 unpack/1,
@@ -50,82 +49,116 @@
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
 
-subset(_) ->
-    10.
-
-%% @doc evaluate a subset of n random features
 -spec subset() -> branch_fun().
 subset() ->
-    fun (Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{
-	       score = Score, 
-	       split = Split, 
-	       distribute = Distribute, 
-	       missing_values = Missing,
-	       no_features = NoFeatures
-	      } = Conf,
-	    NewFeatures = rr_example:random_features(Features, NoFeatures(length(Features))),
-	    {rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing), NewFeatures}
-    end.
+    fun subset/5.
+
+-spec correlation() -> branch_fun().
+correlation() ->
+    fun correlation/5.
+
+-spec random() -> branch_fun().
+random() ->
+    fun random/5.
+
+-spec all() -> branch_fun().
+all() ->
+    fun all/5.
+
+
+%% @doc evaluate a subset of n random features
+-spec subset(features(), examples(), integer(), #rr_example{}, #rf_tree{}) -> branch().
+subset(Features, Examples, Total, ExConf, Conf) ->
+    #rf_tree {
+       score = Score, 
+       split = Split, 
+       distribute = Distribute, 
+       missing_values = Missing,
+       no_features = NoFeatures
+      } = Conf,
+    NewFeatures = rr_example:random_features(Features, NoFeatures(length(Features))),
+    {rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing), NewFeatures}.
 
 %% @doc evaluate the combination of (n*n)-1 features
--spec correlation(integer()) -> branch_fun().
-correlation(NoFeatures) ->
-    fun (Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
-	    FeaturesA = rr_example:random_features(Features, NoFeatures),
-	    FeaturesB = rr_example:random_features(Features, NoFeatures),
-	    
-	    Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB, A =/= B],
-	    rr_example:best_split(ExConf, Combination, Examples, Total, Score, Split, Distribute, Missing)
-    end.
+-spec correlation(features(), examples(), integer(), #rr_example{}, #rf_tree{}) -> branch().
+correlation(Features, Examples, Total, ExConf, Conf) ->
+    #rf_tree {
+       score = Score, 
+       split = Split,
+       distribute = Distribute, 
+       missing_values = Missing,
+       no_features = NoFeatures       
+      } = Conf,
+    Select = NoFeatures(length(Features)),
+    FeaturesA = rr_example:random_features(Features, Select),
+    FeaturesB = rr_example:random_features(Features, Select),
+
+    Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB, A =/= B],
+    rr_example:best_split(ExConf, Combination, Examples, Total, 
+			  Score, Split, Distribute, Missing).
 
 %% @doc tandomly pick either a subset brancher or a correlation brancher
--spec random_correlation(integer(), float()) -> branch_fun().
-random_correlation(NoFeatures, Fraction) ->
-    Corr = correlation(NoFeatures),
-    Sub = subset(NoFeatures),
+-spec random_correlation(float()) -> branch_fun().
+random_correlation(Fraction) ->
+    Corr = correlation(),
+    Sub = subset(),
     random(Corr, Sub, Fraction).
 
 %% @doc evalate one randomly selected feature (maximum diversity)
--spec random() -> branch_fun().
-random() ->
-    fun (Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{score = Score, split = Split, distribute = Distribute, 
-		     missing_values = Missing, no_features = NoFeatures} = Conf,
-	    Feature = [lists:nth(random:uniform(NoFeatures), Features)],
-	    rr_example:best_split(ExConf, Feature, Examples, Total, Score, Split, Distribute, Missing)
-    end.
+-spec random(features(), examples(), integer(), #rr_example{}, #rf_tree{}) -> branch().
+random (Features, Examples, Total, ExConf, Conf) ->
+    #rf_tree {
+       score = Score, 
+       split = Split, 
+       distribute = Distribute, 
+       missing_values = Missing
+      } = Conf,
+    NoFeatures = length(Features),
+    Feature = [lists:nth(random:uniform(NoFeatures), Features)],
+    rr_example:best_split(ExConf, Feature, Examples, Total, 
+			  Score, Split, Distribute, Missing).    
 
 %% @doc evaluate all features to find the best split point
--spec all() -> branch_fun().
-all() ->
-    fun(Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
-	    rr_example:best_split(ExConf, Features, Examples, Total, Score, Split, Distribute, Missing)
-    end.
+-spec all(features(), examples(), integer(), #rr_example{}, #rf_tree{}) -> branch().
+all (Features, Examples, Total, ExConf, Conf) ->
+    #rf_tree {
+       score = Score, 
+       split = Split,
+       distribute = Distribute,
+       missing_values = Missing
+      } = Conf,
+    rr_example:best_split(ExConf, Features, Examples, Total, 
+			  Score, Split, Distribute, Missing).
 
 %% @doc generate a rule at each branch
--spec rule(integer(), integer(), score_fun()) -> branch_fun().
-rule(NoFeatures, NoRules, RuleScore) ->
+-spec rule(integer(), score_fun()) -> branch_fun().
+rule(NoRules, RuleScore) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    NewConf = Conf#rf_tree{split = fun rf_tree:deterministic_split/5},
-	    rf_rule:best(Features, Examples, Total, ExConf, NewConf, NoFeatures, NoRules, RuleScore)
+	    NewConf = Conf#rf_tree {
+			split = fun rf_tree:deterministic_split/5
+		       },
+	    #rf_tree{
+	       no_features = NoFeatures
+	      } = Conf,
+	    FeatureCount = length(Features),
+	    rf_rule:best(Features, Examples, Total, ExConf, NewConf, 
+			 NoFeatures(FeatureCount), NoRules(FeatureCount), RuleScore)
     end.
 
 %% @doc randomly pick a subset-brancher or a rule-bracher at each node
--spec random_rule(integer(), integer(), score_fun(), float()) -> branch_fun().
- random_rule(NoFeatures, NoRules, RuleScore, Prob) ->
-    Rule = rule(NoFeatures, NoRules, RuleScore),
-    Sub = subset(NoFeatures),
+-spec random_rule(integer(), score_fun(), float()) -> branch_fun().
+random_rule(NoRules, RuleScore, Prob) ->
+    Rule = rule(NoRules, RuleScore),
+    Sub = subset(),
     random(Rule, Sub, Prob).
 
 %% @doc choose either rule or subset depending on which is best
-choose_rule(NoFeatures, NoRules, RuleScore) ->
-    Rule = rule(NoFeatures, NoRules, RuleScore),
-    Sub = subset(NoFeatures),
+choose_rule(NoRules, RuleScore) ->
+    Rule = rule(NoRules, RuleScore),
+    Sub = subset(),
     n([Rule, Sub], fun sig/3).
 
+%% @doc choose the candidate which is most significant
 sig([#rr_candidate{split = As}=A, #rr_candidate{split=Bs} = B], Examples, Total) ->
     Achi = rr_estimator:chisquare(As, Examples, Total),
     Bchi = rr_estimator:chisquare(Bs, Examples, Total),
@@ -135,8 +168,8 @@ sig([#rr_candidate{split = As}=A, #rr_candidate{split=Bs} = B], Examples, Total)
 	    B
     end.
 
-
-%% @doc sample a set of examples of Size, if we can find a significant split use it o/w retry
+%% @doc sample a set of examples of Size, if we can 
+%% find a significant split use it o/w retry @end
 sample_examples(NoFeatures, Size, Sigma) ->
     Do = sample_examples(NoFeatures, Size),
     Redo = sample_examples_significance(NoFeatures, Size, Sigma),
@@ -148,10 +181,17 @@ sample_examples(_NoFeatures, Size) when Size >= 1.0 ->
     end;
 sample_examples(NoFeatures, Size) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
+	    #rf_tree{
+	       score = Score, 
+	       split = Split, 
+	       distribute = Distribute, 
+	       missing_values = Missing
+	      } = Conf,
 	    FeatureSubset = rr_example:random_features(Features, NoFeatures),
 	    Subset = sample_sane_examples(Examples, Size, Size, Total),
-	    #rr_candidate{feature=F} = rr_example:best_split(ExConf, FeatureSubset, Subset, rr_example:count(Subset), Score, Split, Distribute, Missing),
+	    #rr_candidate{feature=F} = 
+		rr_example:best_split(ExConf, FeatureSubset, Subset, 
+				      rr_example:count(Subset), Score, Split, Distribute, Missing),
 	    ExSplit = rr_example:split_feature_value(ExConf, F, Examples, Distribute, Missing),
 	    Best = #rr_candidate{feature = F,
 				 split = ExSplit,
@@ -205,46 +245,25 @@ random_subset(Features, Examples, Total, ExConf, Conf, NoFeatures, Variance) ->
     NewFeatures = rr_example:random_features(Features, NewNoFeatures),
     rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing).
     
-depth(NoFeatures) ->
-    fun (Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{score = Score, split = Split, distribute = Distribute, 
-		     missing_values = Missing, depth = Depth} = Conf,
-	    DepthRatio = 1 / (math:log(3+Depth)),
-	    NewNoFeatures = case round(NoFeatures * DepthRatio) of
-				X when X =< 1 -> 1;
-				X when X >= NoFeatures -> NoFeatures;
-				X -> X
-			    end,
-	    NewFeatures = rr_example:random_features(Features, NewNoFeatures),
-	    rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing)
-    end.
-				       
-depth_rule(NoFeatures, NoRules, RuleScore) ->
-    Rule = rule(NoFeatures, NoRules, RuleScore),
-    Subset = subset(NoFeatures),
-    fun (Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{depth=Depth} = Conf,
-	    if Depth >= NoFeatures -> %% todo: base on what?
-		    Rule(Features, Examples, Total, ExConf, Conf);
-	       true ->
-		    Subset(Features, Examples, Total, ExConf, Conf)
-	    end
-    end.
 
 %% @doc
 %% resample a decreasing number of features each time an
 %% insignificant feature is found, until only one feature is inspected
 %% @end
-chisquare_decrease(NoFeatures, Rate, Sigma) ->
-    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
+chisquare_decrease(Rate, Sigma) ->
+    Sample = redo_curry(subset()),
     redo(Sample, chisquare_decrease_resample(Sample, Rate, Sigma)).
     
 chisquare_decrease_resample(_Sample, Rate, Sigma) ->
     fun (#rr_candidate{split=Split}, NoFeatures, Examples, Total) ->
 	    Significance = rr_estimator:chisquare(Split, Examples, Total),
 	    if Significance < Sigma ->
-		    NewNoFeatures = if NoFeatures > 1 -> round(NoFeatures * Rate); true -> 1 end,
-		    NewSample = redo_curry(NewNoFeatures, subset(NewNoFeatures)),
+		    NewNoFeatures = if NoFeatures > 1 ->
+					    fun (_) -> round(NoFeatures * Rate) end; 
+				       true -> 
+					    fun (_) -> 1 end
+				    end,
+		    NewSample = redo_curry(NewNoFeatures, subset()),
 		    {true, NewSample, chisquare_decrease_resample(NewSample, Rate, Sigma)};
 	       true ->
 		    false
@@ -252,47 +271,47 @@ chisquare_decrease_resample(_Sample, Rate, Sigma) ->
     end.
 
 %% @doc randomly select either chisquare or subset
-random_chisquare(NoFeatures, Next, Sigma) ->
-    Chi = chisquare(NoFeatures, Next, Sigma),
-    Sub = subset(NoFeatures),
+random_chisquare(Sigma) ->
+    Chi = chisquare(Sigma),
+    Sub = subset(),
     random(Chi, Sub, 0.5).
 
 %% @doc resample features if chi-square significance is lower than Sigma
-chisquare(NoFeatures, Next, Sigma) ->
-    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
-    Resample = chisquare_resample(Next, Sigma),
+chisquare(Sigma) ->
+    Sample = redo_curry(subset()),
+    Resample = chisquare_resample(Sigma),
     redo(Sample, Resample).
 		
-chisquare_resample(NoFeatures, Sigma) ->
+chisquare_resample(Sigma) ->
     fun (#rr_candidate{split=Split}, _, Examples, Total) ->
 	    Significance = rr_estimator:chisquare(Split, Examples, Total),
 	    if Significance < Sigma ->
-		    {true, redo_curry(NoFeatures, subset(NoFeatures)), chisquare_resample(NoFeatures, Sigma)};
+		    {true, redo_curry(subset()), chisquare_resample(Sigma)};
 	       true ->
 		    false
 	    end
     end.
 
 %% @doc rame as chisquare-resample, however the resampling are done randomly
-randomly_resquare(NoFeatures, Factor, Sigma) ->
-    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
-    Resample = randomly_resquare_redo(NoFeatures, Factor, Sigma),
+randomly_resquare(Factor, Sigma) ->
+    Sample = redo_curry(subset()),
+    Resample = randomly_resquare_redo(Factor, Sigma),
     redo(Sample, Resample).
 
-randomly_resquare_redo(NoFeatures, Factor, Sigma) ->
+randomly_resquare_redo(Factor, Sigma) ->
     fun (#rr_candidate{split=Split}, _, Examples, Total) ->
 	    Significance = rr_estimator:chisquare(Split, Examples, Total),
 	    Random = random:uniform(),
 	    if Significance < Sigma, Random < Factor ->
-		    {true, redo_curry(NoFeatures, subset(NoFeatures)), randomly_resquare_redo(NoFeatures, Factor, Sigma)};
+		    {true, redo_curry(subset()), randomly_resquare_redo(Factor, Sigma)};
 	       true ->
 		    false
 	    end
     end.
 
 %% @doc resample n features m times if gain delta
-resample(NoFeatures, NoResamples, Delta) ->
-    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
+resample(NoResamples, Delta) ->
+    Sample = redo_curry(subset()),
     Resample = simple_resample(Sample, NoResamples, Delta),
     redo(Sample, Resample).
 
@@ -309,17 +328,17 @@ simple_resample(Sample, NoResamples, Delta) ->
     end.
 
 %% @doc resample 1 feature if no informative features is found
-weka(NoFeatures) ->
-    Sample = redo_curry(NoFeatures, subset(NoFeatures)),
-    Resample = weka_resample(Sample),
+weka() ->
+    Sample = redo_curry(subset()),
+    Resample = weka_resample(),
     redo(Sample, Resample).
 
-weka_resample(_Sample) ->
+weka_resample() ->
     fun (#rr_candidate{score = {Score, _, _}}, _, Examples, Total) ->
 	    Gain = (Total * rr_estimator:entropy(Examples)) - Score,
 	    if Gain =< 0.0 ->
-		    NewSample = redo_curry(1, subset(1)),
-		    {true, NewSample, weka_resample(NewSample)};
+		    NewSample = redo_curry(fun (_) -> 1 end, subset()),
+		    {true, NewSample, weka_resample()};
 	       true ->
 		    false
 	    end
@@ -334,13 +353,15 @@ weka_resample(_Sample) ->
 %% @end
 redo(Do, Redo) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    redo(Features, Examples, Total, ExConf, Conf, length(Features), #rr_candidate{score = {inf}}, Do, Redo)
+	    redo(Features, Examples, Total, ExConf, Conf, 
+		 length(Features), #rr_candidate{score = {inf}}, Do, Redo)
     end.
 
 redo([], _, _, _, _, _, _, _, _) ->
     no_information;
 redo(Features, Examples, Total, ExConf, Conf, TotalNoFeatures, _Prev, Do, Redo) ->
-    {NoFeatures, {Best, NewFeatures}} = Do(Features, Examples, Total, ExConf, Conf),
+    {F, {Best, NewFeatures}} = Do(Features, Examples, Total, ExConf, Conf),
+    NoFeatures = F(TotalNoFeatures),
     case Redo(Best, NoFeatures, Examples, Total) of
 	{true, NewDo, NewRedo} ->
 	    redo(ordsets:subtract(Features, ordsets:from_list(NewFeatures)),
@@ -384,10 +405,18 @@ n(Funs, Choose) ->
 %% @doc wrap sample-fun Fun to return the number of sampled features
 redo_curry(NoFeatures, Fun) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    {NoFeatures, Fun(Features, Examples, Total, ExConf, Conf)}
+	    {NoFeatures, Fun(Features, Examples, Total, 
+			     ExConf, Conf#rf_tree{no_features=NoFeatures})}
+    end.
+
+redo_curry(Fun) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+	    {Conf#rf_tree.no_features, Fun(Features, Examples, Total,
+					   ExConf, Conf)}
     end.
 
 %% @doc unpack a candidate
+-spec unpack(branch()) -> unpacked_branch().
 unpack({Candidate, _Features}) ->
     Candidate;
 unpack(Candidate) ->
@@ -399,3 +428,34 @@ unpack(Candidate) ->
 %% @end
 oversample(NoFeatures, Oversample) ->
     ok.
+
+%% TODO: remove?
+%% depth(NoFeatures) ->
+%%     fun (Features, Examples, Total, ExConf, Conf) ->
+%% 	    #rf_tree{score = Score, split = Split, distribute = Distribute, 
+%% 		     missing_values = Missing, depth = Depth} = Conf,
+%% 	    DepthRatio = 1 / (math:log(3+Depth)),
+%% 	    NewNoFeatures = case round(NoFeatures * DepthRatio) of
+%% 				X when X =< 1 -> 1;
+%% 				X when X >= NoFeatures -> NoFeatures;
+%% 				X -> X
+%% 			    end,
+%% 	    NewFeatures = rr_example:random_features(Features, NewNoFeatures),
+%% 	    rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing)
+%%     end.
+				       
+%% depth_rule(NoRules, RuleScore) ->
+%%     Rule = rule(NoRules, RuleScore),
+%%     Subset = subset(),
+%%     fun (Features, Examples, Total, ExConf, Conf) ->
+%% 	    #rf_tree {
+%% 	       depth=Depth,
+%% 	       no_features = NoFeatures
+%% 	      } = Conf,
+%% 	    FeatureCount = NoFeatures(length(Features)),
+%% 	    if Depth >= FeatureCount -> 
+%% 		    Rule(Features, Examples, Total, ExConf, Conf);
+%% 	       true ->
+%% 		    Subset(Features, Examples, Total, ExConf, Conf)
+%% 	    end
+%%     end.

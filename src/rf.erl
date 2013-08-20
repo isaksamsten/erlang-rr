@@ -130,7 +130,7 @@ new(Props) ->
 				rf_tree:example_depth_stop(2, 1000)),
 
     FeatureSampling = proplists:get_value(feature_sampling, Props,
-					  rf_branch:subset(NoFeatures)),
+					  rf_branch:subset()),
     ExampleSampling = proplists:get_value(example_sampling, Props,
 					  fun rr_example:bootstrap_aggregate/1),
     Distribute = proplists:get_value(distribute, Props,
@@ -144,7 +144,7 @@ new(Props) ->
 	      split = Split,
 	      distribute = Distribute,
 	      missing_values = Missing,
-	      no_features = fun (T) -> trunc(math:log(T)/math:log(2)) end
+	      no_features = NoFeatures % note: fun (T) -> trunc(math:log(T)/math:log(2)) end
 	     },
     Ensemble = #rr_ensemble {
 		  progress = Progress,
@@ -155,11 +155,8 @@ new(Props) ->
 		 },
 
     Build = fun (Features, Examples, ExConf) ->
-		    {BaseLearner, Tree0} = Ensemble#rr_ensemble.base_learner,
-		    NewEnsemble = Ensemble#rr_ensemble{base_learner={BaseLearner,
-								     Tree0#rf_tree{no_features=length(Features)}}},
 		    rr_ensemble:generate_model(Features, Examples, 
-					       ExConf, NewEnsemble)
+					       ExConf, Ensemble)
 	    end,
     Evaluate = fun (Model, Test, ExConf) ->
 		       evaluate(Model, Test, ExConf, Ensemble)
@@ -169,24 +166,25 @@ new(Props) ->
 %% @doc convert key from arguments to a function for the rf agorithm
 %% Proplist must contain: {no_features, NoFeatures}
 %% @end
-args(Key, Rest, Prior) ->
-    Error = proplists:get_value(error, Prior, fun (_, _) -> undefined end),
+args(Key, Rest, Error) ->
     Value = proplists:get_value(Key, Rest),
     case Key of
 	<<"example_sampling">> ->
 	    example_sampling(Value, Error);
 	<<"feature_sampling">> ->
-	    feature_sampling(Value, Error, Rest, Prior);
+	    feature_sampling(Value, Error, Rest);
 	<<"score">> ->
 	    score(Value, Error, Rest);
 	<<"progress">> ->
 	    progress(Value, Error);
+	<<"no_features">> ->
+	    no_features(Value, Error);
 	<<"missing">> ->
 	    missing_values(Value, Error);
 	<<"distribute">> ->
 	    distribute(Value, Error);
 	<<"no_rules">> ->
-	    no_rules(Value, Error, Prior);
+	    no_rules(Value, Error); %todo: refactor prior
 	<<"rule_score">> ->
 	    rule_score(Value, Error);
 	O when O == <<"cores">>;
@@ -199,10 +197,7 @@ args(Key, Rest, Prior) ->
     end.
 
 args(Rest, Prior) ->
-    NoFeatures = case proplists:get_value(no_features, Prior) of
-		     undefined -> throw({badarg, no_features});
-		     X -> X
-		 end,
+    NoFeatures = args(<<"no_features">>, Rest, Prior),
     MinEx = args(<<"min_examples">>, Rest, Prior),
     MaxDepth = args(<<"max_depth">>, Rest, Prior),
     Args = [{no_features, NoFeatures},
@@ -252,15 +247,12 @@ main(Args) ->
     Examples = rr_example:randomize(Examples0),
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
 
-    TotalNoFeatures = length(Features),
-    NoFeatures = no_features(TotalNoFeatures, Options),
-    ArgProps =  [{no_features, NoFeatures}, {error, fun rr:illegal_option/2}],
-    RfArgs = args(Options, ArgProps),
+    RfArgs = args(Options, fun rr:illegal_option/2),
     rr_log:debug("arguments: ~p", [RfArgs]),
 
     {Build, Evaluate, _} = rf:new([{base_learner, rf_tree},
 				   {progress, args(<<"progress">>, 
-						   Options, ArgProps)}|RfArgs]),
+						   Options, fun rr:illegal_option/2)}|RfArgs]),
 
     ExperimentTime = now(),
     case proplists:get_value(<<"mode">>, Options) of
@@ -412,79 +404,74 @@ score(Value, Error, Options) ->
 	Other -> Error("score", Other)		
     end.
 
-no_features(TotalNoFeatures, Options) ->
-    case proplists:get_value(<<"no_features">>, Options) of
-	<<"default">> -> trunc(math:log(TotalNoFeatures)/math:log(2)) + 1;
-	<<"sqrt">> -> trunc(math:sqrt(TotalNoFeatures));
+no_features(Value, Error) ->
+    case Value of
+	<<"default">> -> fun (TotalNoFeatures) -> trunc(math:log(TotalNoFeatures)/math:log(2)) + 1 end;
+	<<"sqrt">> -> fun (TotalNoFeatures) -> trunc(math:sqrt(TotalNoFeatures)) end;
 	X ->
 	    case rr_example:format_number(X) of
-		{true, Number} when Number > 0 -> Number;
-		_ -> rr:illegal(
-		       io_lib:format("invalid number to argument '~s'", 
-				     ["no-features"]))
-	    end;
-	Other ->
-	    rr:illegal_option("no-features", Other)
+		{true, Number} when Number > 0 -> fun (_) -> Number end;
+		_ -> Error(X)
+	    end
     end.
 
-feature_sampling(Value, Error, Options, Prior) ->
-    NoFeatures = proplists:get_value(no_features, Prior),
+feature_sampling(Value, Error, Options) ->
     case rr_util:safe_iolist_to_binary(Value) of
 	<<"weka">> ->
-	    rf_branch:weka(NoFeatures);
+	    rf_branch:weka();
 	<<"resample">> ->
-	    NoResamples = proplists:get_value(no_resamples, Options, 6),
-	    MinGain = proplists:get_value(min_gain, Options),
-	    rf_branch:resample(NoResamples, NoFeatures, MinGain);
+	    NoResamples = proplists:get_value(<<"no_resamples">>, Options, 6),
+	    MinGain = proplists:get_value(<<"min_gain">>, Options),
+	    rf_branch:resample(NoResamples, MinGain);
 	<<"combination">> ->
 	    Factor = proplists:get_value(weight_factor, Options),
-	    rf_branch:random_correlation(NoFeatures, Factor);
+	    rf_branch:random_correlation(Factor);
 	<<"rule">> ->
-	    {NewNoFeatures, NoRules} = args(<<"no_rules">>, Options, Prior),
-	    RuleScore = args(<<"rule_score">>, Options, Prior),
-	    rf_branch:rule(NewNoFeatures, NoRules, RuleScore); 
+	    NoRules = args(<<"no_rules">>, Options, Error),
+	    RuleScore = args(<<"rule_score">>, Options, Error),
+	    rf_branch:rule(NoRules, RuleScore); 
 	<<"random-rule">> ->
 	    Factor = proplists:get_value(weight_factor, Options),
-	    {NewNoFeatures, NoRules} = args(<<"no_rules">>, Options, Prior),
-	    RuleScore = args(<<"rule_score">>, Options, Prior),
-	    rf_branch:random_rule(NewNoFeatures, NoRules, RuleScore, Factor);
+	    NoRules = args(<<"no_rules">>, Options, Error),
+	    RuleScore = args(<<"rule_score">>, Options, Error),
+	    rf_branch:random_rule(NoRules, RuleScore, Factor);
 	<<"choose-rule">> ->
-	    {NewNoFeatures, NoRules} = args(<<"no_rules">>, Options, Prior),
-	    RuleScore = args(<<"rule_score">>, Options, Prior),
-	    rf_branch:choose_rule(NewNoFeatures, NoRules, RuleScore);
+	    NoRules = args(<<"no_rules">>, Options, Error),
+	    RuleScore = args(<<"rule_score">>, Options, Error),
+	    rf_branch:choose_rule(NoRules, RuleScore);
 	<<"subset">> -> 
 	    rf_branch:subset();
 	<<"random-chisquare">> ->
 	    Weight = proplists:get_value(weight_factor, Options),
-	    rf_branch:random_chisquare(NoFeatures, NoFeatures, Weight);
+	    rf_branch:random_chisquare(Weight);
 	<<"chisquare">> ->
-	    F = proplists:get_value(weight_factor, Options),
-	    rf_branch:chisquare(NoFeatures, NoFeatures, F);
+	    F = proplists:get_value(<<"weight_factor">>, Options),
+	    rf_branch:chisquare(F);
 	<<"resquare">> ->
-	    F = proplists:get_value(weight_factor, Options),
-	    rf_branch:randomly_resquare(NoFeatures, 0.5, F);
+	    F = proplists:get_value(<<"weight_factor">>, Options),
+	    rf_branch:randomly_resquare(0.5, F);
 	<<"chisquare-decrease">> ->
-	    F =  proplists:get_value(weight_factor, Options),
-	    rf_branch:chisquare_decrease(NoFeatures, 0.5, F);
+	    F =  proplists:get_value(<<"weight_factor">>, Options),
+	    rf_branch:chisquare_decrease(0.5, F);
 	<<"random-subset">> ->
-	    rf_branch:random_subset(NoFeatures, 0);
+	    rf_branch:random_subset(0);
 	<<"sample-examples">> ->
 	    Factor = proplists:get_value(weight_factor, Options),
-	    rf_branch:sample_examples(NoFeatures, 0.1, Factor);
-	<<"depth-rule">> ->
-	    {NewNoFeatures, NoRules} = args(<<"no_rules">>, Options, Prior),
-	    RuleScore = args(<<"rule_score">>, Options, Prior),
-	    rf_branch:depth_rule(NewNoFeatures, NoRules, RuleScore);
+	    rf_branch:sample_examples(0.1, Factor);
+	%% <<"depth-rule">> ->
+	%%     NoRules = args(<<"no_rules">>, Options, Error),
+	%%     RuleScore = args(<<"rule_score">>, Options, Error),
+	%%     rf_branch:depth_rule(NoRules, RuleScore);
 	Other ->
 	    Error("feature-sampling", Other)
     end.
 
 %% @todo rename and fix
-no_rules(Value, Error, Options) ->
-    NoFeatures = proplists:get_value(no_features, Options),
+no_rules(Value, Error) ->
+    NoFeatures = 10,
     case rr_util:safe_iolist_to_binary(Value) of
 	<<"sh">> -> {NoFeatures, NoFeatures div 2};
-	<<"ss">> -> {NoFeatures, NoFeatures};
+	<<"ss">> -> fun (Total) -> trunc(math:sqrt(Total)) + 1 end;
 	<<"sd">> -> {NoFeatures, NoFeatures * 2};
 	<<"ds">> -> {NoFeatures * 2, NoFeatures};
 	<<"dd">> -> {NoFeatures * 2, NoFeatures * 2};
@@ -554,7 +541,7 @@ profile(In, Out) ->
     fun() ->
 	    File = csv:binary_reader(In),
 	    {Features, Examples, Dataset} = rr_example:load(File, 4),
-	    NoFeatures = trunc(math:log(length(Features))/math:log(2)),
+	    NoFeatures = fun (NoFeatures) -> trunc(math:log(NoFeatures)/math:log(2)) end,
 	    {Build, _Evaluate, _} = rf:new([{no_features, NoFeatures}]),
 	    eprof:start(),
 	    eprof:log(Out),

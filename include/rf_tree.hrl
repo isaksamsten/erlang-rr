@@ -47,3 +47,5 @@
 -type score_fun() :: fun((split(), Total::number()) -> score()).
 -type no_features_fun() :: fun((TotalNoFeatures::number()) -> 
 				NewNoFeatures::number()).
+-type branch() :: {BestSplit::#rr_candidate{}, NewFeatures::features()}.
+-type unpacked_branch() :: BestSplit::#rr_candidate{}.
