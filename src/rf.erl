@@ -446,7 +446,7 @@ no_features(Value, Error) ->
 	X ->
 	    case rr_example:format_number(X) of
 		{true, Number} when Number > 0 -> fun (_) -> Number end;
-		_ -> Error(X)
+		_ -> Error("no-features", X)
 	    end
     end.
 
