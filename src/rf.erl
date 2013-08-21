@@ -18,7 +18,10 @@
 	 help/0, 
 	 new/1,  
 	 build/4,
+	 partial_build/1,
+
 	 evaluate/4,
+	 partial_evaluate/1,
 
 	 predict/4,
 	 save/3,
@@ -170,6 +173,18 @@ save(File, Rf, Model) ->
 load(File, Cores) ->
     rr_ensemble:load(File, Cores).
 
+%% @doc return a build fun
+partial_build(Rf) ->
+    fun (Features, Examples, ExConf) ->
+	    build(Rf, Features, Examples, ExConf)
+    end.
+
+%% @doc return an evaluate fun
+partial_evaluate(Rf) ->
+    fun (Model, Examples, ExConf) ->
+	    evaluate(Rf, Model, Examples, ExConf)
+    end.
+
 %% @doc create a new rf-model
 new(Props) ->
     NoFeatures = proplists:get_value(
@@ -250,12 +265,8 @@ main(Args) ->
     Progress = args(<<"progress">>, Options, fun rr:illegal_option/2),
     Rf = rf:new([{base_learner, rf_tree}, {progress, Progress}|RfArgs]),
     
-    Build = fun (Features, Examples, ExConf) ->
-		    build(Rf, Features, Examples, ExConf)
-	    end,
-    Evaluate = fun (Model, Examples, ExConf) ->
-		       evaluate(Rf, Model, Examples, ExConf)
-	       end,
+    Build = partial_build(Rf),
+    Evaluate = partial_evaluate(Rf),
     
     ExperimentTime = now(),
     case proplists:get_value(<<"mode">>, Options) of
