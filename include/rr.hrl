@@ -43,6 +43,12 @@
 	  predictions :: number()
 	 }).
 
+-record(rr_exset, {
+	  features :: features(),
+	  examples :: examples(),
+	  exconf :: #rr_example{}
+	 }).
+
 %% a particular example (with id)
 -record(exid, {
 	  id :: integer(),
@@ -55,6 +61,7 @@
 		   tuple().
 -type features() :: [feature()].
 
+-type example_set() :: #rr_exset{}.
 -type example() :: {Class::atom(), Count::number(), Examples::[exid(),...]}.
 -type examples() :: [example()].
 

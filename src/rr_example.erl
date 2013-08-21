@@ -106,6 +106,8 @@ new() ->
       }.
 
 %% @doc delete a dataset
+kill(#rr_exset{exconf=Dataset}) ->
+    kill(Dataset);
 kill(Dataset) ->
     #rr_example{features = FeatureTable, examples = ExTable, predictions = PredictionsTable} = Dataset,
     ets:delete(FeatureTable),
@@ -117,7 +119,11 @@ kill(Dataset) ->
 load(File, Core) ->
     ExConf = new(),
     {Features, Examples} = load(File, Core, ExConf),
-    {Features, Examples, ExConf}.
+    #rr_exset {
+       features = Features,
+       examples = randomize(Examples),
+       exconf = ExConf
+      }.
 
 %% @doc load a dataset from file using Core cores to Dataset 
 -spec load(string(), number(), #rr_example{}) -> {features(), examples()}.

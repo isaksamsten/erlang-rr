@@ -19,6 +19,8 @@
 	 new/1,  
 	 build/4,
 	 evaluate/4,
+
+	 predict/4,
 	 save/3,
 	 load/2,
 	 
@@ -118,6 +120,10 @@ kill(Model) ->
 %% @doc build a model
 build(Rf, Features, Examples, ExConf) ->
     rr_ensemble:generate_model(Features, Examples, ExConf, Rf).
+
+%% @doc predict the class label of Example using Model and Rf
+predict(Rf, Model, Example, ExConf) ->
+    rr_ensemble:predict_majority(Model, Example, ExConf, Rf).
 
 %% @private evaluate Model using som well knonw evaluation metrics
 evaluate(Conf, Model, Test, ExConf) ->
@@ -229,7 +235,7 @@ main(Args) ->
 		    undefined ->
 			rr:illegal("no input file defined"),
 			halt();
-		    File -> File
+		    File0 -> File0
 		end,
     Cores = proplists:get_value(<<"cores">>, Options),
     Output = output(Options),
@@ -237,8 +243,7 @@ main(Args) ->
     rr_log:info("loading '~s' on ~p core(s)", [InputFile, Cores]),
     LoadingTime = now(),
     Csv = csv:binary_reader(InputFile),
-    {Features, Examples0, ExConf} = rr_example:load(Csv, Cores),
-    Examples = rr_example:randomize(Examples0),
+    ExSet = rr_example:load(Csv, Cores),
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
 
     RfArgs = args(Options, fun rr:illegal_option/2),
@@ -257,10 +262,9 @@ main(Args) ->
 	split ->
 	    Ratio = proplists:get_value(<<"ratio">>, Options),
 	    {Res, _Models} = 
-		rr_eval:split_validation(Features, Examples, ExConf,
-					 [{build, Build}, 
-					  {evaluate, killer(Evaluate)}, 
-					  {ratio, Ratio}]),
+		split_validation:evaluate(ExSet,[{build, Build}, 
+						 {evaluate, killer(Evaluate)}, 
+						 {ratio, Ratio}]),
 	    Output(Res);
 	cv ->
 	    CvProgress = fun (Fold) -> 
@@ -268,21 +272,24 @@ main(Args) ->
 			 end,
 	    Folds = proplists:get_value(<<"folds">>, Options),
 	    {Res, _Models} = 
-		rr_eval:cross_validation(Features, Examples, ExConf,
-					 [{build, Build}, 
-					  {evaluate, killer(Evaluate)}, 
-					  {progress, CvProgress},
-					  {folds, Folds}]),
+		cross_validation:evaluate(ExSet, [{build, Build}, 
+						  {evaluate, killer(Evaluate)}, 
+						  {progress, CvProgress},
+						  {folds, Folds}]),
 	    Output(Res);
 	build ->
-	    Model = Build(Features, Examples, ExConf),
+	    Model = Build(ExSet#rr_exset.features,
+			  ExSet#rr_exset.examples,
+			  ExSet#rr_exset.exconf),
 	    File = proplists:get_value(<<"model_file">>, Options, "undefined-model.rr"),
 	    save(File, Model, Rf);
 	evaluate ->
 	    File = proplists:get_value(<<"model_file">>, Options),
 	    Cores = proplists:get_value(<<"cores">>, Options, 4),
 	    Model = load(File, Cores),				     
-	    Res = evaluate(Rf, Model, Examples, ExConf),
+	    Res = evaluate(Rf, Model, 
+			   ExSet#rr_exset.examples, 
+			   ExSet#rr_exset.exconf),
 	    Output(Res);
 	Other ->
 	    rr:illegal_option("mode", Other)
@@ -293,7 +300,7 @@ main(Args) ->
 	undefined -> ok
     end,
     csv:kill(Csv),
-    rr_example:kill(ExConf),
+    rr_example:kill(ExSet),
     rr_config:stop(),
     rr_log:stop().
 

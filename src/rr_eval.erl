@@ -7,9 +7,6 @@
 -module(rr_eval).
 
 -export([
-	 cross_validation/4,
-	 split_validation/4,
-
 	 accuracy/1,
 	 auc/3,
 	 brier/2,
@@ -25,13 +22,14 @@
 %% @headerfile "rr.hrl"
 -include("rr.hrl").
 
-cross_validation(Features, Examples, ExConf, Props) ->
-    cross_validation:evaluate(Features, Examples, ExConf, Props).
+%% -spec cross_validation(example_set(), any()) -> result_set().
+%% cross_validation(ExampleSet, Props) ->
+%%     cross_validation:evaluate(ExampleSet, Props).
 
-%% @doc split examples and train and evaluate
--spec split_validation(features(), examples(), #rr_example{}, any()) -> result_set().
-split_validation(Features, Examples, ExConf, Props) ->
-    split_validation:evaluate(Features, Examples, ExConf, Props).
+%% %% @doc split examples and train and evaluate
+%% -spec split_validation(example_set(), any()) -> result_set().
+%% split_validation(ExampleSet, Props) ->
+%%     split_validation:evaluate(ExampleSet, Props).
     
 %% @doc 
 %% Calculate the accuracy (i.e. the percentage of correctly

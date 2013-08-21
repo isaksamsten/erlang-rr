@@ -7,15 +7,15 @@
 -module(split_validation).
 
 -export([
-	 evaluate/4
+	 evaluate/2
 	]).
 
 %% @headerfile "rr.hrl"
 -include("rr.hrl").
 
 %% @doc split examples and train and evaluate
--spec evaluate(features(), examples(), #rr_example{}, any()) -> result_set().
-evaluate(Features, Examples, ExConf, Props) ->
+-spec evaluate(example_set(), any()) -> result_set().
+evaluate(ExSet, Props) ->
     Build = case proplists:get_value(build, Props) of
 		undefined -> throw({badarg, build});
 		Build0 -> Build0
@@ -24,7 +24,11 @@ evaluate(Features, Examples, ExConf, Props) ->
 		   undefined -> throw({badarg, evaluate});
 		   Evaluate0 -> Evaluate0
 	       end,
-    
+    #rr_exset {
+       features = Features,
+       examples = Examples,
+       exconf = ExConf
+      } = ExSet,
     Ratio = proplists:get_value(ratio, Props, 0.66),
     {Train, Test} = rr_example:split_dataset(Examples, Ratio),
     Model = Build(Features, Train, ExConf),

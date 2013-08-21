@@ -7,7 +7,7 @@
 -module(cross_validation).
 
 -export([
-	 evaluate/4,
+	 evaluate/2,
 	 average_cross_validation/3
 	]).
 
@@ -17,8 +17,8 @@
 %% @doc
 %% Perform cross-validation on examples
 %% @end
--spec evaluate(features(), examples(), #rr_example{}, any()) -> result_set().
-evaluate(Features, Examples, ExConf, Props) ->
+-spec evaluate(example_set(), any()) -> result_set().
+evaluate(ExSet, Props) ->
     Build = case proplists:get_value(build, Props) of
 		undefined -> throw({badarg, build});
 		Build0 -> Build0
@@ -30,7 +30,11 @@ evaluate(Features, Examples, ExConf, Props) ->
     NoFolds = proplists:get_value(folds, Props, 10),
     Average = proplists:get_value(average, Props, fun average_cross_validation/2),
     Progress = proplists:get_value(progress, Props, fun (_) -> ok end),
-    
+    #rr_exset {
+       features = Features,
+       examples = Examples,
+       exconf = ExConf
+      } = ExSet,
     Total0 = rr_example:cross_validation(
 	      fun (Train, Test, Fold) ->
 		      Progress(Fold),

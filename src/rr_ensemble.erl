@@ -152,6 +152,8 @@ predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
 								 [{Prediction, Probs}|Predictions]
 							 end, [{Prediction, Probs}], Dict)).
 %% @doc predict the class for Example
+-spec predict_majority(pid(), exid(), #rr_example{}, #rr_ensemble{}) -> 
+			      {Predition:tuple(), Rest::[]}.
 predict_majority(Model, Example, ExConf, #rr_ensemble{no_classifiers=N}) ->
     Model ! {evaluate, self(), Example, ExConf},
     receive
