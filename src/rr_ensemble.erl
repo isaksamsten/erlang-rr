@@ -21,23 +21,19 @@
 kill(Model) ->
     Model ! {exit, self()}.
 
-%% @doc collect the base learners and save them to a file
-save(File, Model, Conf) ->
+get_model(Model, Conf) ->
     Collect = fun (BaseModels, _) -> BaseModels end,
     Models = perform(Model, {collect_models, Collect, fun lists:append/2}),
-    ModelDump = [{version, ?VERSION},
-		 {base_models, Models},
-		 {config, Conf}],
-    rr_system:save_model(ModelDump, File).
+    [{version, ?VERSION},
+     {base_models, Models},
+     {config, Conf}].
 
-%% @doc load model from file and return a model in evaluator state
-load(File, Cores) -> % todo: refactor away ExConf
-    Model = rr_system:load_model(File),
+load_model(Model) ->
     case proplists:get_value(version, Model) of
 	?VERSION ->
 	    Models = proplists:get_value(base_models, Model),
 	    Conf = proplists:get_value(config, Model),
-	    load_evaluation_coordinator(Models, Cores, Conf);
+	    load_evaluation_coordinator(Models, Conf#rr_ensemble.cores, Conf);
 	_ ->
 	    throw({error, invalid_version})
     end.

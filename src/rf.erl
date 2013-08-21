@@ -25,7 +25,10 @@
 
 	 predict/4,
 	 save/3,
-	 load/2,
+	 load/1,
+
+	 serialize/2,
+	 unserialize/1,
 	 
 	 args/2,
 
@@ -167,11 +170,25 @@ evaluate(Conf, Model, Test, ExConf) ->
      {base_accuracy, BaseAccuracy},
      {brier, Brier}].
 
-save(File, Rf, Model) ->
-    rr_ensemble:save(File, Model, Rf).
+serialize(Rf, Model) ->
+    Dump = rr_ensemble:get_model(Model, Rf),
+    rr_system:serialize_model(Dump).
 
-load(File, Cores) ->
-    rr_ensemble:load(File, Cores).
+unserialize(Dump) ->
+    rr_system:unserialize_model(Dump).
+
+save(File, Rf, Model) ->
+    Data = serialize(Rf, Model),
+    file:write_file(File, Data).
+
+load(File) ->
+    case file:read_file(File) of
+	{ok, Binary} ->
+	    Model = unserialize(Binary),
+	    rr_ensemble:load_model(Model);
+	{error, Reason} ->
+	    {error, Reason}
+    end.		
 
 %% @doc return a build fun
 partial_build(Rf) ->
@@ -293,11 +310,11 @@ main(Args) ->
 			  ExSet#rr_exset.examples,
 			  ExSet#rr_exset.exconf),
 	    File = proplists:get_value(<<"model_file">>, Options, "undefined-model.rr"),
-	    save(File, Model, Rf);
+	    save(File, Rf, Model);
 	evaluate ->
 	    File = proplists:get_value(<<"model_file">>, Options),
 	    Cores = proplists:get_value(<<"cores">>, Options, 4),
-	    Model = load(File, Cores),				     
+	    Model = load(File),
 	    Res = evaluate(Rf, Model, 
 			   ExSet#rr_exset.examples, 
 			   ExSet#rr_exset.exconf),
