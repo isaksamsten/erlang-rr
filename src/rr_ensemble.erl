@@ -33,7 +33,7 @@ load_model(Model) ->
 	?VERSION ->
 	    Models = proplists:get_value(base_models, Model),
 	    Conf = proplists:get_value(config, Model),
-	    load_evaluation_coordinator(Models, Conf#rr_ensemble.cores, Conf);
+	    {load_evaluation_coordinator(Models, Conf#rr_ensemble.cores, Conf), Conf};
 	_ ->
 	    throw({error, invalid_version})
     end.

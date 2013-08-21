@@ -170,10 +170,15 @@ evaluate(Conf, Model, Test, ExConf) ->
      {base_accuracy, BaseAccuracy},
      {brier, Brier}].
 
+%% @doc 
+%% serialize configuration Rf togheter with Model 
+%% (i.e. remember both the model and the conf that built it) 
+%% @end
 serialize(Rf, Model) ->
     Dump = rr_ensemble:get_model(Model, Rf),
     rr_system:serialize_model(Dump).
 
+%% @doc unserialize a model into a "thing" fit for loading with rr_ensemble:load_model/1
 unserialize(Dump) ->
     rr_system:unserialize_model(Dump).
 
@@ -314,8 +319,8 @@ main(Args) ->
 	evaluate ->
 	    File = proplists:get_value(<<"model_file">>, Options),
 	    Cores = proplists:get_value(<<"cores">>, Options, 4),
-	    Model = load(File),
-	    Res = evaluate(Rf, Model, 
+	    {Model, Conf} = load(File),
+	    Res = evaluate(Conf, Model, 
 			   ExSet#rr_exset.examples, 
 			   ExSet#rr_exset.exconf),
 	    Output(Res);
