@@ -194,6 +194,8 @@ format_features([Value|Values], [numeric|Types], Column, Acc) ->
 %% @doc determine if a string is a number or missing (?)
 format_number("?") ->
     '?';
+format_number(N) when is_number(N) ->
+    {true, N};
 format_number(L0) ->
     L = if is_binary(L0) -> binary_to_list(L0); true -> L0 end,
     Float = (catch erlang:list_to_float(L)),
