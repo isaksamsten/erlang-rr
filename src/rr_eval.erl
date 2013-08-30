@@ -43,7 +43,7 @@ accuracy(Predictions) ->
 %% @private containing number of {Correct, Incorrect} predictions
 correct(Predictions) ->
     dict:fold(fun (Actual, Values, Acc) ->
-		      lists:foldl(fun({{Predict, _}, _Probs},  {C, I}) ->
+		      lists:foldl(fun({{Predict, _, _Votes}, _Probs},  {C, I}) ->
 					  case Actual == Predict of
 					      true -> {C+1, I};
 					      false -> {C, I+1}
@@ -107,7 +107,7 @@ sorted_predictions(Pos, Neg) ->
 %% @private Find probability for predicting "Class" in range [0, 1]
 find_prob(Class, Probs) ->
     case lists:keyfind(Class, 1, Probs) of
-	{Class, Prob} ->
+	{Class, Prob, _Votes} ->
 	    Prob;
 	false ->
 	    0
@@ -134,12 +134,12 @@ calculate_variance([], _, Score) ->
 calculate_variance([{_, Probs}|Rest], Actual, Score) ->
     NextBest = get_2nd_best_prob(Actual, Probs),
     calculate_variance(Rest, Actual, 
-		     case lists:keyfind(Actual, 1, Probs) of
-			 {_, Best} ->
-			     Score + math:pow(Best - NextBest, 2);
-			 false ->
-			     Score + math:pow(0 - NextBest, 2)
-		     end).  
+		       case lists:keyfind(Actual, 1, Probs) of
+			   {_, Best, _Votes} ->
+			       Score + math:pow(Best - NextBest, 2);
+			   false ->
+			       Score + math:pow(0 - NextBest, 2)
+		       end).  
 
 
 %% @doc the strength of RF, calculated as: (1/N)(P(h(x) = Y) - P(h(x) = j) where j /= Y)
@@ -151,17 +151,17 @@ calculate_strength([], _, Score) ->
 calculate_strength([{_, Probs}|Rest], Actual, Score) ->
     NextBest = get_2nd_best_prob(Actual, Probs),
     calculate_strength(Rest, Actual, 
-		     case lists:keyfind(Actual, 1, Probs) of
-			 {_, Best} ->
-			     Score + Best - NextBest;
-			 false ->
-			     Score + 0 - NextBest
-		     end).    
+		       case lists:keyfind(Actual, 1, Probs) of
+			   {_, Best, _Votes} ->
+			       Score + Best - NextBest;
+			   false ->
+			       Score + 0 - NextBest
+		       end).    
 
 get_2nd_best_prob(Actual, Probs) ->
     case lists:keydelete(Actual, 1, Probs) of
 	[] -> 0;
-	[{_, NextBest0}|_] ->
+	[{_, NextBest0, _Votes}|_] ->
 	    NextBest0
     end.
 
@@ -178,7 +178,7 @@ brier(Predictions, NoExamples) ->
 calculate_brier_score([], _, Score) ->
     Score;
 calculate_brier_score([{_, Probs}|Rest], Actual, Score) ->
-    calculate_brier_score(Rest, Actual, lists:foldl(fun ({Class, Prob}, Acc) ->
+    calculate_brier_score(Rest, Actual, lists:foldl(fun ({Class, Prob, _Votes}, Acc) ->
 							    if Class == Actual ->
 								    Acc + math:pow(1 - Prob, 2);
 							       true ->
@@ -258,7 +258,7 @@ confusion_matrix(Classes, Predictions, Acc) ->
 	      lists:foldl(
 		fun (Search, Acc1) ->
 			lists:foldl(
-			  fun ({{Pred, _}, _}, Acc2) ->
+			  fun ({{Pred, _Prob, _Votes}, _}, Acc2) ->
 				  dict:update(Search,
 					      fun (SearchDict) ->
 						      dict:update_counter(Pred, 1, SearchDict)

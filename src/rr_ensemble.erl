@@ -110,7 +110,7 @@ base_accuracy(Model, Test, ExConf, Conf) ->
 						     {_, Preds} = rr_example:get_prediction(ExConf, ExId),
 						     dict:update(
 						       if length(Preds) > 1 ->
-							       {R, _} = lists:nth(2, Preds),
+							       {R, _Prob, _Votes} = lists:nth(2, Preds),
 							       R;
 							  true ->
 							       undefined
@@ -160,14 +160,24 @@ predict_majority(Model, Example, ExConf, #rr_ensemble{no_classifiers=N}) ->
 
 
 %% @doc ge the prediction probabilites for an example
-get_prediction_probabilities(Acc, N) ->
-    Dict = lists:foldl(fun ({{Item, _Laplace}, _NodeNr}, Dict) ->
+get_prediction_probabilities(Predictions, N) ->
+    Dict = lists:foldl(fun ({{Item, _Laplace, _Votes}, _NodeNr}, Dict) ->
 			       dict:update(Item, fun(Count) -> Count + 1  end, 1, Dict)
-		       end, dict:new(), Acc),
-    lists:sort(fun({_, Ca}, {_, Cb}) -> Ca > Cb end, 
+		       end, dict:new(), Predictions),
+    lists:sort(fun({_, Ca, _}, {_, Cb, _}) -> Ca > Cb end, 
 	       lists:foldl(fun ({Class, Count}, Probs) ->
-				   [{Class, Count/N}|Probs]
+				   Votes = vote_list(Predictions, Class),
+				   [{Class, Count/N, Votes}|Probs]
 			   end, [], dict:to_list(Dict))).
+
+vote_list(Predictions, Class) ->
+    lists:map(fun ({{Item, _, _}, _}) ->
+		      if Item == Class ->
+			      1;
+			 true ->
+			      0
+		      end
+	      end, Predictions).
 
 %% @doc Spaws classification and evaluator process
 spawn_base_classifiers(Sets, Cores, Features, Examples, ExConf, Conf) ->

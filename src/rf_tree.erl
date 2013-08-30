@@ -70,7 +70,7 @@ predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
 %% @doc predict an example according to a decision tree
 -spec predict(ExId::exid(), tree(), #rr_example{},  #rf_tree{}, []) -> prediction().
 predict(_, #rf_leaf{id=NodeNr, class=Class, score=Score}, _ExConf, _Conf, Acc) ->
-    {{Class, Score}, [NodeNr|Acc]};
+    {{Class, Score, []}, [NodeNr|Acc]};
 predict(ExId, #rf_node{id=NodeNr, 
 		       feature=F, 
 		       distribution={LeftExamples, RightExamples, {Majority, Count}},
