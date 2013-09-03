@@ -13,6 +13,7 @@
 	 entropy/1,
 	 info/2,
 	 hellinger/2, 
+	 bhattacharyya/2,
 
 	 %% rule learner
 	 purity/2,
@@ -57,14 +58,28 @@ gini_content(Examples, _Total) ->
 
 
 hellinger({both, Left, Right}, _Total) ->
-    Hell = hellinger_content(Left, Right),
-    {1-Hell, Hell, Hell};
-hellinger({left, Left}, _) ->
-    {inf, 0.0, 0.0};
-hellinger({right, Left}, _) ->
+    Value = probability_content(Left, Right, fun hellinger/1),
+    Hell = 1 - (1/math:sqrt(2)) * math:sqrt(Value),
+    {Hell, Hell, Hell};
+hellinger({_, _}, _) ->
     {inf, 0.0, 0.0}.
 
-hellinger_content(Left, Right) ->
+bhattacharyya({both, Left, Right}, _Total) ->
+    case probability_content(Left, Right, fun bhattacharyya/1) of
+	0.0 ->
+	    {inf,0.0,0.0};
+	Value ->
+	    V = 1-(-1*math:log(Value)),
+	    {V, V, V}
+    end;
+bhattacharyya(_, _) ->
+    {inf, 0.0, 0.0}.
+
+bhattacharyya({P, Q}) ->    
+    math:sqrt(P*Q).
+     
+
+probability_content(Left, Right, Fun) ->
     {LeftClasses, LeftTotal} = lists:foldl(
 				 fun ({Class, Count, _}, {Classes, Counts}) ->
 					 {[Class|Classes], Count + Counts}
@@ -73,15 +88,19 @@ hellinger_content(Left, Right) ->
 			 fun ({Class, Count, _}, {Classes, Counts}) ->
 				 {[Class|Classes], Count + Counts}
 			 end, {LeftClasses, 0}, Right),
-    Value = lists:foldl(
-	      fun (Class, Count) ->
-		      P = rr_example:count(Class, Left)/LeftTotal,
-		      Q = if RightTotal > 0 -> rr_example:count(Class, Right)/RightTotal;
-			     true -> 0
-			  end,
-		      Count + math:pow(math:sqrt(P) - math:sqrt(Q), 2)
-	      end, 0, ordsets:from_list(Classes)), %% note: wrong
-    (1/math:sqrt(2)) * math:sqrt(Value).
+    lists:foldl(fun (Class, Count) ->
+			P = rr_example:count(Class, Left)/LeftTotal,
+			Q = if RightTotal > 0 -> rr_example:count(Class, Right)/RightTotal;
+			       true -> 0
+			    end,
+			Count + Fun({P, Q})
+	      end, 0, ordsets:from_list(Classes)). %% note: wrong?
+    
+
+
+
+hellinger({P, Q}) ->
+    math:pow(math:sqrt(P) - math:sqrt(Q), 2).
 
 %% @doc
 info_gain({both, Left, Right}, Total) ->
@@ -210,7 +229,7 @@ hellinger_test() ->
 				   [{green, 0}, {yellow, 1000}]),
     Split2 = rr_example:mock_split([{green, 10}, {yellow, 20000}],
 				   [{green, 8}, {yellow, 1000}]),
-    Distance = fun hellinger/2,
+    Distance = fun bhattacharyya/2,
     ?debugFmt("~p < ~p", [element(1, Distance(Split1,322)), element(1, Distance(Split2,322))]),
     ?assert(element(1, Distance(Split1, 322)) < element(1, Distance(Split2, 322))).
 -endif.
