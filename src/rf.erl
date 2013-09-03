@@ -457,7 +457,8 @@ score(Value, Error, Options) ->
     case rr_util:safe_iolist_to_binary(Value) of
 	<<"info">> -> rf_tree:info();
 	<<"gini">> -> rf_tree:gini();
-	<<"gini-info">> -> rf_tree:gini_info(WeightFactor);	
+	<<"gini-info">> -> rf_tree:gini_info(WeightFactor);
+	<<"hellinger">> -> fun rr_estimator:hellinger/2;
 	Other -> Error("score", Other)		
     end.
 

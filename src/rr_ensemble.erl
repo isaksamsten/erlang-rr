@@ -337,8 +337,8 @@ update_variable_importance(TreeVariables, VariableImportance, Total) ->
 
 -ifdef(TEST).
 
-partition_test() ->
-    Partitions = partition([1,2,3,4], [[], []]),
-    ?assertEqual([[3,1], [4,2]], Partitions).
+%partition_test() ->
+%    Partitions = partition([1,2,3,4], [[], []]),
+ %   ?assertEqual([[3,1], [4,2]], Partitions).
 
 -endif.

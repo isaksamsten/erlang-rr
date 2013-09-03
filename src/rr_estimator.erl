@@ -12,6 +12,7 @@
 	 info_gain/2,
 	 entropy/1,
 	 info/2,
+	 hellinger/2, 
 
 	 %% rule learner
 	 purity/2,
@@ -38,10 +39,10 @@ gini({both, Left, Right}, Total) ->
     {1-(LeftGini + RightGini), LeftGini, RightGini};
 gini({left, Left}, Total) ->
     LeftGini = gini_content(Left, Total),
-    {1-LeftGini, LeftGini, 1.0};
+    {inf, LeftGini, 0.0};
 gini({right, Right}, Total) ->
     RightGini = gini_content(Right, Total),
-    {1-RightGini, 1.0, RightGini}.
+    {inf, 0.0, RightGini}.
     
 gini_content(Examples, _Total) -> 
     Counts = [C || {_, C, _} <- Examples],
@@ -54,6 +55,34 @@ gini_content(Examples, _Total) ->
 			Count + math:pow(Class/Total, 2)
 		end, 0.0, Counts).
 
+
+hellinger({both, Left, Right}, _Total) ->
+    Hell = hellinger_content(Left, Right),
+    {1-Hell, Hell, Hell};
+hellinger({left, Left}, _) ->
+    {inf, 0.0, 0.0};
+hellinger({right, Left}, _) ->
+    {inf, 0.0, 0.0}.
+
+hellinger_content(Left, Right) ->
+    {LeftClasses, LeftTotal} = lists:foldl(
+				 fun ({Class, Count, _}, {Classes, Counts}) ->
+					 {[Class|Classes], Count + Counts}
+				 end, {[], 0}, Left),
+    {Classes, RightTotal} = lists:foldl(
+			 fun ({Class, Count, _}, {Classes, Counts}) ->
+				 {[Class|Classes], Count + Counts}
+			 end, {LeftClasses, 0}, Right),
+    Value = lists:foldl(
+	      fun (Class, Count) ->
+		      P = rr_example:count(Class, Left)/LeftTotal,
+		      Q = if RightTotal > 0 -> rr_example:count(Class, Right)/RightTotal;
+			     true -> 0
+			  end,
+		      Count + math:pow(math:sqrt(P) - math:sqrt(Q), 2)
+	      end, 0, ordsets:from_list(Classes)), %% note: wrong
+    (1/math:sqrt(2)) * math:sqrt(Value).
+
 %% @doc
 info_gain({both, Left, Right}, Total) ->
     LeftInfo = info_content(Left, Total),
@@ -61,10 +90,10 @@ info_gain({both, Left, Right}, Total) ->
     {LeftInfo + RightInfo, LeftInfo, RightInfo};
 info_gain({left, Left}, Total) ->
     LeftInfo = info_content(Left, Total),
-    {LeftInfo, LeftInfo, 0.0};
+    {inf, LeftInfo, 0.0};
 info_gain({right, Right}, Total) ->
     RightInfo = info_content(Right, Total),
-    {RightInfo, 0.0, RightInfo}.
+    {inf, 0.0, RightInfo}.
 
 info_content(Side, Total) ->
     NoSide = rr_example:count(Side),
@@ -166,7 +195,7 @@ chisquare_weight(Examples, P) ->
 
 chi_square_test() ->
     ?assertEqual(chisquare(rr_example:mock_split([{green, 4}, {red, 1}],
-						  [{green, 3}, {red, 1}]),
+						 [{green, 3}, {red, 1}]),
 			    rr_example:mock_examples([{green, 7}, {red, 2}]), 
 			    9), 
 		 0.03214285714285711),
@@ -176,4 +205,12 @@ chi_square_test() ->
 			    17), 
 		 10.577777777777778).
 
+hellinger_test() ->
+    Split1 = rr_example:mock_split([{green, 10}, {yellow, 20000}],
+				   [{green, 0}, {yellow, 1000}]),
+    Split2 = rr_example:mock_split([{green, 10}, {yellow, 20000}],
+				   [{green, 8}, {yellow, 1000}]),
+    Distance = fun hellinger/2,
+    ?debugFmt("~p < ~p", [element(1, Distance(Split1,322)), element(1, Distance(Split2,322))]),
+    ?assert(element(1, Distance(Split1, 322)) < element(1, Distance(Split2, 322))).
 -endif.

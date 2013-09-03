@@ -202,6 +202,3 @@ gini() ->
 -spec info() -> score_fun().
 info() ->
     fun rr_estimator:info_gain/2.
-
-        
-
