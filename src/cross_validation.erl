@@ -90,7 +90,7 @@ average_list_item([Item|Rest], Folds, Acc) ->
 		 {Key, {_, 'n/a'}} -> % note: don't count when we got no value
 		     case lists:keytake(Key, 1, Acc) of
 			 {value, {Key, {_, B}}, AccRest} ->
-			     [{Key, {0, B + 1 / Folds}}|AccRest];
+			     [{Key, {0, B + 0 / Folds}}|AccRest];
 			 false ->
 			     [{Key, {0,  1/Folds}}|Acc]
 		     end;
@@ -104,7 +104,7 @@ average_list_item([Item|Rest], Folds, Acc) ->
 		 {Key, 'n/a'} ->
 		     case lists:keytake(Key, 1, Acc) of
 			 {value, {Key, B}, AccRest} ->
-			     [{Key, B + 1 / Folds}|AccRest];
+			     [{Key, B + 0 / Folds}|AccRest];
 			 false ->
 			     [{Key, 1/Folds}|Acc]
 		     end;
