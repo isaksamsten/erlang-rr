@@ -73,7 +73,7 @@ csv_output_measures(Measures, Header) ->
     [{_, Last}|NewHeader] = lists:reverse(Header),
     lists:foreach(fun ({_, Key}) ->
 			  case lists:keyfind(Key, 1, Measures) of
-			      {Key, {Auc, _}} ->
+			      {Key, {_, Auc}} ->
 				  io:format("~p,", [Auc]);
 			      {Key, Value} ->
 				  io:format("~p,", [Value]);
