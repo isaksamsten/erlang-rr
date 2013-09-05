@@ -40,10 +40,10 @@ gini({both, Left, Right}, Total) ->
     {1-(LeftGini + RightGini), LeftGini, RightGini};
 gini({left, Left}, Total) ->
     LeftGini = gini_content(Left, Total),
-    {inf, LeftGini, 0.0};
+    {LeftGini, LeftGini, 0.0};
 gini({right, Right}, Total) ->
     RightGini = gini_content(Right, Total),
-    {inf, 0.0, RightGini}.
+    {RightGini, 0.0, RightGini}.
     
 gini_content(Examples, _Total) -> 
     Counts = [C || {_, C, _} <- Examples],
@@ -62,18 +62,18 @@ hellinger({both, Left, Right}, _Total) ->
     Hell = 1 - (1/math:sqrt(2)) * math:sqrt(Value),
     {Hell, Hell, Hell};
 hellinger({_, _}, _) ->
-    {inf, 0.0, 0.0}.
+    {1000, 0.0, 0.0}.
 
 bhattacharyya({both, Left, Right}, _Total) ->
     case probability_content(Left, Right, fun bhattacharyya/1) of
 	0.0 ->
-	    {inf,0.0,0.0};
+	    {1000,0.0,0.0};
 	Value ->
 	    V = 1-(-1*math:log(Value)),
 	    {V, V, V}
     end;
 bhattacharyya(_, _) ->
-    {inf, 0.0, 0.0}.
+    {1000, 0.0, 0.0}.
 
 bhattacharyya({P, Q}) ->    
     math:sqrt(P*Q).
@@ -109,10 +109,10 @@ info_gain({both, Left, Right}, Total) ->
     {LeftInfo + RightInfo, LeftInfo, RightInfo};
 info_gain({left, Left}, Total) ->
     LeftInfo = info_content(Left, Total),
-    {inf, LeftInfo, 0.0};
+    {LeftInfo, LeftInfo, 0.0};
 info_gain({right, Right}, Total) ->
     RightInfo = info_content(Right, Total),
-    {inf, 0.0, RightInfo}.
+    {RightInfo, 0.0, RightInfo}.
 
 info_content(Side, Total) ->
     NoSide = rr_example:count(Side),

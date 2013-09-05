@@ -483,7 +483,7 @@ feature_sampling(Value, Error, Options) ->
 	    MinGain = proplists:get_value(<<"min_gain">>, Options),
 	    rf_branch:resample(NoResamples, MinGain);
 	<<"combination">> ->
-	    Factor = proplists:get_value(weight_factor, Options),
+	    Factor = proplists:get_value(<<"weight_factor">>, Options),
 	    rf_branch:random_correlation(Factor);
 	<<"rule">> ->
 	    NoRules = args(<<"no_rules">>, Options, Error),
@@ -501,7 +501,7 @@ feature_sampling(Value, Error, Options) ->
 	<<"subset">> -> 
 	    rf_branch:subset();
 	<<"random-chisquare">> ->
-	    Weight = proplists:get_value(weight_factor, Options),
+	    Weight = proplists:get_value(<<"weight_factor">>, Options),
 	    rf_branch:random_chisquare(Weight);
 	<<"chisquare">> ->
 	    F = proplists:get_value(<<"weight_factor">>, Options),
