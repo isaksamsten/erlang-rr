@@ -478,6 +478,8 @@ feature_sampling(Value, Error, Options) ->
     case rr_util:safe_iolist_to_binary(Value) of
 	<<"weka">> ->
 	    rf_branch:weka();
+	<<"hell">> ->
+	    rf_branch:hell();
 	<<"resample">> ->
 	    NoResamples = proplists:get_value(<<"no_resamples">>, Options, 6),
 	    MinGain = proplists:get_value(<<"min_gain">>, Options),

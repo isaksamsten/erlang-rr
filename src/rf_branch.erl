@@ -29,6 +29,7 @@
 	 %% resampling approahces
 	 weka/0,
 	 resample/2,
+	 hell/0,
 
 	 %% significance approaches
 	 random_chisquare/1,
@@ -326,6 +327,22 @@ simple_resample(Sample, NoResamples, Delta) ->
 		    false
 	    end
     end.
+
+hell() ->
+    Sample = redo_curry(subset()),
+    Resample = hell_resample(),
+    redo(Sample, Resample).
+
+hell_resample() ->
+    fun(#rr_candidate{score = {Score, _, _}}, _, _, _) ->
+	    if Score >= 1 ->
+		    NewSample = redo_curry(fun(_) -> 1 end, subset()),
+		    {true, NewSample, hell_resample()};
+	       true ->
+		    false
+	    end
+    end.
+						    
 
 %% @doc resample 1 feature if no informative features is found
 weka() ->

@@ -59,7 +59,7 @@ gini_content(Examples, _Total) ->
 
 hellinger({both, Left, Right}, _Total) ->
     Value = probability_content(Left, Right, fun hellinger/1),
-    Hell = 1 - (1/math:sqrt(2)) * math:sqrt(Value),
+    Hell = 1 - ((1/math:sqrt(2)) * math:sqrt(Value)),
     {Hell, Hell, Hell};
 hellinger({_, _}, _) ->
     {1000, 0.0, 0.0}.
@@ -78,26 +78,22 @@ bhattacharyya(_, _) ->
 bhattacharyya({P, Q}) ->    
     math:sqrt(P*Q).
      
+class_total(Examples, Init) ->
+    lists:foldl(
+      fun ({Class, Count, _}, {Classes, Counts}) ->
+	      {[Class|Classes], Count + Counts}
+      end, Init, Examples).
 
 probability_content(Left, Right, Fun) ->
-    {LeftClasses, LeftTotal} = lists:foldl(
-				 fun ({Class, Count, _}, {Classes, Counts}) ->
-					 {[Class|Classes], Count + Counts}
-				 end, {[], 0}, Left),
-    {Classes, RightTotal} = lists:foldl(
-			 fun ({Class, Count, _}, {Classes, Counts}) ->
-				 {[Class|Classes], Count + Counts}
-			 end, {LeftClasses, 0}, Right),
+    {LeftClasses, LeftTotal} = class_total(Left, {[], 0}),
+    {Classes, RightTotal} = class_total(Right, {LeftClasses, 0}),
     lists:foldl(fun (Class, Count) ->
 			P = rr_example:count(Class, Left)/LeftTotal,
 			Q = if RightTotal > 0 -> rr_example:count(Class, Right)/RightTotal;
 			       true -> 0
 			    end,
 			Count + Fun({P, Q})
-	      end, 0, ordsets:from_list(Classes)). %% note: wrong?
-    
-
-
+	      end, 0, ordsets:from_list(Classes)).
 
 hellinger({P, Q}) ->
     math:pow(math:sqrt(P) - math:sqrt(Q), 2).
