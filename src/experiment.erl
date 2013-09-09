@@ -125,11 +125,11 @@ run([Dataset|Datasets], Evaluate, Classifier, Loader, Output, Progress, Iteratio
     Result = lists:foldl(
 	       fun (Iteration, Results) ->
 		       Progress(Dataset, {Iteration, Iterations}),
-		       {Res, _Models} = Evaluate(ExSet, Classifier()),
+		       {Res, Models} = Evaluate(ExSet, Classifier()),
 		       Output(Dataset, Iteration, Res),
-		       [Res|Results]
+		       [{Iteration, Res, Models}|Results]
 	       end, [], lists:seq(1, Iterations)),
-    run(Datasets, Evaluate, Classifier, Loader, Output, Progress, Iterations, [Result|Acc]).
+    run(Datasets, Evaluate, Classifier, Loader, Output, Progress, Iterations, [{Dataset, Result}|Acc]).
 		       
 evaluation(Value, _Error) ->    
     case string:tokens(Value, " ") of
