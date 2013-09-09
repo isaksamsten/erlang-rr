@@ -77,7 +77,7 @@ main(Args) ->
     Experiment = new(Options ++ 
 			 [
 			  {progress, Progress},
-			  {output, Output},
+			  {output, Output}
 			 ]),
     run(["data/iris.txt", "data/car.txt"], Experiment),
     ok.
