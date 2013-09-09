@@ -9,6 +9,7 @@
 -author('isak-kar@dsv.su.se').
 -export([
 	 csv/0,
+	 csv/1,
 	 default/0
 ]).
 
@@ -42,50 +43,58 @@
 
 %% @doc return a csv result generator
 -spec csv() -> result_fun().
-csv() ->
+csv(Source) ->
     fun(Data) ->
 	    Header = rr_config:get_value('csv.headers', ?DEFAULT_CSV_HEADERS),
-	    case rr_config:get_value('output.csv.header', true) of
+	    case rr_config:get_value('output.csv.header', false) of
 		true ->
 		    io:format("~s~n", [string:join(lists:map(fun ({H, _}) -> H end, Header), ",")]);
 		false ->
 		    ok
 	    end,
-	    csv_output(Data, Header)
+	    csv_output(Data, Source, Header)
     end.
+csv() ->
+    csv(fun (info, Fold) ->
+		io:format("fold ~p,", [Fold]);
+	    (value, Value) ->
+		io:format("~p,", [Value]);
+	    (value_end, Value) ->
+		io:format("~p~n", [Value])
+	end).
 
-csv_output({cv, _, Folds}, Header) ->
-    csv_output_cv(Folds, Header);
-csv_output({split, Split}, Header) ->
-    csv_output_split(Split, Header).
+csv_output({cv, _, Folds}, Output, Header) ->
+    csv_output_cv(Folds, Output, Header);
+csv_output({split, Split}, Output, Header) ->
+    csv_output_split(Split, Output, Header).
 
-csv_output_cv([], _) ->
+csv_output_cv([], _, _) ->
     done;
-csv_output_cv([{{_, Fold}, Measures}|Rest], Header) ->
-    io:format("fold ~p,", [Fold]),
-    csv_output_measures(Measures, Header),
-    csv_output_cv(Rest, Header).
+csv_output_cv([{{_, Fold}, Measures}|Rest], Output, Header) ->
+    Output(info, [Fold]),
+    csv_output_measures(Measures, Output, Header),
+    csv_output_cv(Rest, Output, Header).
 
-csv_output_split({_, Measures}, Header) ->
-    csv_output_measures(Measures, Header).
+csv_output_split({_, Measures}, Output, Header) ->
+    csv_output_measures(Measures, Output, Header).
 
-csv_output_measures(Measures, Header) ->
+csv_output_measures(Measures, Output, Header) ->
     [{_, Last}|NewHeader] = lists:reverse(Header),
     lists:foreach(fun ({_, Key}) ->
 			  case lists:keyfind(Key, 1, Measures) of
 			      {Key, {_, Auc}} ->
-				  io:format("~p,", [Auc]);
+				  Output(value, [Auc]);
 			      {Key, Value} ->
-				  io:format("~p,", [Value]);
+				  Output(value, [Value]);
 			      {Key, _, Value} ->
-				  io:format("~p,", [Value]);
+				  Output(value, [Value]);
 			      _ ->
 				  ok
 			  end
 		  end, lists:reverse(NewHeader)),
     case lists:keyfind(Last, 1, Measures) of
 	{Last, Value} ->
-	    io:format("~p~n", [Value]);
+	    Output(value_end, [Value]);
 	_ ->
 	    rr:illegal("invalid ending in header...")
     end.

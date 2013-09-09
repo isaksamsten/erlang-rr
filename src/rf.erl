@@ -14,6 +14,7 @@
 -define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 -export([
 	 main/1,
+	 parse_args/1,
 	 
 	 help/0, 
 	 new/1,  
@@ -249,9 +250,11 @@ new(Props) ->
        cores = Cores
       }.
 
+parse_args(Args) ->
+    rr:parse(Args, ?CMD_SPEC).
+
 %% @todo refactor to use proplist
-main(Args) ->
-    Options = rr:parse(Args, ?CMD_SPEC),
+main(Options) ->
     case rr:any_opt([<<"help">>, <<"version">>, 
 		     <<"examples">>, <<"observer">>], Options) of
 	<<"help">> ->
@@ -276,6 +279,8 @@ main(Args) ->
 		end,
     Cores = proplists:get_value(<<"cores">>, Options),
     Output = output(Options),
+    RfArgs = args(Options, fun rr:illegal_option/2),
+    Rf = rf:new([{base_learner, rf_tree}|RfArgs]),
 
     rr_log:info("loading '~s' on ~p core(s)", [InputFile, Cores]),
     LoadingTime = now(),
@@ -283,9 +288,7 @@ main(Args) ->
     ExSet = rr_example:load(Csv, Cores),
     rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
 
-    RfArgs = args(Options, fun rr:illegal_option/2),
-    Progress = args(<<"progress">>, Options, fun rr:illegal_option/2),
-    Rf = rf:new([{base_learner, rf_tree}, {progress, Progress}|RfArgs]),
+
     
     Build = partial_build(Rf),
     Evaluate = partial_evaluate(Rf),
@@ -384,7 +387,9 @@ args(Rest, Prior) ->
     NoFeatures = args(<<"no_features">>, Rest, Prior),
     MinEx = args(<<"min_examples">>, Rest, Prior),
     MaxDepth = args(<<"max_depth">>, Rest, Prior),
+    Progress = args(<<"progress">>, Rest, Prior),
     Args = [{no_features, NoFeatures},
+	    {progress, Progress},
 	    {no_cores, args(<<"cores">>, Rest, Prior)},
 	    {no_trees, args(<<"no_trees">>, Rest, Prior)},
 	    {score, args(<<"score">>, Rest, Prior)},

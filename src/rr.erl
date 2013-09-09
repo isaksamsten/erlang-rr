@@ -15,6 +15,7 @@
 
 -export([
 	 main/1,
+	 parse_args/1,
 
 	 show_help/3,
 
@@ -32,6 +33,14 @@
 	 any_opt/2
 	]).
 
+%% @doc returns the parse arguments and a suitable module
+parse_args(Args) ->
+    case Args of
+	["rf"|Cmd] ->
+	    {rf, rf:parse_args(Cmd)}
+    end.
+	    
+
 main(Args) ->
     Props = read_config("rr.config"),
     initialize(Props),
@@ -39,7 +48,11 @@ main(Args) ->
 	["km"|Cmd] ->
 	    km:main(Cmd);
 	["rf"|Cmd] ->
-	    rf:main(Cmd);
+	    RfArgs = rf:parse_args(Cmd),
+	    rf:main(RfArgs);
+	["experiment"|Cmd] ->
+	    ExArgs = experiment:parse_args(Cmd),
+	    experiment:main(ExArgs);
 	["config"|Cmd] ->
 	    case Cmd of
 		["get",Var] ->
@@ -57,7 +70,7 @@ main(Args) ->
 	    end;
 	["version"] ->
 	    io:format("~s~n", [show_information()]);
-	[] ->
+	_ ->
 	    io:format("no command specified~n"),
 	    show_help()
     end.
