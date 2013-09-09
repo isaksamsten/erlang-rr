@@ -1,7 +1,9 @@
 %%% @author Isak Karlsson <isak-kar@dsv.su.se>
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
-%%% 
+%%% Usage: 
+%%    Ex = experiment:new([....]),
+%%    experiment:run([Datasets], [....])
 %%% @end
 %%% Created :  9 Sep 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
@@ -42,7 +44,6 @@ args(Args, Error) ->
     
     [{iterations, Iterations},
      {evaluate, Evaluation},
-
      {classifier, Classifier}].
 
 args(Arg, Args, Error) ->
@@ -58,9 +59,11 @@ args(Arg, Args, Error) ->
 
 main(Args) ->
     Options = args(Args, fun rr:illegal_option/2),
-    Progress = fun (done, done) -> io:format(standard_error, "~n", []);
+    Progress = fun (done, done) -> 
+		       io:format(standard_error, "~n", []);
 		   (Dataset, {I, Oi}) -> 
-		       io:format(standard_error, "running ~s iteration ~p/~p~n", [Dataset, I, Oi])
+		       io:format(standard_error, 
+				 "running ~s iteration ~p/~p~n", [Dataset, I, Oi])
 	       end,
     Output = fun (Dataset, Iteration, Res) ->
 		     Csv = rr_result:csv(
