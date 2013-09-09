@@ -39,13 +39,10 @@ args(Args, Error) ->
     Iterations = args(<<"iterations">>, Args, Error),
     Evaluation = args(<<"evaluation">>, Args, Error),
     Classifier = args(<<"classifier">>, Args, Error),
-    Progress = fun (done, done) -> io:format(standard_error, "~n", []);
-		   (Dataset, {I, Oi}) -> 
-		       io:format(standard_error, "running ~s iteration ~p/~p~n", [Dataset, I, Oi])
-	       end,
+    
     [{iterations, Iterations},
      {evaluate, Evaluation},
-     {progress, Progress},
+
      {classifier, Classifier}].
 
 args(Arg, Args, Error) ->
@@ -61,7 +58,27 @@ args(Arg, Args, Error) ->
 
 main(Args) ->
     Options = args(Args, fun rr:illegal_option/2),
-    Experiment = new(Options),
+    Progress = fun (done, done) -> io:format(standard_error, "~n", []);
+		   (Dataset, {I, Oi}) -> 
+		       io:format(standard_error, "running ~s iteration ~p/~p~n", [Dataset, I, Oi])
+	       end,
+    Output = fun (Dataset, Iteration, Res) ->
+		     Csv = rr_result:csv(
+			     fun (info, Fold) ->
+				     io:format("fold ~p,", Fold),
+				     io:format("~s,~p,", [Dataset, Iteration]);
+				 (value, Value) ->
+				     io:format("~p,", Value);
+				 (value_end, Value) ->
+				     io:format("~p~n", Value)
+			     end),
+		     Csv(Res)
+	     end,
+    Experiment = new(Options ++ 
+			 [
+			  {progress, Progress},
+			  {output, Output},
+			 ]),
     run(["data/iris.txt", "data/car.txt"], Experiment),
     ok.
 
@@ -69,20 +86,7 @@ new(Props) ->
     Cores = proplists:get_value(cores, Props, erlang:system_info(schedulers)),
     Evaluate = proplists:get_value(evaluate, Props),
     Classifier = proplists:get_value(classifier, Props),
-    Output = proplists:get_value(
-	       output, Props, 
-	       fun (Dataset, Iteration, Res) ->
-		       Csv = rr_result:csv(
-			       fun (info, Fold) ->
-				       io:format("fold ~p,", Fold),
-				       io:format("~s,~p,", [Dataset, Iteration]);
-				   (value, Value) ->
-				       io:format("~p,", Value);
-				   (value_end, Value) ->
-				       io:format("~p~n", Value)
-			       end),
-		       Csv(Res)
-	       end),
+    Output = proplists:get_value(output, Props, fun (_,_,_) -> ok end),
     Iterations = proplists:get_value(iterations, Props, 10),
     Progress = proplists:get_value(progress, Props, fun (_, _) -> ok end),
     Loader = proplists:get_value(loader, Props, 
