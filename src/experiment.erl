@@ -100,7 +100,6 @@ load_dir(Dir) ->
 			end, [], Filenames),
     rr_log:debug("running experiment with ~p files", [length(Files)]),
     lists:reverse(Files).
-					
 
 new(Props) ->
     Cores = proplists:get_value(cores, Props, erlang:system_info(schedulers)),
@@ -137,7 +136,8 @@ run(Datasets, Experiment) ->
 run([], _, _, _, _, Progress, _, Acc) ->
     Progress(done, done),
     Acc;
-run([Dataset|Datasets], Evaluate, Classifier, Loader, Output, Progress, Iterations, Acc) ->
+run([Dataset|Datasets], Evaluate, Classifier, Loader, 
+    Output, Progress, Iterations, Acc) ->
     ExSet = Loader(Dataset),
     Result = lists:foldl(
 	       fun (Iteration, Results) ->
@@ -146,14 +146,16 @@ run([Dataset|Datasets], Evaluate, Classifier, Loader, Output, Progress, Iteratio
 		       Output(Dataset, Iteration, Res),
 		       [{Iteration, Res, Models}|Results]
 	       end, [], lists:seq(1, Iterations)),
-    run(Datasets, Evaluate, Classifier, Loader, Output, Progress, Iterations, [{Dataset, Result}|Acc]).
+    run(Datasets, Evaluate, Classifier, Loader, 
+	Output, Progress, Iterations, [{Dataset, Result}|Acc]).
 		       
 evaluation(Value, _Error) ->    
     case string:tokens(Value, " ") of
 	["cv"|_Cmd] ->
-	     CvProgress = fun (Fold) -> 
-				  io:format(standard_error, "fold ~p ", [Fold])
-			  end,
+	     CvProgress = 
+		fun (Fold) -> 
+			io:format(standard_error, "fold ~p ", [Fold])
+		end,
 	    fun (Dataset, Props) ->
 		    cross_validation:evaluate(Dataset, Props ++ [{progress, CvProgress}])
 	    end
