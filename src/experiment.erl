@@ -11,6 +11,7 @@
 -export([
 	 new/1,
 	 run/2,
+	 help/0,
 
 	 main/1,
 	 args/2,
@@ -29,10 +30,13 @@
 	  "Folder containing datasets"},
 	 {<<"iterations">>, $i, "iterations", {integer, 10},
 	  "Number of iterations to run each experiment"},
-	 {<<"evaluation">>, $e, "evaluation", {string, "cv --folds 10"},
+	 {<<"evaluation">>, $e, "evaluation", {string, "cv"},
 	  "Evaluation settings."},
-	 {<<"classifier">>, $c, "classifier", {string, "rf -n 100"},
+	 {<<"classifier">>, $c, "classifier", string,
 	  "Classifier settings."}]).	  
+
+help() ->
+    "".
 
 parse_args(Args) ->
     rr:parse(Args, ?CMD_SPEC).
@@ -69,7 +73,7 @@ main(Args) ->
 		     Csv = rr_result:csv(
 			     fun (info, Fold) ->
 				     io:format("fold ~p,", Fold),
-				     io:format("~s,~p,", [Dataset, Iteration]);
+				     io:format("~s,iteration ~p,", [Dataset, Iteration]);
 				 (value, Value) ->
 				     io:format("~p,", Value);
 				 (value_end, Value) ->
@@ -77,13 +81,26 @@ main(Args) ->
 			     end),
 		     Csv(Res)
 	     end,
+    DatasetFolder = args(<<"dataset">>, Args, fun rr:illegal_options/2),
     Experiment = new(Options ++ 
 			 [
 			  {progress, Progress},
 			  {output, Output}
 			 ]),
-    run(["data/iris.txt", "data/car.txt"], Experiment),
+    run(load_dir(DatasetFolder), Experiment),
     ok.
+
+load_dir(Dir) ->
+    {ok, Filenames} = file:list_dir(Dir),
+    Files = lists:foldl(fun (File, Acc) ->
+				case filename:extension(File) of
+				    ".txt" -> [filename:join(Dir, File)|Acc];
+				    _ -> Acc
+				end
+			end, [], Filenames),
+    rr_log:debug("running experiment with ~p files", [length(Files)]),
+    lists:reverse(Files).
+					
 
 new(Props) ->
     Cores = proplists:get_value(cores, Props, erlang:system_info(schedulers)),
@@ -125,7 +142,7 @@ run([Dataset|Datasets], Evaluate, Classifier, Loader, Output, Progress, Iteratio
     Result = lists:foldl(
 	       fun (Iteration, Results) ->
 		       Progress(Dataset, {Iteration, Iterations}),
-		       {Res, Models} = Evaluate(ExSet, Classifier()),
+		       {Res, Models} = Evaluate(ExSet, Classifier),
 		       Output(Dataset, Iteration, Res),
 		       [{Iteration, Res, Models}|Results]
 	       end, [], lists:seq(1, Iterations)),
@@ -143,16 +160,13 @@ evaluation(Value, _Error) ->
     end.
 
 classifier(Value, Error) ->
-    case string:tokens(Value, " ") of
-	["rf"|Cmd] ->
-	    Args = rf:parse_args(Cmd),
-	    Opts = rf:args(Args, Error),
-	    Rf = rf:new(Opts),
-	    Build = rf:partial_build(Rf),
-	    Evaluate = rf:partial_evaluate(Rf),
-	    fun () ->
-		    [{build, Build}, {evaluate, rf:killer(Evaluate)}]
-	    end
+    case rr:parse_args(string:tokens(Value, " ")) of
+	{Method, Args} ->
+	    Opts = Method:args(Args, Error),
+	    Rf = Method:new(Opts),
+	    Build = Method:partial_build(Rf),
+	    Evaluate = Method:partial_evaluate(Rf),
+	    [{build, Build}, {evaluate, rf:killer(Evaluate)}]
     end.
 
 

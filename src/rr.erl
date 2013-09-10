@@ -34,45 +34,32 @@
 	]).
 
 %% @doc returns the parse arguments and a suitable module
-parse_args(Args) ->
-    case Args of
-	["rf"|Cmd] ->
-	    {rf, rf:parse_args(Cmd)}
+parse_args([Key|Args]) ->
+    case ordsets:is_element(Key, ordsets:from_list(rr_config:get_value(modules))) of
+	true ->
+	    Atom = list_to_atom(Key),
+	    {Atom, Atom:parse_args(Args)};
+	false ->
+	    error
     end.
 	    
-
 main(Args) ->
     Props = read_config("rr.config"),
-    initialize(Props),
-    case Args of
-	["km"|Cmd] ->
-	    km:main(Cmd);
-	["rf"|Cmd] ->
-	    RfArgs = rf:parse_args(Cmd),
-	    rf:main(RfArgs);
-	["experiment"|Cmd] ->
-	    ExArgs = experiment:parse_args(Cmd),
-	    experiment:main(ExArgs);
-	["config"|Cmd] ->
-	    case Cmd of
-		["get",Var] ->
-		    io:format("~s ~n", [proplists:get_value(list_to_atom(Var), Props)]);
-		_Other ->
-		    io:format("config: invalid argument~n")
-	    end;		
-	["help"|Methods] ->
-	    case Methods of
-		[Method] ->
-		    Atom = list_to_atom(Method),
-		    Atom:help();
-		[] ->
-		    show_help()
-	    end;
-	["version"] ->
-	    io:format("~s~n", [show_information()]);
-	_ ->
-	    io:format("no command specified~n"),
-	    show_help()
+    ok = initialize(Props),
+    try
+	case parse_args(Args) of
+	    {Method, MethodArgs} ->
+		Method:main(MethodArgs);
+	    error ->
+		io:format(standard_error, "no command specified~n", []),
+		show_help()
+	end
+    catch 
+	_:Error ->
+	    io:format(standard_error, "unexpected error (please view the log-file)!~n", []),
+	    rr_log:log(error, "~p", [Error]),
+	    rr_log:debug("~p", [erlang:get_stacktrace()]),
+	    rr_log:stop()
     end.
 
 read_config(File) ->
@@ -80,10 +67,10 @@ read_config(File) ->
 	{ok, Props} ->
 	    Props;
 	{error, {Line, _, Term}} ->
-	    io:format("malformed configuration file: \"~s\" (line: ~p). ~n", [Term, Line]),
+	    io:format(standard_error, "malformed configuration file: \"~s\" (line: ~p). ~n", [Term, Line]),
 	    halt();
 	{error, Reason} ->
-	    io:format("could not read 'rr.config': '~p'. ~n", [Reason]),
+	    io:format(standard_error, "could not read 'rr.config': '~p'. ~n", [Reason]),
 	    halt()
     end.
 
@@ -91,20 +78,20 @@ initialize(Props) ->
     rr_config:init(Props),
     rr_log:new(proplists:get_value('log.target', Props, std_err),
 	       proplists:get_value('log.level', Props, info)),
-    rr_log:debug("initialized configuration file").
+    ok.
 
 show_help(options, CmdSpec, Application) ->
-    io:format("~s~n", [show_information()]),
+    io:format(standard_error, "~s~n", [show_information()]),
     getopt:usage(CmdSpec, Application).
 
 show_help() ->
-    io:format("~s~n", [show_information()]),
-    io:format("Commands:
+    io:format(standard_error, "~s~n", [show_information()]),
+    io:format(standard_error, "Commands:
    rf             generate a random forest
    config         set and get global configuration options
    help           show program options
    version        show program version
-").
+", []).
 
 show_information() -> 
     io_lib:format("rr (Random Rule Learner) ~s.~s.~s (build date: ~s)

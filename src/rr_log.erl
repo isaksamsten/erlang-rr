@@ -14,6 +14,9 @@
 	 debug/1,
 	 debug/2,
 
+	 msg/1,
+	 msg/2,
+
 	 log/3,
 	 log/2,
 	 new/2,
@@ -41,6 +44,12 @@ stop() ->
 	    ok
     end.
 
+
+msg(Str, Params) ->
+    log(none, Str, Params).
+msg(Str) ->
+    log(none, Str).
+
 info(Str, Params) ->
     log(info, Str, Params).
 info(Str) ->
@@ -64,7 +73,8 @@ log(Level, Str) ->
 loop(Device, Max) ->
     receive
 	{log, Level, Str, Params} ->
-	    do_log(Device, to_number(Level), Max, atom_to_list(Level) ++ ": " ++ io_lib:format(Str, Params)),
+	    do_log(Device, to_number(Level), Max, 
+		   if Level =/= none -> atom_to_list(Level) ++ ": " ; true -> [] end ++ io_lib:format(Str, Params)),
 	    loop(Device, Max);
 	{stop, Pid} ->
 	    Pid ! ok

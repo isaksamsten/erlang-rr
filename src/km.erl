@@ -6,9 +6,20 @@
 %%% Created :  4 Jun 2013 by  <Isak@ISAK-PC>
 
 -module(km).
--compile(export_all).
+
+-export([
+	 main/1,
+	 args/2,
+	 args/3,
+	 help/0,
+	 parse_args/1,
+	 
+	 new/1
+	 
+	]).
 
 -define(E, 2.718281828459045).
+-behaviour(rr_command).
 -include("km.hrl").
 
 -define(CMD_SPEC,
@@ -35,11 +46,16 @@ new(Props) ->
 	       end,
     {Build, Evaluate, Conf}.    
 
-kill(_) ->
-    ok.
-
 help() ->
     ok.
+
+args(_, _, _) ->
+    [].
+args(_, _) ->
+    {no, no}.
+
+parse_args(Args) ->
+    rr:parse(Args, ?CMD_SPEC).
 
 main(Args) ->
     rr_example:init(),

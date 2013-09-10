@@ -37,6 +37,9 @@
 	 killer/1
 	]).
 
+-behaviour(rr_command).
+-behavioud(rr_classifier).
+
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
 
