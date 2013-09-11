@@ -865,19 +865,23 @@ select_bootstrap_examples([{Class, Count, Ids}|Examples], N, Bootstrap, {InBags,
 	    select_bootstrap_examples(Examples, N+Count, Bootstrap, {[InBag|InBags], [OutBag|OutBags]})
     end.
 
+select_bootstrap_examples_for_class(Class, Count, N, Ids, Bootstrap, Acc) ->
+    select_bootstrap_examples_for_class(Class, Count, N, Ids, Bootstrap, 
+					rr_config:get_value('rf.config.variance', 1), Acc).
+
 %% @private
-select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, [], _, {InBag, OutBag}) ->
+select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, [], _, _, {InBag, OutBag}) ->
     {{Class, InBagCount, InBag}, {Class, OutBagCount, OutBag}};
-select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|Rest], Bootstrap, {InBag, OutBag}) ->
+select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|Rest], Bootstrap, Variance,{InBag, OutBag}) ->
     case dict:find(N, Bootstrap) of
 	{ok, Times0} ->
-	    Times = Times0 * random:uniform(rr_config:get_value('rf.config.variance', 1)),
+	    Times = Times0 * random:uniform(Variance),
 	    NewInBag = duplicate_example(ExId, Times, InBag),
 	    select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount},
-						N+1, Rest, Bootstrap, {NewInBag, OutBag});
+						N+1, Rest, Bootstrap, Variance, {NewInBag, OutBag});
 	error ->
 	    select_bootstrap_examples_for_class(Class, {InBagCount,  OutBagCount + 1},
-						N+1, Rest, Bootstrap, {InBag, [ExId|OutBag]})
+						N+1, Rest, Bootstrap, Variance, {InBag, [ExId|OutBag]})
     end.
 
 %% @private
