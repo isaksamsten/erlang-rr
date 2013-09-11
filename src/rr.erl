@@ -18,6 +18,7 @@
 	 parse_args/1,
 
 	 show_help/3,
+	 show_help/0,
 
 	 parse/2,
 	 warn/1,
@@ -37,9 +38,8 @@
 parse_args([]) ->
     error;
 parse_args([Key|Args]) ->
-    case lists:keymember(Key, 1, rr_config:get_value(modules)) of
-	true ->
-	    Atom = list_to_atom(Key),
+    case lists:keyfind(Key, 1, rr_config:get_value(modules)) of
+	{Key, Atom, _} ->
 	    {Atom, Atom:parse_args(Args)};
 	false ->
 	    error
@@ -90,12 +90,14 @@ show_help() ->
     io:format(standard_error, "~s~n", [show_information()]),
     io:format(standard_error, "Commands:~n", []),
     Modules = rr_config:get_value(modules),
-    Sorted = lists:sort(fun({A,_}, {B, _}) -> length(A) > length(B) end, Modules),
+    Sorted = lists:sort(fun({A,_,_}, {B,_,_}) -> length(A) > length(B) end, Modules),
     Longest = length(element(1, hd(Sorted))),
     lists:foreach(
-      fun({Module, Desc}) ->
-	      rr_log:info("~p", [Longest]),
-	      io:format(standard_error, "  ~s    ~s~n", [string:left(Module, length(Module) + Longest - length(Module)), Desc])
+      fun({_, _, undefined}) ->
+	      ok;
+	 ({Module, _, Desc}) ->
+	      io:format(standard_error, "  ~s    ~s~n", 
+			[string:left(Module, length(Module) + Longest - length(Module)), Desc])
       end, Modules).
 					 
 

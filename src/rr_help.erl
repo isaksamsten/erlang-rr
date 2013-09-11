@@ -5,7 +5,7 @@
 %%% @end
 %%% Created : 11 Sep 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 
--module(help).
+-module(rr_help).
 -behaviour(rr_command).
 
 -export([
@@ -31,6 +31,7 @@ args(_,_,_) ->
 args(_,_) ->
     ok.
 help() ->
+    rr:show_help(),
     ok.
 
     
