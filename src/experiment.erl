@@ -36,7 +36,7 @@
 	  "Classifier settings."}]).	  
 
 help() ->
-    "".
+    rr:show_help(options, ?CMD_SPEC, "experiment").
 
 parse_args(Args) ->
     rr:parse(Args, ?CMD_SPEC).

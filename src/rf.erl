@@ -5,13 +5,6 @@
 %%% @end
 %%% Created : 12 May 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rf).
-
--define(DATE, "2013-05-16").
--define(MAJOR_VERSION, "1").
--define(MINOR_VERSION, "0").
--define(REVISION, "0.1").
-
--define(AUTHOR, "Isak Karlsson <isak-kar@dsv.su.se>").
 -export([
 	 main/1,
 	 parse_args/1,
@@ -38,7 +31,7 @@
 	]).
 
 -behaviour(rr_command).
--behavioud(rr_classifier).
+-behaviour(rr_classifier).
 
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
@@ -50,8 +43,6 @@
 -define(CMD_SPEC,
 	[{<<"help">>,           $h,           "help",         undefined,
 	  "Show this usage information."},
-	 {<<"version">>,        undefined,    "version",      undefined,
-	  "Show the program version."},
 	 {<<"examples">>,       undefined,    "examples",     undefined,
 	  "View example usages"},
 	 {<<"observer">>,        undefined,    "observer",     undefined,
@@ -258,13 +249,9 @@ parse_args(Args) ->
 
 %% @todo refactor to use proplist
 main(Options) ->
-    case rr:any_opt([<<"help">>, <<"version">>, 
-		     <<"examples">>, <<"observer">>], Options) of
+    case rr:any_opt([<<"help">>, <<"examples">>, <<"observer">>], Options) of
 	<<"help">> ->
 	    help(),
-	    halt();
-	<<"version">> ->
-	    io:format(show_information()),
 	    halt();
 	<<"examples">> ->
 	    io:format(show_examples()),
@@ -341,7 +328,8 @@ main(Options) ->
     csv:kill(Csv),
     rr_example:kill(ExSet),
     rr_config:stop(),
-    rr_log:stop().
+    rr_log:stop(),
+    ok.
 
 %% @doc kill (to clean up unused models) after evaluation (to reduce
 %% memory footprint during cross validation)
@@ -583,13 +571,6 @@ Example 5: 0.7 percent training examples, for multiple dataset and output
 evaluations csv-formated. This could be achieved using a bash-script:
   > for f in data/*.txt; do ./rr -i \"$f\" -s -r 0.7 -o csv >> result.csv; 
 done~n".
-
-show_information() -> 
-    io_lib:format("rf (Random Forest Learner) ~s.~s.~s (build date: ~s)
-Copyright (C) 2013+ ~s
-
-Written by ~s ~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, 
-		    ?DATE, ?AUTHOR, ?AUTHOR]).
 
 -ifdef(TEST).
 -ifdef(PROFILE).

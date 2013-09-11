@@ -6,8 +6,8 @@
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr).
 -author('isak-kar@dsv.su.se').
--define(DATE, "2013-05-16").
--define(MAJOR_VERSION, "1").
+-define(DATE, "2013-09-11").
+-define(MAJOR_VERSION, "2").
 -define(MINOR_VERSION, "0").
 -define(REVISION, "0.0").
 
@@ -34,8 +34,10 @@
 	]).
 
 %% @doc returns the parse arguments and a suitable module
+parse_args([]) ->
+    error;
 parse_args([Key|Args]) ->
-    case ordsets:is_element(Key, ordsets:from_list(rr_config:get_value(modules))) of
+    case lists:keymember(Key, 1, rr_config:get_value(modules)) of
 	true ->
 	    Atom = list_to_atom(Key),
 	    {Atom, Atom:parse_args(Args)};
@@ -46,21 +48,21 @@ parse_args([Key|Args]) ->
 main(Args) ->
     Props = read_config("rr.config"),
     ok = initialize(Props),
-    try
+%    try
 	case parse_args(Args) of
 	    {Method, MethodArgs} ->
-		Method:main(MethodArgs);
+		ok = Method:main(MethodArgs);
 	    error ->
-		io:format(standard_error, "no command specified~n", []),
+		io:format(standard_error, "invalid command specified~n", []),
 		show_help()
-	end
-    catch 
-	_:Error ->
-	    io:format(standard_error, "unexpected error (please view the log-file)!~n", []),
-	    rr_log:log(error, "~p", [Error]),
-	    rr_log:debug("~p", [erlang:get_stacktrace()]),
-	    rr_log:stop()
-    end.
+	end.
+    %% catch 
+    %% 	_:Error ->
+    %% 	    io:format(standard_error, "unexpected error (please view the log-file)!~n", []),
+    %% 	    rr_log:log(error, "~p", [Error]),
+    %% 	    rr_log:debug("~p", [erlang:get_stacktrace()]),
+    %% 	    rr_log:stop()
+    %% end.
 
 read_config(File) ->
     case rr_config:read_config_file(File) of
@@ -86,12 +88,16 @@ show_help(options, CmdSpec, Application) ->
 
 show_help() ->
     io:format(standard_error, "~s~n", [show_information()]),
-    io:format(standard_error, "Commands:
-   rf             generate a random forest
-   config         set and get global configuration options
-   help           show program options
-   version        show program version
-", []).
+    io:format(standard_error, "Commands:~n", []),
+    Modules = rr_config:get_value(modules),
+    Sorted = lists:sort(fun({A,_}, {B, _}) -> length(A) > length(B) end, Modules),
+    Longest = length(element(1, hd(Sorted))),
+    lists:foreach(
+      fun({Module, Desc}) ->
+	      rr_log:info("~p", [Longest]),
+	      io:format(standard_error, "  ~s    ~s~n", [string:left(Module, length(Module) + Longest - length(Module)), Desc])
+      end, Modules).
+					 
 
 show_information() -> 
     io_lib:format("rr (Random Rule Learner) ~s.~s.~s (build date: ~s)
