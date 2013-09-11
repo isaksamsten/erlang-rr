@@ -30,6 +30,8 @@
 	  "Folder containing datasets"},
 	 {<<"iterations">>, $i, "iterations", {integer, 10},
 	  "Number of iterations to run each experiment"},
+	 {<<"tag">>, $t, "tag", {string, "experiment"},
+	  "Tag the experiment"},
 	 {<<"evaluation">>, $e, "evaluation", {string, "cv"},
 	  "Evaluation settings."},
 	 {<<"classifier">>, $c, "classifier", string,
@@ -69,11 +71,12 @@ main(Args) ->
 		       io:format(standard_error, 
 				 "running ~s iteration ~p/~p~n", [Dataset, I, Oi])
 	       end,
+    Tag = args(<<"tag">>, Args, fun rr:illegal_option/2),
     Output = fun (Dataset, Iteration, Res) ->
 		     Csv = rr_result:csv(
 			     fun (info, Fold) ->
 				     io:format("fold ~p,", Fold),
-				     io:format("~s,iteration ~p,", [Dataset, Iteration]);
+				     io:format("~s,iteration ~p,~s,", [Dataset, Iteration, Tag]);
 				 (value, Value) ->
 				     io:format("~p,", Value);
 				 (value_end, Value) ->
