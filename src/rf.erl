@@ -89,8 +89,10 @@
 
 	 {<<"example_sampling">>, undefined,  "example-sampling", {string, <<"bagging">>},
 	  "Select the method for feature sampling. Available options include: 'bagging' and 'subagging'."},
-	 {<<"highvariance_options">>, undefined, "highvariance-options", {string, <<"0.3 1 100 10">>},
-	  "Options for the highvariance sampling method. Format: 'Threshold A B C'"},
+	 {<<"triangle_variance_options">>, undefined, "triangle-variance", {string, <<"0.3 1 100 10">>},
+	  "Options for the triangle variance sampling method. Format: 'Threshold A B C'"},
+	 {<<"uniform_variance_options">>, undefined, "uniform-variance", {string, <<"0.3,1,10">>},
+	  "Options for the uniform variance sampling method. Format: 'Threshold,Min,Max'"},
 
 	 {<<"weight_factor">>,  undefined,    "weight-factor", {float, 0.5},
 	  "Used for controlling the randomness of the 'combination' and 'weighted'-arguments."},
@@ -395,17 +397,24 @@ example_sampling(Value, Error, Options) ->
 	    fun rr_example:subset_aggregate/1;
 	<<"bagging">> ->
 	    fun rr_sampling:bootstrap_replicate/1;
-	<<"highvariance">> ->
-	    Option = args(<<"highvariance_options">>, Options, Error),
-	    [Threshold, A, B, C] = lists:map(fun (X) -> 
-						     element(2, rr_example:format_number(X)) 
-					     end, string:tokens(Option, ", ")),
-	    rr_sampling:highvariance_sample(Threshold, A, B, C);
+	<<"triangle-variance">> ->
+	    Option = args(<<"triangle_variance_options">>, Options, Error),
+	    [Threshold, A, B, C] = options(Option),
+	    rr_sampling:triangle_variance_sample(Threshold, A, B, C);
+	<<"uniform-variance">> ->
+	    Option = args(<<"uniform_variance_options">>, Options, Error),
+	    [Threshold, Min, Max] = options(Option),
+	    rr_sampling:uniform_variance_sample(Threshold, Min, Max);
 	<<"nothing">> ->
 	    fun (Examples) -> {Examples, []} end;
 	Other ->
 	    Error("example-sampling", Other)		
     end.
+
+options(Option) ->
+    lists:map(fun (X) -> 
+		      element(2, rr_example:format_number(X)) 
+	      end, string:tokens(Option, ", ")).
 
 distribute(Value, Error) ->	
     case rr_util:safe_iolist_to_binary(Value) of

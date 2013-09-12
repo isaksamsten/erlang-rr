@@ -18,12 +18,12 @@ oversample_replicate(_) ->
 smote_replicate(_) ->
     ok.
 
-highvariance_sample(Threshold, A, B, C) ->
+triangle_variance_sample(Threshold, A, B, C) ->
     fun (Examples) ->
-	    highvariance_sample(Examples, Threshold, A, B, C)
+	    triangle_variance_sample(Examples, Threshold, A, B, C)
     end.
 
-highvariance_sample(Examples, Threshold, A, B, C) ->
+triangle_variance_sample(Examples, Threshold, A, B, C) ->
     select_bootstrap_examples(Examples, 1, [],
 			      fun (_, _) ->
 				      Include = rr_random:uniform(),
@@ -33,6 +33,22 @@ highvariance_sample(Examples, Threshold, A, B, C) ->
 					      {ok, round(rr_random:triangle(A, B, C))}
 				      end
 			      end).
+
+uniform_variance_sample(Threshold, Min, Max) ->
+    fun (Examples) ->
+	    uniform_variance_sample(Examples, Threshold, Min, Max)
+    end.
+
+uniform_variance_sample(Examples, Threshold, Min, Max) ->
+    select_bootstrap_examples(Examples, 1, [],
+			       fun (_, _) ->
+				       Include = rr_random:uniform(),
+				       if Include =< Threshold ->
+					       error;
+					  true ->
+					       {ok, round(rr_random:uniform(Min, Max))}
+				       end
+			       end).
 
 bootstrap_replicate(Examples) ->
     Bootstrap = generate_bootstrap(rr_example:count(Examples)),

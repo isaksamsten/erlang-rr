@@ -9,6 +9,9 @@
 
 -compile(export_all).
 
+uniform(Min, Max) ->
+    Min + (random:uniform() * ((Max - Min) + 1)).
+
 uniform(X) ->
     random:uniform(X).
 uniform() ->
