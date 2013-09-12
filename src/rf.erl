@@ -89,6 +89,8 @@
 
 	 {<<"example_sampling">>, undefined,  "example-sampling", {string, <<"bagging">>},
 	  "Select the method for feature sampling. Available options include: 'bagging' and 'subagging'."},
+	 {<<"highvariance_options">>, undefined, "highvariance-options", {string, <<"0.3 1 100 10">>},
+	  "Options for the highvariance sampling method. Format: 'Threshold A B C'"},
 
 	 {<<"weight_factor">>,  undefined,    "weight-factor", {float, 0.5},
 	  "Used for controlling the randomness of the 'combination' and 'weighted'-arguments."},
@@ -347,7 +349,7 @@ args(Key, Rest, Error) ->
     Value = proplists:get_value(Key, Rest),
     case Key of
 	<<"example_sampling">> ->
-	    example_sampling(Value, Error);
+	    example_sampling(Value, Error, Rest);
 	<<"feature_sampling">> ->
 	    feature_sampling(Value, Error, Rest);
 	<<"score">> ->
@@ -364,13 +366,8 @@ args(Key, Rest, Error) ->
 	    no_rules(Value, Error); %todo: refactor prior
 	<<"rule_score">> ->
 	    rule_score(Value, Error);
-	O when O == <<"cores">>;
-	       O == <<"min_examples">>;
-	       O == <<"max_depth">>;
-	       O == <<"no_trees">> ->
-	    Value;
 	_ ->
-	    undefined
+	    Value
     end.
 
 %% @doc get all important args
@@ -392,12 +389,18 @@ args(Rest, Prior) ->
 	    {base_learner, rf_tree}],
     lists:filter(fun ({_Key, Value}) -> Value =/= undefined end, Args).
 
-example_sampling(Value, Error) ->
+example_sampling(Value, Error, Options) ->
     case rr_util:safe_iolist_to_binary(Value) of
 	<<"subagging">> ->
 	    fun rr_example:subset_aggregate/1;
 	<<"bagging">> ->
-	    fun rr_example:bootstrap_aggregate/1;
+	    fun rr_sampling:bootstrap_replicate/1;
+	<<"highvariance">> ->
+	    Option = args(<<"highvariance_options">>, Options, Error),
+	    [Threshold, A, B, C] = lists:map(fun (X) -> 
+						     element(2, rr_example:format_number(X)) 
+					     end, string:tokens(Option, ", ")),
+	    rr_sampling:highvariance_sample(Threshold, A, B, C);
 	<<"nothing">> ->
 	    fun (Examples) -> {Examples, []} end;
 	Other ->
