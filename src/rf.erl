@@ -397,7 +397,6 @@ example_sampling(Value, Error, Options) ->
 	    fun rr_sampling:bootstrap_replicate/1;
 	<<"highvariance">> ->
 	    Option = args(<<"highvariance_options">>, Options, Error),
-	    io:format("error: ~p~n", [Option]),
 	    [Threshold, A, B, C] = lists:map(fun (X) -> 
 						     element(2, rr_example:format_number(X)) 
 					     end, string:tokens(Option, ", ")),
