@@ -53,8 +53,12 @@ select_bootstrap_examples([], _N, _Bootstrap, _Include, Acc) ->
     Acc;
 select_bootstrap_examples([{Class, Count, Ids}|Examples], N, Bootstrap, Include, {InBags, OutBags}) ->
     case select_bootstrap_examples_for_class(Class, {0, 0}, N, Ids, Bootstrap, Include, {[], []}) of
-	{{_, 0, []}, _} -> % note: inbag is empty (no examples of Class)
-	    select_bootstrap_examples(Examples, N+Count, Bootstrap, Include, {InBags, OutBags});
+	{{_, 0, []}, {_, 0, []}} ->
+	    select_bootstrap_examples(Examples, N+Count, Bootstrap, Include, {InBags, OutBags});	
+	{{_, 0, []}, OutBag} ->
+	    select_bootstrap_examples(Examples, N+Count, Bootstrap, Include, {InBags, [OutBag|OutBags]});
+	{InBag, {_, 0, []}} -> 
+	    select_bootstrap_examples(Examples, N+Count, Bootstrap, Include, {[InBag|InBags], OutBags});
 	{InBag, OutBag} ->
 	    select_bootstrap_examples(Examples, N+Count, Bootstrap, Include, {[InBag|InBags], [OutBag|OutBags]})
     end.

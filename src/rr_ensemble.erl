@@ -1,4 +1,4 @@
-%%% @author Isak Karlsson <isak-kar@dsv.su.se>
+%%% @authorf Isak Karlsson <isak-kar@dsv.su.se>
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
 %%%
@@ -292,7 +292,7 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
 	    NewVariableImportance = update_variable_importance(TreeVariableImportance, VariableImportance, ImportanceSum),
 	    OOBAccuracy = case OutBag of
 			      [] -> 0.0;
-			      _ -> rr_eval:accuracy(Base:evaluate_model(Model, OutBag, ExConf, BaseConf))
+			      _-> rr_eval:accuracy(Base:evaluate_model(Model, OutBag, ExConf, BaseConf))
 			  end,
 	    Rem = if T > 10 -> round(T/10); true -> 1 end, %% todo: refactor (let progress decide)
 	    case Id rem Rem of

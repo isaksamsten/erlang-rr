@@ -160,7 +160,7 @@ evaluate(Conf, Model, Test, ExConf) ->
      {strength, Strength},
      {correlation, Correlation},
      {variance, Variance},
-     {c_s2, Correlation/math:pow(Strength, 2)},
+     {c_s2, if Strength =/= 0.0 -> Correlation/math:pow(Strength, 2); true -> 0.0 end},
      {precision, Precision},
      {recall, Recall},
      {oob_base_accuracy, OOBAccuracy},
@@ -397,6 +397,7 @@ example_sampling(Value, Error, Options) ->
 	    fun rr_sampling:bootstrap_replicate/1;
 	<<"highvariance">> ->
 	    Option = args(<<"highvariance_options">>, Options, Error),
+	    io:format("error: ~p~n", [Option]),
 	    [Threshold, A, B, C] = lists:map(fun (X) -> 
 						     element(2, rr_example:format_number(X)) 
 					     end, string:tokens(Option, ", ")),
