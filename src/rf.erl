@@ -406,7 +406,9 @@ example_sampling(Value, Error, Options) ->
 	    [Threshold, Min, Max] = options(Option),
 	    rr_sampling:uniform_variance_sample(Threshold, Min, Max);
 	<<"random">> ->
-	    fun rr_sampling:random/1;	
+	    fun rr_sampling:random/1;
+	<<"undersample">> ->
+	    fun rr_sampling:undersample_replicate/1;
 	<<"nothing">> ->
 	    fun (Examples) -> {Examples, []} end;
 	Other ->

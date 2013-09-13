@@ -374,7 +374,7 @@ redo(Do, Redo) ->
 		 length(Features), #rr_candidate{score = {inf}}, Do, Redo)
     end.
 
-redo([], _, _, _, _, _, _, _, _) ->
+redo(_, _, _, _, _, 0, _, _, _) ->
     no_information;
 redo(Features, Examples, Total, ExConf, Conf, TotalNoFeatures, _Prev, Do, Redo) ->
     {F, {Best, NewFeatures}} = Do(Features, Examples, Total, ExConf, Conf),

@@ -13,6 +13,9 @@
 
 	 partition/2,
 
+	 min/2,
+	 max/2,
+
 	 safe_iolist_to_binary/1
 	]).
 
@@ -53,6 +56,27 @@ partition([], Parts) ->
 partition([Model|Models], [Part|Parts]) ->
     partition(Models, Parts ++ [[Model|Part]]).
 
+min(Fun, List) ->
+    lists:foldl(fun (Value, Min) ->
+			U = Fun(Value),
+			if U < Min ->
+				U;
+			   true ->
+				Min
+			end
+		end, Fun(hd(List)), tl(List)).
+
+
+max(Fun, List) ->
+    lists:foldl(fun (Value, Min) ->
+			U = Fun(Value),
+			if U > Min ->
+				U;
+			   true ->
+				Min
+			end
+		end, Fun(hd(List)), tl(List)).
+
 -ifdef(TEST).
 
 weighted_list() ->
@@ -72,3 +96,4 @@ distribution_test() ->
     ?assertEqual(D, List).
 
 -endif.
+

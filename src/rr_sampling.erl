@@ -64,7 +64,7 @@ undersample_replicate(Examples) ->
     select_bootstrap_examples(Examples, fun (N, Class) ->
 						case dict:find(N, Bootstrap) of
 						    {ok, Times} ->
-							if (Class/Count) > 0.5 ->
+							if (Class/Count) > 1/length(Examples) ->
 								{ok, Times*(Class/Count)};
 							   true ->
 								{ok, Times}
@@ -74,9 +74,6 @@ undersample_replicate(Examples) ->
 						end
 					end).
     
-
-
-
 bootstrap_replicate(Examples) ->
     Count = rr_example:count(Examples),
     Bootstrap = generate_bootstrap(Count),
