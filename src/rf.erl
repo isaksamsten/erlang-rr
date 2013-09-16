@@ -148,17 +148,12 @@ evaluate(Conf, Model, Test, ExConf) ->
 
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
-    AvgAuc = lists:foldl(fun
-			     ({_, {_, 'n/a'}}, Sum) -> 
-				 Sum;
-			     ({_, {No, A}}, Sum) -> 
-				 Sum + No/NoTestExamples*A
-			 end, 0, Auc),
+ 
     Precision = rr_eval:precision(ClassesInTest, Matrix),
     Recall = rr_eval:recall(ClassesInTest, Matrix),
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy},
-     {auc, {Auc, AvgAuc}}, 
+     {auc, Auc}, 
      {strength, Strength},
      {correlation, Correlation},
      {variance, Variance},
@@ -488,9 +483,9 @@ no_features(Value, Error) ->
 
 feature_sampling(Value, Error, Options) ->
     case rr_util:safe_iolist_to_binary(Value) of
-	<<"weka">> ->
+	<<"infinite-resample">> ->
 	    rf_branch:weka();
-	<<"hell">> ->
+	<<"hellinger">> ->
 	    rf_branch:hell();
 	<<"resample">> ->
 	    NoResamples = proplists:get_value(<<"no_resamples">>, Options, 6),
@@ -531,10 +526,6 @@ feature_sampling(Value, Error, Options) ->
 	<<"sample-examples">> ->
 	    Factor = proplists:get_value(weight_factor, Options),
 	    rf_branch:sample_examples(0.1, Factor);
-	%% <<"depth-rule">> ->
-	%%     NoRules = args(<<"no_rules">>, Options, Error),
-	%%     RuleScore = args(<<"rule_score">>, Options, Error),
-	%%     rf_branch:depth_rule(NoRules, RuleScore);
 	Other ->
 	    Error("feature-sampling", Other)
     end.

@@ -61,12 +61,12 @@ average_cross_validation(_, _, [], Acc) ->
 average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
     A = lists:foldl(fun ({_, Measures}, Sum) ->
 			    case lists:keyfind(H, 1, Measures) of
-				{H, {List, Auc}} ->
+				{H, {Tag, List, Auc}} ->
 				    case Sum of
 					0 ->
-					    {average_list_item(List, Folds, 0), Sum + Auc/Folds};
-					{ListSum, AvgSum} ->
-					    {average_list_item(List, Folds, ListSum), AvgSum + Auc/Folds}
+					    {Tag, average_list_item(List, Folds, 0), Sum + Auc/Folds};
+					{Tag, ListSum, AvgSum} ->
+					    {Tag, average_list_item(List, Folds, ListSum), AvgSum + Auc/Folds}
 				    end;
 				{H, List} when is_list(List) ->
 				    average_list_item(List, Folds, Sum);

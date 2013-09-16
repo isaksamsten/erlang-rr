@@ -335,7 +335,7 @@ hell() ->
 
 hell_resample() ->
     fun(#rr_candidate{score = {Score, _, _}}, _, _, _) ->
-	    if Score >= 1 ->
+	    if Score >= 0.95 ->
 		    NewSample = redo_curry(fun(_) -> 1 end, subset()),
 		    {true, NewSample, hell_resample()};
 	       true ->

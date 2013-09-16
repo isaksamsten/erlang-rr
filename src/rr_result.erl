@@ -21,7 +21,9 @@
 			      {"strength", strength}, 
 			      {"variance", variance}, 
 			      {"correlation", correlation},
-			      {"c/s^2", c_s2}, 
+			      {"c/s^2", c_s2},
+			      {"precision", precision},
+			      {"recall", recall},
 			      {"brier", brier}]).
 
 
@@ -46,7 +48,7 @@
 csv(Source) ->
     fun(Data) ->
 	    Header = rr_config:get_value('csv.headers', ?DEFAULT_CSV_HEADERS),
-	    case rr_config:get_value('output.csv.header', false) of
+	    case rr_config:get_value('output.csv.header', true) of
 		true ->
 		    io:format("~s~n", [string:join(lists:map(fun ({H, _}) -> H end, Header), ",")]);
 		false ->
@@ -56,11 +58,11 @@ csv(Source) ->
     end.
 csv() ->
     csv(fun (info, Fold) ->
-		io:format("fold ~p,", [Fold]);
+		io:format("fold ~p,", Fold);
 	    (value, Value) ->
-		io:format("~p,", [Value]);
+		io:format("~p,", Value);
 	    (value_end, Value) ->
-		io:format("~p~n", [Value])
+		io:format("~p~n", Value)
 	end).
 
 csv_output({cv, _, Folds}, Output, Header) ->
@@ -82,7 +84,7 @@ csv_output_measures(Measures, Output, Header) ->
     [{_, Last}|NewHeader] = lists:reverse(Header),
     lists:foreach(fun ({_, Key}) ->
 			  case lists:keyfind(Key, 1, Measures) of
-			      {Key, {_, Auc}} ->
+			      {Key, {_tag, _, Auc}} ->
 				  Output(value, [Auc]);
 			      {Key, Value} ->
 				  Output(value, [Value]);
@@ -136,7 +138,14 @@ default_output_measures(Fold, Measures, Header) ->
 				  lists:foreach(fun({Class, P}) ->
 						io:format(" - ~s: ~p ~n", [Class, P])
 					end, Value);
-			      {Key, {Value, Auc}} -> 
+			      
+			      {Key, {Type, Value, Auc}} when Type == recall; Type == precision-> 
+				  io:format("~p:~n", [Type]),
+				  lists:foreach(fun({Class, P}) ->
+						io:format(" - ~s: ~p ~n", [Class, P])
+					end, Value),
+				  io:format(" average: ~p~n", [Auc]);			      
+			      {Key, {auc, Value, Auc}} -> 
 				  io:format("area under ROC~n"),
 				  lists:foreach(fun({Class, {_, P}}) ->
 						io:format(" - ~s: ~p ~n", [Class, P])

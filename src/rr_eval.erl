@@ -57,7 +57,14 @@ correct(Predictions) ->
 %% @end
 -spec auc(any(), dict(), integer()) -> [{Class::atom(), NoExamples::integer(), Auc::float()}].
 auc(Classes, Predictions, NoExamples) ->
-    calculate_auc_for_classes(Classes, Predictions, NoExamples, []).
+    Auc = calculate_auc_for_classes(Classes, Predictions, NoExamples, []),
+    AvgAuc = lists:foldl(fun
+			     ({_, {_, 'n/a'}}, Sum) -> 
+				 Sum;
+			     ({_, {No, A}}, Sum) -> 
+				 Sum + No/NoExamples*A
+			 end, 0, Auc),
+    {auc, Auc, AvgAuc}.
 
 calculate_auc_for_classes([], _, _, Acc) ->
     Acc;
@@ -202,23 +209,38 @@ calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
 %% @doc Calculate the precision when predicting each class
 -spec precision([atom(),...], dict()) -> [{Class::atom(), Precision::float()}].
 precision(Classes, Matrix) ->
-    lists:foldl(fun (Class, Acc) ->
-			[{Class, precision_for_class(Class, Matrix)}|Acc]
-		end, [], Classes).
+    NoClasses = length(Classes),
+    Precision = lists:foldl(fun (Class, Acc) ->
+				    [{Class, precision_for_class(Class, Matrix)}|Acc]
+			    end, [], Classes),
+    AvgPrecision = lists:foldl(fun ({_Class, 'n/a'}, Acc) ->
+				       Acc;
+				   ({_Class, Value}, Acc) ->
+				       Acc + Value * 1/NoClasses
+			       end, 0, Precision),
+    {precision, Precision, AvgPrecision}.
+
     
 precision_for_class(Class, Matrix) ->
     case dict:find(Class, Matrix) of
-	error -> 'n/a';
-	{ok, Row} ->
-	    Tp = dict:fetch(Class, Row),
-	    Rest = dict:fold(fun (_K, Value, Acc) -> Value + Acc end, 0, Row),
-	    Tp / Rest
-    end.
+		    error -> 'n/a';
+		    {ok, Row} ->
+			Tp = dict:fetch(Class, Row),
+			Rest = dict:fold(fun (_K, Value, Acc) -> Value + Acc end, 0, Row),
+			Tp / Rest
+		end.
 
 recall(Classes, Matrix) ->
-    lists:foldl(fun (Class, Acc) ->
-			[{Class, recall_for_class(Class, Matrix)}|Acc]
-		end, [], Classes).
+    NoClasses = length(Classes),
+    Recall = lists:foldl(fun (Class, Acc) ->
+				 [{Class, recall_for_class(Class, Matrix)}|Acc]
+			 end, [], Classes),
+    AvgRecall = lists:foldl(fun ({_Class, 'n/a'}, Acc) ->
+				    Acc;
+				({_Class, Value}, Acc) ->
+				    Acc + Value * 1/NoClasses
+			    end, 0, Recall),
+    {recall, Recall, AvgRecall}.
 
 recall_for_class(Class, Matrix) ->
     case dict:find(Class, Matrix) of
@@ -227,9 +249,9 @@ recall_for_class(Class, Matrix) ->
 	    case dict:find(Class, Column) of
 		error -> 'n/a';
 		{ok, Value} ->
-		    case dict:fold(fun (_, Dict, Value) ->
+		    case dict:fold(fun (_, Dict, ValueX) ->
 						   ValueB = dict:fetch(Class, Dict),
-					   Value + ValueB
+					   ValueX + ValueB
 				   end, 0, Matrix) of
 			0 -> 'n/a';
 			ValueB ->
