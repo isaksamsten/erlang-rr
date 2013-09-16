@@ -15,7 +15,7 @@
 
 	 min/2,
 	 max/2,
-
+	 shuffle/1,
 	 safe_iolist_to_binary/1
 	]).
 
@@ -57,25 +57,38 @@ partition([Model|Models], [Part|Parts]) ->
     partition(Models, Parts ++ [[Model|Part]]).
 
 min(Fun, List) ->
-    lists:foldl(fun (Value, Min) ->
-			U = Fun(Value),
-			if U < Min ->
-				U;
-			   true ->
-				Min
-			end
-		end, Fun(hd(List)), tl(List)).
+    FirstMin = Fun(hd(List)),
+    FirstValue = hd(List),
+    {_, Min} = lists:foldl(fun (Value, {OldMin, OldValue}) ->
+				   U = Fun(Value),
+				   if U < OldMin ->
+					   {U, Value};
+				      true ->
+					   {OldMin, OldValue}
+				   end
+			   end, {FirstMin, FirstValue}, tl(List)),
+    Min.
 
 
 max(Fun, List) ->
-    lists:foldl(fun (Value, Min) ->
-			U = Fun(Value),
-			if U > Min ->
-				U;
-			   true ->
-				Min
+    {_, Min} = lists:foldl(fun (Value, {Min, Value}) ->
+				   U = Fun(Value),
+				   if U > Min ->
+					   {U, Value};
+				      true ->
+					   {Min, Value}
 			end
-		end, Fun(hd(List)), tl(List)).
+			   end, Fun(hd(List)), tl(List)),
+    Min.
+
+%% @doc randomly permute a list (public)
+shuffle(List) ->
+    shuffle_list(List).
+
+%% @doc randomly permute a list of items
+shuffle_list(Ids0) ->
+    [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> {random:uniform(), Id} end, Ids0))].
+
 
 -ifdef(TEST).
 

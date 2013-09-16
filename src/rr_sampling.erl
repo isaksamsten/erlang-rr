@@ -59,21 +59,28 @@ uniform_variance_sample(Examples, Threshold, Min, Max) ->
 					end).
 
 undersample_replicate(Examples) ->
-    Count = rr_example:count(Examples),
-    Bootstrap = generate_bootstrap(Count),
-    select_bootstrap_examples(Examples, fun (N, Class) ->
-						case dict:find(N, Bootstrap) of
-						    {ok, Times} ->
-							if (Class/Count) > 1/length(Examples) ->
-								{ok, Times*(Class/Count)};
-							   true ->
-								{ok, Times}
-							end;
-						    error ->
-							error
-						end
-					end).
+    Under = undersample_bootstrap(Examples),
+    {Under, []}.
+
+undersample_bootstrap(Examples) ->
+    {_, Min, _} = rr_util:min(fun({_, M, _}) -> M end, Examples),
+    undersample_bootstrap(Min, Examples, []).
+
+undersample_bootstrap(_, [], Acc) ->
+    Acc;
+undersample_bootstrap(Min, [{Class, _, ExIds}|Rest], Acc) ->
+    NewExIds = undersample_bootstrap_for_class(Min, rr_util:shuffle(ExIds), []),
+    Min = length(NewExIds),
+    undersample_bootstrap(Min, Rest, [{Class, Min, NewExIds}|Acc]).
+
+undersample_bootstrap_for_class(0, _, Acc) ->
+    Acc;
+undersample_bootstrap_for_class(N, [ExId|Rest], Acc) ->
+    undersample_bootstrap_for_class(N - 1, Rest, [ExId|Acc]).
+				       
     
+
+
 bootstrap_replicate(Examples) ->
     Count = rr_example:count(Examples),
     Bootstrap = generate_bootstrap(Count),
