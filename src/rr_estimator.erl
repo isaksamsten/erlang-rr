@@ -191,7 +191,7 @@ chisquare(Split, Examples, Total) ->
     NRprim = chisquare_weight(Examples, Pr),
     chisquare_sum(Left, NLprim) + chisquare_sum(Right, NRprim).
 
-chisquare_sum(N, Nprim) ->
+chisquare_sum(Ns, Nprim) ->
     lists:foldl(fun ({Class, N, _}, Acc) ->
 		     case lists:keyfind(Class, 1, Nprim) of
 			 false ->
@@ -199,7 +199,7 @@ chisquare_sum(N, Nprim) ->
 			 {Class, NP} ->
 			     Acc + math:pow(N-NP, 2)/NP
 		     end
-		end, 0.0, N).
+		end, 0.0, Ns).
 
 chisquare_weight(Examples, P) ->
     lists:foldl(fun ({Class, N, _}, Acc) ->

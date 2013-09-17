@@ -56,10 +56,6 @@
 	 randomize/1,
 	 cross_validation/3,
 	 split_dataset/2,
-
-	 bootstrap_aggregate/1,
-	 subset_aggregate/1,
-
 	 parse_example_process/6,
 
 	 best_split/8,
@@ -831,64 +827,6 @@ cross_validation(Fun, Folds, NoFolds, CurrentFold, Acc) ->
     {Test, Train} = merge_folds(Folds, CurrentFold),
     Result = Fun(Train, Test, NoFolds - CurrentFold + 1),
     cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, [Result|Acc]).
-
-%% @doc Generate a bootstrap replicate of "Examples" with {InBag, OutOfBag} examples.
-bootstrap_aggregate(Examples) ->
-    MaxId = count(Examples),
-    Bootstrap = generate_bootstrap(MaxId),
-    select_bootstrap_examples(Examples, 1, Bootstrap, {[], []}).
-
-%% @private
-generate_bootstrap(MaxId) ->
-    lists:foldl(fun(_, Bootstrap) ->
-			dict:update(random:uniform(MaxId), fun (Count) -> Count + 1 end, 1, Bootstrap)
-		end, dict:new(), lists:seq(1, MaxId)).
-
-%% @doc generate a subset aggregate (of size total no. examples / 2)
-subset_aggregate(Examples) ->
-    MaxId = count(Examples),
-    {Bootstrap, _Ignore} = lists:split(MaxId div 2, generate_substrap(MaxId)),
-    select_bootstrap_examples(Examples, 1, lists:foldl(fun(N, D) -> dict:store(N, 1, D) end, dict:new(), Bootstrap), {[], []}).
-
-%% @private
-generate_substrap(MaxId) ->
-    shuffle_list(lists:seq(1, MaxId)).
-    
-%% @private
-select_bootstrap_examples([], _N, _Bootstrap, Acc) ->
-    Acc;
-select_bootstrap_examples([{Class, Count, Ids}|Examples], N, Bootstrap, {InBags, OutBags}) ->
-    case select_bootstrap_examples_for_class(Class, {0, 0}, N, Ids, Bootstrap, {[], []}) of
-	{{_, 0, []}, _} -> % note: inbag is empty (no examples of Class)
-	    select_bootstrap_examples(Examples, N+Count, Bootstrap, {InBags, OutBags});
-	{InBag, OutBag} ->
-	    select_bootstrap_examples(Examples, N+Count, Bootstrap, {[InBag|InBags], [OutBag|OutBags]})
-    end.
-
-select_bootstrap_examples_for_class(Class, Count, N, Ids, Bootstrap, Acc) ->
-    select_bootstrap_examples_for_class(Class, Count, N, Ids, Bootstrap, 
-					rr_config:get_value('rf.config.variance', 1), Acc).
-
-%% @private
-select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, [], _, _, {InBag, OutBag}) ->
-    {{Class, InBagCount, InBag}, {Class, OutBagCount, OutBag}};
-select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, [ExId|Rest], Bootstrap, Variance,{InBag, OutBag}) ->
-    case dict:find(N, Bootstrap) of
-	{ok, Times0} ->
-	    Times = Times0 * random:uniform(Variance),
-	    NewInBag = duplicate_example(ExId, Times, InBag),
-	    select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount},
-						N+1, Rest, Bootstrap, Variance, {NewInBag, OutBag});
-	error ->
-	    select_bootstrap_examples_for_class(Class, {InBagCount,  OutBagCount + 1},
-						N+1, Rest, Bootstrap, Variance, {InBag, [ExId|OutBag]})
-    end.
-
-%% @private
-duplicate_example({ExId, _}, N, Acc) ->
-    [{exid(ExId), N}|Acc];
-duplicate_example(ExId, N, Acc) ->
-    [{exid(ExId), N}|Acc].
 
 %% @doc sample one example from all examples
 sample_example([{_Class, _, ExIds}]) ->

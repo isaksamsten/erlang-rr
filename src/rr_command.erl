@@ -14,8 +14,7 @@ behaviour_info(callbacks) ->
      {main, 1}, %% run the algorithm
      {help, 0}, %% return a string with help
      
-     {args, 2}, %% get all args which are used with this command
-     {args, 3}  %% get arg with key
+     {args, 2} %% get all args which are used with this command
     ];
 behaviour_info(_) ->
     undefined.

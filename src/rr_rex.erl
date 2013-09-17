@@ -7,8 +7,8 @@
 
 -module(rr_rex).
 
-%% @headerfile "rf_tree.hrl"
--include("rf_tree.hrl").
+%% @headerfile "rex.hrl"
+-include("rex.hrl").
 
 -export([
 	 extract/4
@@ -31,11 +31,12 @@ extract(#rf_node{feature=Feature,
 		 right=Right, 
 		 distribution={LeftCount, RightCount, {Class, True}}}, MinConfidence, MinCoverage, Total, Rule, Acc) ->
     False = (LeftCount+RightCount)-True,
+    
     Confidence = confidence(True, False),
     Coverage = coverage(True, False, Total),
     if Coverage >= MinCoverage ->
-	    LeftFeature = [{left, Feature}|Rule],
-	    RightFeature = [{right, Feature}|Rule],
+	    LeftFeature = [{left, Feature}|Rule], %% lt or eq
+	    RightFeature = [{right, Feature}|Rule], %% gt or not eq
 	    if Confidence >= MinConfidence ->
 		    LeftAcc = extract(Left, MinConfidence, MinCoverage, Total, LeftFeature, Acc),
 		    NewAcc = case Rule of

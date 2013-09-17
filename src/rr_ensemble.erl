@@ -22,11 +22,13 @@ kill(Model) ->
     Model ! {exit, self()}.
 
 get_model(Model, Conf) ->
-    Collect = fun (BaseModels, _) -> BaseModels end,
-    Models = perform(Model, {collect_models, Collect, fun lists:append/2}),
+    Models = get_base_classifiers(Model),
     [{version, ?VERSION},
      {base_models, Models},
      {config, Conf}].
+get_base_classifiers(Model) ->
+    Collect = fun (BaseModels, _) -> BaseModels end,
+    perform(Model, {collect_models, Collect, fun lists:append/2}).
 
 load_model(Model) ->
     case proplists:get_value(version, Model) of

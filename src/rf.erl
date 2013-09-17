@@ -12,6 +12,7 @@
 	 help/0, 
 	 new/1,  
 	 build/4,
+	 build/2,
 	 partial_build/1,
 
 	 evaluate/4,
@@ -20,7 +21,8 @@
 	 predict/4,
 	 save/3,
 	 load/1,
-
+	 
+	 get/1,
 	 serialize/2,
 	 unserialize/1,
 	 
@@ -89,10 +91,8 @@
 
 	 {<<"example_sampling">>, undefined,  "example-sampling", {string, <<"bagging">>},
 	  "Select the method for feature sampling. Available options include: 'bagging' and 'subagging'."},
-	 {<<"triangle_variance_options">>, undefined, "triangle-variance", {string, <<"0.3 1 100 10">>},
+	 {<<"variance_options">>, undefined, "variance-options", {string, "0.3,1,100,10"},
 	  "Options for the triangle variance sampling method. Format: 'Threshold A B C'"},
-	 {<<"uniform_variance_options">>, undefined, "uniform-variance", {string, <<"0.3,1,10">>},
-	  "Options for the uniform variance sampling method. Format: 'Threshold,Min,Max'"},
 
 	 {<<"weight_factor">>,  undefined,    "weight-factor", {float, 0.5},
 	  "Used for controlling the randomness of the 'combination' and 'weighted'-arguments."},
@@ -122,9 +122,15 @@ help() ->
 kill(Model) ->
     rr_ensemble:kill(Model).
 
+get(Model) ->
+    rr_ensemble:get_base_classifiers(Model).
+
 %% @doc build a model
 build(Rf, Features, Examples, ExConf) ->
     rr_ensemble:generate_model(Features, Examples, ExConf, Rf).
+
+build(Rf, ExSet) ->
+    build(Rf, ExSet#rr_exset.features, ExSet#rr_exset.examples, ExSet#rr_exset.exconf).
 
 %% @doc predict the class label of Example using Model and Rf
 predict(Rf, Model, Example, ExConf) ->
@@ -221,7 +227,7 @@ new(Props) ->
     FeatureSampling = proplists:get_value(feature_sampling, Props,
 					  rf_branch:subset()),
     ExampleSampling = proplists:get_value(example_sampling, Props,
-					  fun rr_example:bootstrap_aggregate/1),
+					  fun rr_sampling:bootstrap_replicate/1),
     Distribute = proplists:get_value(distribute, Props,
 				     fun rr_example:distribute/3),
     BaseLearner = proplists:get_value(base_learner, Props, rf_tree),
@@ -393,11 +399,11 @@ example_sampling(Value, Error, Options) ->
 	<<"bagging">> ->
 	    fun rr_sampling:bootstrap_replicate/1;
 	<<"triangle-variance">> ->
-	    Option = args(<<"triangle_variance_options">>, Options, Error),
+	    Option = args(<<"variance_options">>, Options, Error),
 	    [Threshold, A, B, C] = options(Option),
 	    rr_sampling:triangle_variance_sample(Threshold, A, B, C);
 	<<"uniform-variance">> ->
-	    Option = args(<<"uniform_variance_options">>, Options, Error),
+	    Option = args(<<"variance_options">>, Options, Error),
 	    [Threshold, Min, Max] = options(Option),
 	    rr_sampling:uniform_variance_sample(Threshold, Min, Max);
 	<<"random">> ->
