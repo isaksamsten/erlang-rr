@@ -1,9 +1,9 @@
-%%% @author Isak Karlsson <isak@Unkown-MacBook-Pro.local>
+%%% @author Isak Karlsson <isak-kar@dsv.su.se>
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
 %%% Implementation of some pseudo random distributions
 %%% @end
-%%% Created : 12 Sep 2013 by Isak Karlsson <isak@Unkown-MacBook-Pro.local>
+%%% Created : 12 Sep 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_random).
 

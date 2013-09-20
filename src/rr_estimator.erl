@@ -15,6 +15,8 @@
 	 hellinger/2, 
 	 bhattacharyya/2,
 
+	 chord/2,
+
 	 %% rule learner
 	 purity/2,
 	 laplace/2,
@@ -77,6 +79,13 @@ bhattacharyya(_, _) ->
 
 bhattacharyya({P, Q}) ->    
     math:sqrt(P*Q).
+
+chord({both, Left, Right}, _Total) ->
+    C = 1-(1/2*probability_content(Left, Right, fun chord/1)),
+    {C, C, C};
+chord(_, _) ->
+    {1000, 0.0, 0.0}.
+
      
 class_total(Examples, Init) ->
     lists:foldl(
@@ -97,6 +106,9 @@ probability_content(Left, Right, Fun) ->
 
 hellinger({P, Q}) ->
     math:pow(math:sqrt(P) - math:sqrt(Q), 2).
+
+chord({P, Q}) ->
+    math:pow(abs(math:sqrt(P) - math:sqrt(Q)), 1.9).
 
 %% @doc
 info_gain({both, Left, Right}, Total) ->

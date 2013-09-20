@@ -16,6 +16,13 @@
 	  seed = {0,0,0} :: {integer(), integer(), integer()}
 	 }).
 
+-record(rr_base, {
+	  id,
+	  model,
+	  accuracy,
+	  no_rules
+	 }).
+
 %%
 %% * feature = the feature involving the split
 %% * score = the score of this split (less is better)

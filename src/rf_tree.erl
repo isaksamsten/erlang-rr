@@ -49,7 +49,7 @@ chisquare_prune(Sigma) ->
 -spec generate_model(features(), examples(), #rr_example{}, #rf_tree{}) -> #rf_node{}.
 generate_model(Features, Examples, ExConf, Conf) ->
     Info = rr_estimator:info(Examples, rr_example:count(Examples)),
-    build_decision_node(Features, Examples, dict:new(), 0, Info, ExConf, Conf, 1).
+    build_decision_node(Features, Examples, dict:new(), 0, Info, ExConf, Conf, 1, 1).
 
 -spec evaluate_model(#rf_node{}, examples(), #rr_example{}, #rf_tree{}) -> dict().
 evaluate_model(Model, Examples, ExConf, Conf) ->
@@ -97,40 +97,40 @@ predict(ExId, #rf_node{id=NodeNr,
 	    
 %% @private induce a decision tree
 -spec build_decision_node(Features::features(), Examples::examples(), Importance::dict(), Total::number(), 
-			  Error::number(), #rr_example{}, #rf_tree{}, []) -> {tree(), dict(), number()}.
-build_decision_node([], [], Importance, Total, _Error, _ExConf, _Conf, Id) ->
-    {make_leaf(Id, [], error), Importance, Total};
-build_decision_node([], Examples, Importance, Total, _Error, _ExConf, _Conf, Id) ->
-    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
-build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _ExConf, _Conf, Id) ->
-    {make_leaf(Id, Examples, {Class, Count}), Importance, Total};
-build_decision_node(Features, Examples, Importance, Total, Error, ExConf, Conf, Id) ->
+			  Error::number(), #rr_example{}, #rf_tree{}, [], number()) -> {tree(), dict(), number(), number()}.
+build_decision_node([], [], Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
+    {make_leaf(Id, [], error), Importance, Total, NoNodes};
+build_decision_node([], Examples, Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
+    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, NoNodes};
+build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
+    {make_leaf(Id, Examples, {Class, Count}), Importance, Total, NoNodes};
+build_decision_node(Features, Examples, Importance, Total, Error, ExConf, Conf, Id, NoNodes) ->
     #rf_tree{prune=Prune, pre_prune = _PrePrune, branch=Branch, depth=Depth} = Conf,
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
 	true ->
-	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
+	    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, NoNodes};
 	false ->
 	    case rf_branch:unpack(Branch(Features, Examples, NoExamples, ExConf, Conf)) of
 		no_information ->
-		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
+		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, NoNodes};
 		#rr_candidate{split={_, _}} ->
-		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total};
+		    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, NoNodes};
 		#rr_candidate{feature=Feature, 
 			      score={Score, LeftError, RightError}, 
 			      split={both, LeftExamples, RightExamples}}  -> 
 		    NewReduction = Error - (LeftError + RightError),
 		    NewImportance = dict:update_counter(rr_example:feature_id(Feature), NewReduction, Importance),
 		    
-		    {LeftNode, LeftImportance, TotalLeft} = 
+		    {LeftNode, LeftImportance, TotalLeft, NoLeftNodes} = 
 			build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError, 
-					    ExConf, Conf#rf_tree{depth=Depth + 1}, Id + 1),
+					    ExConf, Conf#rf_tree{depth=Depth + 1}, Id + 1, NoNodes),
 		    
-		    {RightNode, RightImportance, TotalRight} = 
+		    {RightNode, RightImportance, TotalRight, NoRightNodes} = 
 			build_decision_node(Features, RightExamples, LeftImportance, TotalLeft, RightError, 
-					    ExConf, Conf#rf_tree{depth=Depth + 1}, Id + 2),
+					    ExConf, Conf#rf_tree{depth=Depth + 1}, Id + 2, NoLeftNodes),
 		    Distribution = {rr_example:count(LeftExamples), rr_example:count(RightExamples), rr_example:majority(Examples)},
-		    {make_node(Id, Feature, Distribution, Score, LeftNode, RightNode), RightImportance, TotalRight}
+		    {make_node(Id, Feature, Distribution, Score, LeftNode, RightNode), RightImportance, TotalRight, NoRightNodes+1}
 	    end	   
     end.
 

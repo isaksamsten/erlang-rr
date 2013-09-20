@@ -151,7 +151,7 @@ evaluate(Conf, Model, Test, ExConf) ->
     Variance = rr_eval:variance(Dict, NoTestExamples),
     Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, 
 				      Conf#rr_ensemble.no_classifiers),
-
+    NoRules = rr_ensemble:no_rules(Model, Conf),
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
  
@@ -160,6 +160,7 @@ evaluate(Conf, Model, Test, ExConf) ->
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy},
      {auc, Auc}, 
+     {no_rules, NoRules},
      {strength, Strength},
      {correlation, Correlation},
      {variance, Variance},
@@ -472,6 +473,7 @@ score(Value, Error, Options) ->
 	<<"gini">> -> rf_tree:gini();
 	<<"gini-info">> -> rf_tree:gini_info(WeightFactor);
 	<<"hellinger">> -> fun rr_estimator:hellinger/2;
+	<<"squared-chord">> -> fun rr_estimator:chord/2;
 	<<"bhattacharyya">> -> fun rr_estimator:bhattacharyya/2;
 	Other -> Error("score", Other)		
     end.

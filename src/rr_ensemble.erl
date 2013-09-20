@@ -81,10 +81,24 @@ variable_importance(Model, #rr_ensemble{no_classifiers=Classifiers}) ->
 %% @doc get the out-of-bag base accuracy
 oob_accuracy(Model, Conf) ->
     TreeFun = fun(BaseModels, _) ->
-		      lists:foldl(fun ({_, _, A}, Acc) -> [A|Acc] end, [], BaseModels)
+		      lists:foldl(fun (#rr_base{accuracy = A}, Acc) -> [A|Acc] end, [], BaseModels)
 	      end,
     A = perform(Model, {oob_accuracy, TreeFun, fun lists:append/2}),
     lists:sum(A)/Conf#rr_ensemble.no_classifiers.
+
+%% @doc get #rules
+no_rules(Model, _) ->
+    lists:sum(perform(Model, {
+			no_rules, 
+			fun (Models, _) ->
+				[lists:foldl(fun (#rr_base{no_rules = R}, Acc) -> R + Acc end, 0, Models)]
+			end,
+			fun lists:append/2
+		       })).
+			    
+		    
+							  
+    
 
 %% @doc
 %% Calculate the base Test accuracy for each model. This function relies
@@ -123,7 +137,7 @@ base_accuracy(Model, Test, ExConf, Conf) ->
 					     end, dict:new(), ExIds)|Acc]
 				  end, [], Test)))),
     TreeFun = fun(BaseModels, #rr_ensemble{base_learner={Base, BaseConf}}) ->
-		      lists:foldl(fun({_, BaseModel, _}, Acc) ->
+		      lists:foldl(fun(#rr_base{model=BaseModel}, Acc) ->
 					  Pred = Base:evaluate_model(BaseModel, Test, ExConf, BaseConf),
 					  PredSecond = Base:evaluate_model(BaseModel, SecondBestTest, ExConf, BaseConf),
 					  [{rr_eval:accuracy(Pred), rr_eval:accuracy(PredSecond)}|Acc]
@@ -289,7 +303,7 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
     receive
 	{build, Id} ->
 	    {Bag, OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
-	    {Model, TreeVariableImportance, ImportanceSum} = Base:generate_model(Features, Bag, ExConf, BaseConf),
+	    {Model, TreeVariableImportance, ImportanceSum, NoRules} = Base:generate_model(Features, Bag, ExConf, BaseConf),
 	    
 	    NewVariableImportance = update_variable_importance(TreeVariableImportance, VariableImportance, ImportanceSum),
 	    OOBAccuracy = case OutBag of
@@ -303,8 +317,9 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
 		_ ->
 		    ok
 	    end,
+	    BaseModel = #rr_base{id = Id, model = Model, accuracy = OOBAccuracy, no_rules = NoRules}, %{Id, Model, OOBAccuracy}
 	    base_build_process(Coordinator, Features, Examples, ExConf, 
-			       Conf, NewVariableImportance, [{Id, Model, OOBAccuracy}|Models]);
+			       Conf, NewVariableImportance, [BaseModel|Models]);
 	{completed, Coordinator} ->
 	    base_evaluator_process(Coordinator, self(), Conf, VariableImportance, Models)
     end.
@@ -332,7 +347,7 @@ make_prediction(Models, Base, ExId, ExConf, Conf) ->
 
 make_prediction([], _Base, _ExId, _ExConf, _Conf, Acc) ->
     Acc;
-make_prediction([{ModelNr, Model, _}|Models], Base, ExId, ExConf, Conf, Acc) ->
+make_prediction([#rr_base{id=ModelNr, model=Model}|Models], Base, ExId, ExConf, Conf, Acc) ->
     {Prediction, NodeNr} = Base:predict(ExId, Model, ExConf, Conf, []),
     make_prediction(Models, Base, ExId, ExConf, Conf, [{Prediction, [ModelNr|NodeNr]}|Acc]).
 

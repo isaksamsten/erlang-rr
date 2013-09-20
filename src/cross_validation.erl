@@ -49,7 +49,7 @@ evaluate(ExSet, Props) ->
 %% @private default method for averaging the results of cross-validation
 average_cross_validation(Result, Folds) ->
     average_cross_validation(Result, Folds, [accuracy, auc, strength, correlation, c_s2, precision, recall,
-					     variance, oob_base_accuracy, base_accuracy, brier]).
+					     variance, oob_base_accuracy, base_accuracy, brier, no_rules]).
 
 %% @doc average the cross-validation (for the results specified in Inputs)
 average_cross_validation(Result, Folds, Inputs) ->

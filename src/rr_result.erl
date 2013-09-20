@@ -24,6 +24,7 @@
 			      {"c/s^2", c_s2},
 			      {"precision", precision},
 			      {"recall", recall},
+			      {"no-rules", no_rules},
 			      {"brier", brier}]).
 
 
@@ -37,6 +38,7 @@
 			  {"correlation", correlation},
 			  {"precision", precision},
 			  {"recall", recall},
+			  {"no-rules", no_rules},
 			  {"c/s^2", c_s2}, 
 			  {"brier", brier}]).
 
