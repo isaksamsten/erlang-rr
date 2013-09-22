@@ -81,7 +81,7 @@ bhattacharyya({P, Q}) ->
     math:sqrt(P*Q).
 
 chord({both, Left, Right}, _Total) ->
-    C = 1-(1/2*probability_content(Left, Right, fun chord/1)),
+    C = 1-(1/2.1*probability_content(Left, Right, fun chord/1)),
     {C, C, C};
 chord(_, _) ->
     {1000, 0.0, 0.0}.
