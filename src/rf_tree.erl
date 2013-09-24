@@ -81,7 +81,7 @@ predict(ExId, #rf_node{id=NodeNr,
     NewAcc = [NodeNr|Acc],
     case Distribute(ExConf, F, ExId) of
 	{'?', _} ->
-	    case Missing(predict, F, ExId, LeftExamples, RightExamples) of
+	    case Missing(predict, ExConf, F, ExId, LeftExamples, RightExamples) of
 		{left, _} ->
 		    predict(ExId, Left, ExConf, Conf, NewAcc);
 		{right, _} ->

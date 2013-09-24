@@ -56,7 +56,8 @@
 	 randomize/1,
 	 cross_validation/3,
 	 split_dataset/2,
-	 parse_example_process/6,
+	 parse_example_process/7,
+	 example_value_handler/2,
 
 	 best_split/8,
 	 best_split/9
@@ -98,17 +99,26 @@ new() ->
     #rr_example{
        examples = ets:new(examples, [public, {read_concurrency, true}]),
        features = ets:new(features, [public]),
-       predictions = ets:new(predictions, [public])
+       predictions = ets:new(predictions, [public]),
+       values = ets:new(values, [public])
       }.
 
 %% @doc delete a dataset
 kill(#rr_exset{exconf=Dataset}) ->
     kill(Dataset);
 kill(Dataset) ->
-    #rr_example{features = FeatureTable, examples = ExTable, predictions = PredictionsTable} = Dataset,
+    #rr_example {
+       features = FeatureTable, 
+       examples = ExTable, 
+       values = ExValues,
+       predictions = PredictionsTable } = Dataset,
+    
+    
     ets:delete(FeatureTable),
     ets:delete(ExTable),
+    ets:delete(ExValues),
     ets:delete(PredictionsTable).
+    
 
 %% @doc a dataset from File using Core cores (creates a new dataset)
 -spec load(string(), number()) -> {features(), examples(), #rr_example{}}.
@@ -124,7 +134,7 @@ load(File, Core) ->
 %% @doc load a dataset from file using Core cores to Dataset 
 -spec load(string(), number(), #rr_example{}) -> {features(), examples()}.
 load(File, Cores, Dataset) ->
-    #rr_example{features = FeatureTable, examples = ExTable} = Dataset,
+    #rr_example{features = FeatureTable} = Dataset,
     {ClassId, Types} = case csv:next_line(File) of
 			   {ok, Types0, _} ->
 			       parse_type_declaration(Types0);
@@ -137,25 +147,36 @@ load(File, Cores, Dataset) ->
 		   eof ->
 		       throw({error, features_type_error})
 	       end,
-    Examples = parse_examples(ExTable, File, Cores, ClassId, Types),
+    Examples = parse_examples(Dataset, File, Cores, ClassId, Types),
     {Features, Examples}.
     
 %% @private spawns "Cores" 'parse_example_process' and collects their results
-parse_examples(ExTable, File, Cores, ClassId, Types) ->
+parse_examples(Dataset, File, Cores, ClassId, Types) ->
     Self = self(),
+    ExTable = Dataset#rr_example.examples,
+    Handler = spawn_link(?MODULE, example_value_handler, [Dataset, dict:new()]),
     lists:foreach(fun (_) ->
-			  spawn_link(?MODULE, parse_example_process, [Self, ExTable, File, ClassId, Types, dict:new()])
+			  spawn_link(?MODULE, parse_example_process, 
+				     [Self, ExTable, File, ClassId, Types, Handler, dict:new()])
 		  end, lists:seq(1, Cores)),
-    collect_parse_example_processes(Self, Cores, dict:new()).
+    Examples = collect_parse_example_processes(Self, Cores, dict:new()),
+%    Handler ! {stop, Self, rr_example:count(Examples)},
+ %   receive
+  %  	{value_handler_stop, Self} ->
+	    Examples.
+ %   end.
+
+
 
 %% @private process that gets a line from the "File" and process each example
-parse_example_process(Parent, ExTable, File, ClassId, Types, Acc) ->
+parse_example_process(Parent, ExTable, File, ClassId, Types, Handler, Acc) ->
     case csv:next_line(File) of
 	{ok, Example, Id0} ->
 	    {Class, Attributes} = take_feature(Example, ClassId),
 	    Id = Id0 - 2, %% NOTE: subtracting headers 
-	    ets:insert(ExTable, format_features(Attributes, Types, 1, [Id])),
-	    parse_example_process(Parent, ExTable, File, ClassId, Types, update_class_distribution(Class, Id, Acc));
+	    ets:insert(ExTable, format_features(Attributes, Types, 1, Handler, [Id])),
+	    parse_example_process(Parent, ExTable, File, ClassId, Types, Handler,
+				  update_class_distribution(Class, Id, Acc));
 	eof ->
 	    Parent ! {done, Parent, Acc}
     end.
@@ -173,19 +194,44 @@ collect_parse_example_processes(Self, Cores, Examples) ->
     end.
 
 %% @private format example values according to their correct type
-format_features([], [], _, Acc) ->
+format_features([], [], _, _, Acc) ->
     list_to_tuple(lists:reverse(Acc));
-format_features([Value|Values], [categoric|Types], Column, Acc) ->
-    format_features(Values, Types, Column + 1, [list_to_atom(Value)|Acc]);
-format_features([Value|Values], [numeric|Types], Column, Acc) ->
-    format_features(Values, Types, Column + 1, [case format_number(Value) of
-						    {true, Number} ->
-							Number;
-						    '?' ->
-							'?';
-						    false ->
-							throw({error, {invalid_number_format, Column, Value}})
-						end|Acc]).
+format_features([Value|Values], [categoric|Types], Column, Handler, Acc) ->
+    FeatureValue = if Value == "?" -> '?'; true -> list_to_binary(Value) end,
+%    Handler ! {categoric, Column, FeatureValue},
+    format_features(Values, Types, Column + 1, Handler, [FeatureValue|Acc]);
+format_features([Value|Values], [numeric|Types], Column, Handler, Acc) ->
+    format_features(Values, Types, Column + 1, Handler,
+		    [case format_number(Value) of
+			 {true, Number} ->
+%			     Handler ! {numeric, Column, Number},
+			     Number;
+			 '?' ->
+			     '?';
+			 false ->
+			     throw({error, {invalid_number_format, Column, Value}})
+		     end|Acc]).
+
+example_value_handler(ExTable, Dict) ->
+    receive
+	{numeric, Feature, Value} ->
+	    NewDict = dict:update_counter(Feature, Value, Dict),
+	    example_value_handler(ExTable, NewDict);
+	{categoric, Feature, Value} ->
+	    NewDict = dict:update(Feature, fun (ValuesDict) -> 
+						   dict:update_counter(Value, 1, ValuesDict) 
+					   end,	dict:store(Value, 1, dict:new()), Dict),
+	    example_value_handler(ExTable, NewDict);
+	{stop, Parent, NoEx} ->
+	    Values = ExTable#rr_example.values,
+	    dict:fold(fun (Key, Value, _) when is_number(Value) ->
+			      ets:insert(Values, {Key, numeric, Value/NoEx});
+			  (Key, Value, _) ->
+			      NewValue = rr_util:max(fun ({K, V}) -> if K == '?' -> 0; true -> V end end, dict:to_list(Value)),
+			      ets:insert(Values, {Key, categoric, NewValue})
+		      end, 0, Dict),
+	    Parent ! {value_handler_stop, Parent}
+    end.
 
 %% @doc determine if a string is a number or missing (?)
 format_number("?") ->
@@ -265,40 +311,40 @@ format_left_right_split(Left, Right) ->
     {both, Left, Right}.
 
 %% @private distribute missing values either right or left depending on Distribute
-distribute_missing_values(_, _, _, _, [], [], [], Left, Right, _) ->
+distribute_missing_values(_, _, _, _, _, [], [], [], Left, Right, _) ->
     format_left_right_split(Left, Right);
-distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, [Left|LeftRest], [Right|RightRest], 
+distribute_missing_values(Me, Feature, Examples, TotalNoLeft, TotalNoRight, [Left|LeftRest], [Right|RightRest], 
 			  [{_, _, Missing}|MissingRest], LeftAcc, RightAcc, Distribute) ->
-    case  distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, Missing, Left, Right, Distribute) of
+    case  distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, Missing, Left, Right, Distribute) of
 	{{_, 0, []}, NewRight} ->
-	    distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest,
+	    distribute_missing_values(Me, Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest,
 				      LeftAcc, [NewRight|RightAcc], Distribute);
 	{NewLeft, {_, 0, []}} ->
-	    distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest, 
+	    distribute_missing_values(Me, Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest, 
 				      [NewLeft|LeftAcc], RightAcc, Distribute);
 	{NewLeft, NewRight} ->
-	    distribute_missing_values(Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest, 
+	    distribute_missing_values(Me, Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest, 
 				      [NewLeft|LeftAcc], [NewRight|RightAcc], Distribute)
     end.
 	    
-distribute_missing_values_for_class(_, _, _, _, [], Left, Right, _) ->
+distribute_missing_values_for_class(_, _, _, _, _, [], Left, Right, _) ->
     {Left, Right};
-distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, [MissingEx|RestMissing], 
+distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, [MissingEx|RestMissing], 
 				   {Class, NoLeft, Left} = LeftExamples, 
 				   {Class, NoRight, Right} = RightExamples, Distribute) ->
-    case Distribute(build, Feature, MissingEx, TotalNoLeft, TotalNoRight) of
+    case Distribute(build, Me, Feature, MissingEx, TotalNoLeft, TotalNoRight) of
 	{right, {_, NewCount}=NewEx} ->
-	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, LeftExamples,
+	    distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, LeftExamples,
 						{Class, NoRight + NewCount, [NewEx|Right]}, Distribute);
 	{left, {_, NewCount}=NewEx} ->
-	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
+	    distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
 						{Class, NoLeft + NewCount, [NewEx|Left]}, RightExamples, Distribute);
 	{both, {{_, NewLeftCount}=NewLeftEx, {_, NewRightCount} = NewRightEx}} ->
-	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing,
+	    distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing,
 						{Class, NoLeft + NewLeftCount, [NewLeftEx|Left]},
 						{Class, NoRight + NewRightCount, [NewRightEx|Right]}, Distribute);
 	ignore ->
-	    distribute_missing_values_for_class(Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
+	    distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
 						LeftExamples, RightExamples, Distribute)
     end.
 
@@ -313,14 +359,14 @@ unpack_split({right, Right}) ->
 
 split_feature_value(Me, FeatureValue, Examples, Distribute, DistributeMissing) ->
     {Left, Right, Missing} = split_feature(Me, FeatureValue, Examples, Distribute, [], [], []),
-    distribute_missing_values(FeatureValue, Examples, count(Left), count(Right), 
+    distribute_missing_values(Me, FeatureValue, Examples, count(Left), count(Right), 
 			      Left, Right, Missing, [], [], DistributeMissing).    
 
 %% @doc Split Examples into two disjoint subsets according to Feature.
 -spec split(#rr_example{}, feature(), examples(), distribute_fun(), missing_fun(), any()) -> {'$none' | atom(), split()}.
 split(Me, Feature, Examples, Distribute, DistributeMissing, Sample) ->
     {Value, {Left, Right, Missing}} = split_with_value(Me, Feature, Examples, Distribute, Sample),
-    {Value, distribute_missing_values({Feature, Value}, Examples, count(Left), count(Right), 
+    {Value, distribute_missing_values(Me, {Feature, Value}, Examples, count(Left), count(Right), 
 				      Left, Right, Missing, [], [], DistributeMissing)}.
 
 %% @doc split examples into two subsets according to feature handle split randomly

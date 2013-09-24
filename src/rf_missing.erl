@@ -31,24 +31,24 @@ partition(ExId, Fraction) ->
 %% @doc random partitions
 -spec random_partition() -> missing_fun().
 random_partition() ->
-    fun random_partition/5.
+    fun random_partition/6.
 			      
 
 %% @private
-random_partition(build, _, ExId, _, _) ->
+random_partition(build, _, _, ExId, _, _) ->
     partition(ExId, 0.5);
-random_partition(predict, _, ExId, _, _) ->
+random_partition(predict, _, _, ExId, _, _) ->
     {direction(random:uniform() =< 0.5), 
      {rr_example:exid(ExId), rr_example:count(ExId)}}.
-weighted_partition(build, _, ExId, NoLeft, NoRight) -> 
+weighted_partition(build, _, _, ExId, NoLeft, NoRight) -> 
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     partition(ExId, LeftFraction);
-weighted_partition(predict, _, ExId, NoLeft, NoRight) -> 
+weighted_partition(predict, _, _, ExId, NoLeft, NoRight) -> 
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     {direction(random:uniform() =< LeftFraction), 
      {rr_example:exid(ExId), rr_example:count(ExId)}}.
     
-weighted(_, _, ExId, NoLeft, NoRight) ->
+weighted(_, _, _, ExId, NoLeft, NoRight) ->
     LeftFraction = case NoLeft of
 		       0 -> 0; 0.0 -> 0; 
 		       _-> (NoLeft) / (NoLeft + NoRight)
@@ -57,11 +57,10 @@ weighted(_, _, ExId, NoLeft, NoRight) ->
      {rr_example:exid(ExId), rr_example:count(ExId)}}.
 		       
 
-
 %%
 %% Distribute the examples evenly over the left and right side
 %%
-random(_, _, ExId, _, _) ->
+random(_, _, _, ExId, _, _) ->
     {direction(random:uniform() =< 0.5),
      {rr_example:exid(ExId), rr_example:count(ExId)}}.
 
@@ -69,21 +68,21 @@ random(_, _, ExId, _, _) ->
 %% Distribute examples based on the number of examples falling in each
 %% branch.
 %%
-random_weighted(_, _, ExId, NoLeft, NoRight) ->
+random_weighted(_, _, _, ExId, NoLeft, NoRight) ->
     LeftFraction = (NoLeft + 1) / (NoLeft + NoRight + 2),
     {direction(random:uniform() =< LeftFraction), 
      {rr_example:exid(ExId), rr_example:count(ExId)}}.
 
-ignore(_, _, _, _, _) ->
+ignore(_, _, _, _, _, _) ->
     ignore.
 	  
 %%
 %% Distribute every example in the right branch (i.e. consider it
 %% false)
 %%
-right(_, _, ExId, _, _) ->
+right(_, _, _, ExId, _, _) ->
     {right, exid(ExId)}.
-left(_, _, ExId, _, _) ->
+left(_, _, _, ExId, _, _) ->
     {left, exid(ExId)}.
 
 

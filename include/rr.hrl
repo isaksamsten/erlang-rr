@@ -47,7 +47,8 @@
 -record(rr_example, {
 	  examples :: number(),
 	  features :: number(),
-	  predictions :: number()
+	  predictions :: number(),
+	  values :: number()
 	 }).
 
 -record(rr_exset, {

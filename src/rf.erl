@@ -218,7 +218,7 @@ new(Props) ->
     Cores = proplists:get_value(no_cores, Props, 
 				erlang:system_info(schedulers)),
     Missing = proplists:get_value(missing_values, Props, 
-				  fun rf_missing:weighted/5),
+				  fun rf_missing:weighted/6),
     Progress = proplists:get_value(progress, Props, fun (_, _) -> ok end),
     Score = proplists:get_value(score, Props, rf_tree:info()),
     NoTrees = proplists:get_value(no_trees, Props, 100),
@@ -431,15 +431,15 @@ distribute(Value, Error) ->
 
 missing_values(Value, Error) ->
     case rr_util:safe_iolist_to_binary(Value) of
-	<<"random">> -> fun rf_missing:random/5;
-	<<"randomw">> -> fun rf_missing:random_weighted/5;
-	<<"weighted">> -> fun rf_missing:weighted/5;
-	<<"partition">> -> fun rf_missing:random_partition/5;
-	<<"wpartition">> -> fun rf_missing:weighted_partition/5;
-	<<"proximity">> -> fun rf_missing:proximity/5;
-	<<"right">> -> fun rf_missing:right/5;
-	<<"left">> -> fun rf_missing:left/5;
-	<<"ignore">> -> fun rf_missing:ignore/5;
+	<<"random">> -> fun rf_missing:random/6;
+	<<"randomw">> -> fun rf_missing:random_weighted/6;
+	<<"weighted">> -> fun rf_missing:weighted/6;
+	<<"partition">> -> fun rf_missing:random_partition/6;
+	<<"wpartition">> -> fun rf_missing:weighted_partition/6;
+	<<"proximity">> -> fun rf_missing:proximity/6;
+	<<"right">> -> fun rf_missing:right/6;
+	<<"left">> -> fun rf_missing:left/6;
+	<<"ignore">> -> fun rf_missing:ignore/6;
 	Other -> Error("missing", Other)
     end.
 
@@ -479,10 +479,12 @@ score(Value, Error, Options) ->
     end.
 
 no_features(Value, Error) ->
-    case Value of
+    case rr_util:safe_iolist_to_binary(Value) of
 	<<"default">> -> fun (TotalNoFeatures) -> trunc(math:log(TotalNoFeatures)/math:log(2)) + 1 end;
 	<<"sqrt">> -> fun (TotalNoFeatures) -> trunc(math:sqrt(TotalNoFeatures)) end;
+	<<"all">> -> fun (TotalNoFeatures) -> TotalNoFeatures end;
 	X ->
+	    io:format("~p~n",[X]),
 	    case rr_example:format_number(X) of
 		{true, Number} when Number > 0 -> fun (_) -> Number end;
 		_ -> Error("no-features", X)

@@ -71,14 +71,16 @@ min(Fun, List) ->
 
 
 max(Fun, List) ->
-    {_, Min} = lists:foldl(fun (Value, {Min, Value}) ->
+    FirstMax = Fun(hd(List)),
+    FirstValue = hd(List),
+    {_, Min} = lists:foldl(fun (Value, {OldMax, OldValue}) ->
 				   U = Fun(Value),
-				   if U > Min ->
+				   if U > OldMax ->
 					   {U, Value};
 				      true ->
-					   {Min, Value}
+					   {OldMax, OldValue}
 			end
-			   end, Fun(hd(List)), tl(List)),
+			   end, {FirstMax, FirstValue}, tl(List)),
     Min.
 
 %% @doc randomly permute a list (public)
