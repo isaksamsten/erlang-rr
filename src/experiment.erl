@@ -32,7 +32,7 @@
 	  "Number of iterations to run each experiment"},
 	 {<<"tag">>, $t, "tag", {string, "experiment"},
 	  "Tag the experiment"},
-	 {<<"evaluation">>, $e, "evaluation", {string, "cv"},
+	 {<<"evaluation">>, $x, "evaluation", {string, "cv"},
 	  "Evaluation settings."},
 	 {<<"classifier">>, $c, "classifier", string,
 	  "Classifier settings."}]).	  
@@ -154,13 +154,14 @@ run([Dataset|Datasets], Evaluate, Classifier, Loader,
 		       
 evaluation(Value, _Error) ->    
     case string:tokens(Value, " ") of
-	["cv"|_Cmd] ->
+	["cv", Folds0] ->
+	    {true, Folds} = rr_example:format_number(Folds0),
 	     CvProgress = 
 		fun (Fold) -> 
 			io:format(standard_error, "fold ~p ", [Fold])
 		end,
 	    fun (Dataset, Props) ->
-		    cross_validation:evaluate(Dataset, Props ++ [{progress, CvProgress}])
+		    cross_validation:evaluate(Dataset, Props ++ [{progress, CvProgress}, {folds, Folds}])
 	    end
     end.
 

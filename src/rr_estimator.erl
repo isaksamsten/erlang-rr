@@ -86,7 +86,6 @@ chord({both, Left, Right}, _Total) ->
 chord(_, _) ->
     {1000, 0.0, 0.0}.
 
-     
 class_total(Examples, Init) ->
     lists:foldl(
       fun ({Class, Count, _}, {Classes, Counts}) ->
