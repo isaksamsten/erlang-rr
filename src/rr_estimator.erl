@@ -60,9 +60,16 @@ gini_content(Examples, _Total) ->
 
 
 hellinger({both, Left, Right}, _Total) ->
-    Value = probability_content(Left, Right, fun hellinger/1),
-    Hell = 1 - ((1/math:sqrt(2)) * math:sqrt(Value)),
-    {Hell, Hell, Hell};
+%    Value = probability_content(Left, Right, fun hellinger/1),
+ %   Hell = 1 - ((1/math:sqrt(2)) * math:sqrt(Value)),
+    Totals = lists:foldl(fun ({Class, Count, _}, Acc) ->
+				 dict:update_counter(Class, Count, Acc)
+			 end, dict:new(), Left ++ Right),
+    LeftValue = maximize(fun hellinger/1, Left, Totals),
+    RightValue = maximize(fun hellinger/1, Right, Totals),
+    Total = 1 - ((1/math:sqrt(2)) * math:sqrt(LeftValue+RightValue)),
+   % io:format("~p ~n", [Total]),
+    {Total, 1-(1/math:sqrt(2))*math:sqrt(LeftValue), 1-(1/math:sqrt(2))*math:sqrt(RightValue)};
 hellinger({_, _}, _) ->
     {1000, 0.0, 0.0}.
 
@@ -81,8 +88,13 @@ bhattacharyya({P, Q}) ->
     math:sqrt(P*Q).
 
 chord({both, Left, Right}, _Total) ->
-    C = 1-(1/2.1*probability_content(Left, Right, fun chord/1)),
-    {C, C, C};
+    %C = 1-(1/2.1*probability_content(Left, Right, fun chord/1)),
+    Totals = lists:foldl(fun ({Class, Count, _}, Acc) ->
+				 dict:update_counter(Class, Count, Acc)
+			 end, dict:new(), Left ++ Right),
+    LeftValue = maximize(fun chord/1, Left, Totals),
+    RightValue = maximize(fun chord/1, Right, Totals),
+    {1-((1/2.1)*(LeftValue+RightValue)), LeftValue, RightValue};
 chord(_, _) ->
     {1000, 0.0, 0.0}.
 
@@ -102,6 +114,25 @@ probability_content(Left, Right, Fun) ->
 			    end,
 			Count + Fun({P, Q})
 	      end, 0, ordsets:from_list(Classes)).
+
+maximize(Fun, Examples, Total) ->
+    case [{CountA/dict:fetch(ClassA, Total), CountB/dict:fetch(ClassB, Total)} || 
+	     {ClassA, CountA, _} <- Examples, 
+	     {ClassB, CountB, _} <- Examples,
+	     ClassA =/= ClassB andalso ClassB =/= ClassA] of
+	[] -> 0.0;
+	Classes ->
+	    lists:foldl(fun (Prob, Max) ->
+				Value = Fun(Prob),
+				if Value > Max ->
+					Value;
+				   true ->
+					Max
+				end
+			end, Fun(hd(Classes)), tl(Classes))
+    end.
+			
+    
 
 hellinger({P, Q}) ->
     math:pow(math:sqrt(P) - math:sqrt(Q), 2).
@@ -236,7 +267,7 @@ hellinger_test() ->
 				   [{green, 0}, {yellow, 1000}]),
     Split2 = rr_example:mock_split([{green, 10}, {yellow, 20000}],
 				   [{green, 8}, {yellow, 1000}]),
-    Distance = fun bhattacharyya/2,
+    Distance = fun hellinger/2,
     ?debugFmt("~p < ~p", [element(1, Distance(Split1,322)), element(1, Distance(Split2,322))]),
     ?assert(element(1, Distance(Split1, 322)) < element(1, Distance(Split2, 322))).
 -endif.
