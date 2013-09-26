@@ -971,7 +971,7 @@ subset_test() ->
 bootstrap_test() ->
     random:seed({1,2,3}),
     Examples = mock_examples([{a, 1000}, {b, 2000}]),
-    {InBag, OutBag} = bootstrap_aggregate(Examples),
+    {InBag, OutBag} = rr_sampling:bootstrap_replicate(Examples),
     ?assertEqual(count(a, InBag), 1017),
     ?assertEqual(count(b, InBag), 1983),
     

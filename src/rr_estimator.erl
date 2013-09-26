@@ -15,7 +15,7 @@
 	 hellinger/2, 
 	 bhattacharyya/2,
 
-	 chord/2,
+	 squared_chord/2,
 
 	 %% rule learner
 	 purity/2,
@@ -58,20 +58,24 @@ gini_content(Examples, _Total) ->
 			Count + math:pow(Class/Total, 2)
 		end, 0.0, Counts).
 
-
+%% Value = probability_content(Left, Right, fun hellinger/1),
+%% Hell = 1 - ((1/math:sqrt(2)) * math:sqrt(Value)),
+%% {Hell, Hell, Hell};
 hellinger({both, Left, Right}, _Total) ->
-%    Value = probability_content(Left, Right, fun hellinger/1),
- %   Hell = 1 - ((1/math:sqrt(2)) * math:sqrt(Value)),
-    Totals = lists:foldl(fun ({Class, Count, _}, Acc) ->
-				 dict:update_counter(Class, Count, Acc)
-			 end, dict:new(), Left ++ Right),
+    Totals = totals(Left ++ Right),
     LeftValue = maximize(fun hellinger/1, Left, Totals),
     RightValue = maximize(fun hellinger/1, Right, Totals),
-    Total = 1 - ((1/math:sqrt(2)) * math:sqrt(LeftValue+RightValue)),
-   % io:format("~p ~n", [Total]),
-    {Total, 1-(1/math:sqrt(2))*math:sqrt(LeftValue), 1-(1/math:sqrt(2))*math:sqrt(RightValue)};
-hellinger({_, _}, _) ->
-    {1000, 0.0, 0.0}.
+    Total = 1-((1/math:sqrt(2)) * math:sqrt(LeftValue+RightValue)),
+   
+   {Total, 1-(1/math:sqrt(2))*math:sqrt(LeftValue), 1-(1/math:sqrt(2))*math:sqrt(RightValue)};
+hellinger({left, Left}, _) ->
+    Totals = totals(Left),
+    LeftValue = 1-((1/2.1)*maximize(fun hellinger/1, Left, Totals)),
+    {LeftValue, LeftValue, 1.0};
+hellinger({right, Right}, _) ->
+    Totals = totals(Right),
+    RightValue = 1-((1/2.1)*maximize(fun hellinger/1, Right, Totals)),
+    {RightValue, 1.0, RightValue}.
 
 bhattacharyya({both, Left, Right}, _Total) ->
     case probability_content(Left, Right, fun bhattacharyya/1) of
@@ -87,16 +91,25 @@ bhattacharyya(_, _) ->
 bhattacharyya({P, Q}) ->    
     math:sqrt(P*Q).
 
-chord({both, Left, Right}, _Total) ->
+squared_chord({both, Left, Right}, _Total) ->
     %C = 1-(1/2.1*probability_content(Left, Right, fun chord/1)),
-    Totals = lists:foldl(fun ({Class, Count, _}, Acc) ->
-				 dict:update_counter(Class, Count, Acc)
-			 end, dict:new(), Left ++ Right),
-    LeftValue = maximize(fun chord/1, Left, Totals),
-    RightValue = maximize(fun chord/1, Right, Totals),
+    Totals = totals(Left++Right),
+    LeftValue = maximize(fun squared_chord/1, Left, Totals),
+    RightValue = maximize(fun squared_chord/1, Right, Totals),
     {1-((1/2.1)*(LeftValue+RightValue)), LeftValue, RightValue};
-chord(_, _) ->
-    {1000, 0.0, 0.0}.
+squared_chord({left, Left}, _) ->
+    Totals = totals(Left),
+    LeftValue = 1-((1/2.1)*maximize(fun squared_chord/1, Left, Totals)),
+    {LeftValue, LeftValue, 1.0};
+squared_chord({right, Right}, _) ->
+    Totals = totals(Right),
+    RightValue = 1-((1/2.1)*maximize(fun squared_chord/1, Right, Totals)),
+    {RightValue, 1.0, RightValue}.
+
+totals(Examples) ->
+    lists:foldl(fun ({Class, Count, _}, {Classes, Acc}) ->
+			{[Class|Classes], dict:update_counter(Class, Count, Acc)}
+		end, {[], dict:new()}, Examples).
 
 class_total(Examples, Init) ->
     lists:foldl(
@@ -115,29 +128,38 @@ probability_content(Left, Right, Fun) ->
 			Count + Fun({P, Q})
 	      end, 0, ordsets:from_list(Classes)).
 
-maximize(Fun, Examples, Total) ->
-    case [{CountA/dict:fetch(ClassA, Total), CountB/dict:fetch(ClassB, Total)} || 
-	     {ClassA, CountA, _} <- Examples, 
-	     {ClassB, CountB, _} <- Examples,
-	     ClassA =/= ClassB andalso ClassB =/= ClassA] of
-	[] -> 0.0;
-	Classes ->
-	    lists:foldl(fun (Prob, Max) ->
-				Value = Fun(Prob),
+maximize(Fun, Examples, {Classes, Total}) ->
+    case ordsets:from_list(lists:map(
+	   fun ({X, Y}) ->
+		   if X > Y -> {X, Y}; true -> {Y, X} end
+	   end,		   
+	   [{ClassA, ClassB} || ClassA <- Classes, ClassB <- Classes, ClassA =/= ClassB])) of
+	[] ->
+	    0.0;
+	Pairs ->
+	    {Pos0, Neg0} = hd(Pairs),
+	    PosFrac0 = rr_example:count(Pos0, Examples)/dict:fetch(Pos0, Total),
+	    NegFrac0 = rr_example:count(Neg0, Examples)/dict:fetch(Neg0, Total),
+	    lists:foldl(fun ({Pos, Neg}, Max) ->
+				PosFrac = rr_example:count(Pos, Examples)/dict:fetch(Pos, Total),
+				NegFrac = rr_example:count(Neg, Examples)/dict:fetch(Neg, Total),
+				Value = Fun({PosFrac, NegFrac}),
 				if Value > Max ->
 					Value;
 				   true ->
 					Max
 				end
-			end, Fun(hd(Classes)), tl(Classes))
+			end, Fun({PosFrac0, NegFrac0}), tl(Pairs))
     end.
-			
-    
+	
+%% should do this for multi-class settings
+joint_maximize(Fun, Right, Left, Total) ->		
+    ok.
 
 hellinger({P, Q}) ->
     math:pow(math:sqrt(P) - math:sqrt(Q), 2).
 
-chord({P, Q}) ->
+squared_chord({P, Q}) ->
     math:pow(abs(math:sqrt(P) - math:sqrt(Q)), 1.9).
 
 %% @doc
@@ -263,11 +285,16 @@ chi_square_test() ->
 		 10.577777777777778).
 
 hellinger_test() ->
-    Split1 = rr_example:mock_split([{green, 10}, {yellow, 20000}],
-				   [{green, 0}, {yellow, 1000}]),
-    Split2 = rr_example:mock_split([{green, 10}, {yellow, 20000}],
-				   [{green, 8}, {yellow, 1000}]),
+%%    Split1 = rr_example:mock_split([{green, 10}, {yellow, 20000}],
+%%				   [{green, 0}, {yellow, 1000}]),
+  %%  Split2 = rr_example:mock_split([{green, 10}, {yellow, 20000}],
+%%				   [{green, 8}, {yellow, 1000}]),
+    Split1 = rr_example:mock_split([{a, 2}, {b, 100001}], [{a, 1}, {b, 99999}]),
+    Split2 = rr_example:mock_split([{b, 100000+99}], [{a, 4}, {b, 100000-99}]),
+
     Distance = fun hellinger/2,
-    ?debugFmt("~p < ~p", [element(1, Distance(Split1,322)), element(1, Distance(Split2,322))]),
-    ?assert(element(1, Distance(Split1, 322)) < element(1, Distance(Split2, 322))).
+    A = element(1, Distance(Split1,8)),
+    B = element(1, Distance(Split2,8)),
+    ?debugFmt("split1: ~p > split2: ~p ~n", [A, B]),
+    ?assert(A > B).
 -endif.

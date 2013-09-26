@@ -473,7 +473,7 @@ score(Value, Error, Options) ->
 	<<"gini">> -> rf_tree:gini();
 	<<"gini-info">> -> rf_tree:gini_info(WeightFactor);
 	<<"hellinger">> -> fun rr_estimator:hellinger/2;
-	<<"squared-chord">> -> fun rr_estimator:chord/2;
+	<<"squared-chord">> -> fun rr_estimator:squared_chord/2;
 	<<"bhattacharyya">> -> fun rr_estimator:bhattacharyya/2;
 	Other -> Error("score", Other)		
     end.
