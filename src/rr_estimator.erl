@@ -58,27 +58,29 @@ gini_content(Examples, _Total) ->
 			Count + math:pow(Class/Total, 2)
 		end, 0.0, Counts).
 
-%% Value = probability_content(Left, Right, fun hellinger/1),
-%% Hell = 1 - ((1/math:sqrt(2)) * math:sqrt(Value)),
-%% {Hell, Hell, Hell};
+
 hellinger({both, Left, Right}, _Total) ->
     Totals = totals(Left ++ Right),
-    LeftValue = maximize(fun hellinger/1, Left, Totals),
-    RightValue = maximize(fun hellinger/1, Right, Totals),
-    Total = 1-((1/math:sqrt(2)) * math:sqrt(LeftValue+RightValue)),
+    Value = probability_content(Left, Right, Totals, fun hellinger/1),
+    Hell = 1 - ((1/math:sqrt(2)) * math:sqrt(Value)),
+    {Hell, Hell, Hell};
+   %%  Totals = totals(Left ++ Right),
+   %%  LeftValue = maximize(fun hellinger/1, Left, Totals),
+   %%  RightValue = maximize(fun hellinger/1, Right, Totals),
+   %%  Total = 1-((1/math:sqrt(2)) * math:sqrt(LeftValue+RightValue)),
    
-   {Total, 1-(1/math:sqrt(2))*math:sqrt(LeftValue), 1-(1/math:sqrt(2))*math:sqrt(RightValue)};
+   %% {Total, 1-(1/math:sqrt(2))*math:sqrt(LeftValue), 1-(1/math:sqrt(2))*math:sqrt(RightValue)};
 hellinger({left, Left}, _) ->
     Totals = totals(Left),
     LeftValue = 1-((1/2.1)*maximize(fun hellinger/1, Left, Totals)),
-    {LeftValue, LeftValue, 1.0};
+    {1000, LeftValue, 1.0};
 hellinger({right, Right}, _) ->
     Totals = totals(Right),
     RightValue = 1-((1/2.1)*maximize(fun hellinger/1, Right, Totals)),
-    {RightValue, 1.0, RightValue}.
+    {1000, 1.0, RightValue}.
 
 bhattacharyya({both, Left, Right}, _Total) ->
-    case probability_content(Left, Right, fun bhattacharyya/1) of
+    case probability_content(Left, Right, [], fun bhattacharyya/1) of
 	0.0 ->
 	    {1000,0.0,0.0};
 	Value ->
@@ -107,9 +109,10 @@ squared_chord({right, Right}, _) ->
     {RightValue, 1.0, RightValue}.
 
 totals(Examples) ->
-    lists:foldl(fun ({Class, Count, _}, {Classes, Acc}) ->
-			{[Class|Classes], dict:update_counter(Class, Count, Acc)}
-		end, {[], dict:new()}, Examples).
+    {Classes, Totals} = lists:foldl(fun ({Class, Count, _}, {Classes, Acc}) ->
+					    {[Class|Classes], dict:update_counter(Class, Count, Acc)}
+				    end, {[], dict:new()}, Examples),
+    {Classes, Totals}.
 
 class_total(Examples, Init) ->
     lists:foldl(
@@ -117,14 +120,25 @@ class_total(Examples, Init) ->
 	      {[Class|Classes], Count + Counts}
       end, Init, Examples).
 
-probability_content(Left, Right, Fun) ->
-    {LeftClasses, LeftTotal} = class_total(Left, {[], 0}),
-    {Classes, RightTotal} = class_total(Right, {LeftClasses, 0}),
+scale(Examples, Totals) ->
+    lists:foldl(fun ({Class, Count, _}, Acc) ->
+			dict:store(Class, Count/dict:fetch(Class, Totals), Acc)
+		end, dict:new(), Examples).
+			
+
+
+probability_content(Left, Right, {Classes, Totals} , Fun) ->
+    LeftScale = scale(Left, Totals),
+    RightScale = scale(Right, Totals),
+    LeftTotal = dict:fold(fun (_, V, Acc)  -> V + Acc end, 0, LeftScale),
+    RightTotal= dict:fold(fun (_, V, Acc)  -> V + Acc end, 0, RightScale),
+%    io:format("Left: ~p ~n Right: ~p ~n", [dict:to_list(LeftScale), dict:to_list(RightScale)]),
+    %%   {LeftClasses, _LeftTotal} = class_total(Left, {[], 0}),
+    %%   {Classes, RightTotal} = class_total(Right, {LeftClasses, 0}),
     lists:foldl(fun (Class, Count) ->
-			P = rr_example:count(Class, Left)/LeftTotal,
-			Q = if RightTotal > 0 -> rr_example:count(Class, Right)/RightTotal;
-			       true -> 0
-			    end,
+			P = case dict:find(Class, LeftScale) of {ok, V} -> V/LeftTotal; error -> 0 end,
+			Q = case dict:find(Class, RightScale) of {ok, Vq} -> Vq/RightTotal; error -> 0 end,
+%			io:format("P=~p Q=~p J=~p ~n", [P, Q, Count+Fun({P, Q})]),
 			Count + Fun({P, Q})
 	      end, 0, ordsets:from_list(Classes)).
 
@@ -291,9 +305,10 @@ hellinger_test() ->
 %%				   [{green, 8}, {yellow, 1000}]),
     Split1 = rr_example:mock_split([{a, 2}, {b, 100001}], [{a, 1}, {b, 99999}]),
     Split2 = rr_example:mock_split([{b, 100000+99}], [{a, 4}, {b, 100000-99}]),
-
+    Split3 = rr_example:mock_split([{a, 10}, {b, 1000}],  %% todo: fix!!!!!!!!!!
+				   [{a, 1}, {b, 900}]),
     Distance = fun hellinger/2,
-    A = element(1, Distance(Split1,8)),
+    A = element(1, Distance(Split3,8)),
     B = element(1, Distance(Split2,8)),
     ?debugFmt("split1: ~p > split2: ~p ~n", [A, B]),
     ?assert(A > B).
