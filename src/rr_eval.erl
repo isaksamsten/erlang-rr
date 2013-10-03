@@ -211,11 +211,11 @@ calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
 precision(Classes, Matrix) ->
     NoClasses = length(Classes),
     Precision = lists:foldl(fun (Class, Acc) ->
-				    [{Class, precision_for_class(Class, Matrix)}|Acc]
+				    [{Class, {0, precision_for_class(Class, Matrix)}}|Acc]
 			    end, [], Classes),
     AvgPrecision = lists:foldl(fun ({_Class, 'n/a'}, Acc) ->
 				       Acc;
-				   ({_Class, Value}, Acc) ->
+				   ({_Class, {_, Value}}, Acc) ->
 				       Acc + Value * 1/NoClasses
 			       end, 0, Precision),
     {precision, Precision, AvgPrecision}.
@@ -233,11 +233,11 @@ precision_for_class(Class, Matrix) ->
 recall(Classes, Matrix) ->
     NoClasses = length(Classes),
     Recall = lists:foldl(fun (Class, Acc) ->
-				 [{Class, recall_for_class(Class, Matrix)}|Acc]
+				 [{Class, {0, recall_for_class(Class, Matrix)}}|Acc]
 			 end, [], Classes),
     AvgRecall = lists:foldl(fun ({_Class, 'n/a'}, Acc) ->
 				    Acc;
-				({_Class, Value}, Acc) ->
+				({_Class, {_, Value}}, Acc) ->
 				    Acc + Value * 1/NoClasses
 			    end, 0, Recall),
     {recall, Recall, AvgRecall}.
@@ -264,14 +264,16 @@ recall_for_class(Class, Matrix) ->
 
 confusion_matrix(Predictions) ->
     Classes = dict:fetch_keys(Predictions),
-    Dict = lists:foldl(fun (ClassA, Dict) ->
-			       lists:foldl(fun (ClassB, Dict2) ->
-						   dict:update(ClassA,
-							       fun (Dict3) ->
-								       dict:store(ClassB, 0, Dict3)
-							       end, dict:store(ClassB, 0, dict:new()), Dict2)
-					   end, Dict, Classes)
-		       end, dict:new(), Classes),
+    Dict = lists:foldl(
+	     fun (ClassA, Dict) ->
+		     lists:foldl(
+		       fun (ClassB, Dict2) ->
+			       dict:update(ClassA,
+					   fun (Dict3) ->
+						   dict:store(ClassB, 0, Dict3)
+					   end, dict:store(ClassB, 0, dict:new()), Dict2)
+		       end, Dict, Classes)
+	     end, dict:new(), Classes),
     confusion_matrix(Classes, Predictions, Dict).
 
 confusion_matrix(Classes, Predictions, Acc) ->

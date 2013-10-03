@@ -28,9 +28,8 @@
 			      {"brier", brier}]).
 
 
--define(DEFAULT_HEADERS, [{"fold", fold},
-			  {"accuracy", accuracy}, 
-			  {"auc", auc}, 
+-define(DEFAULT_HEADERS, [{"accuracy", accuracy}, 
+			  {"area under ROC", auc}, 
 			  {"oob-base-accuracy", oob_base_accuracy},
 			  {"base-accuracy", base_accuracy},
 			  {"strength", strength}, 
@@ -134,34 +133,19 @@ default_output_cv([{{_, Fold}, Measures}|Rest], OutputFolds, Header) ->
 default_output_measures(Fold, Measures, Header) ->
     io:format("fold ~p ~n", [Fold]),
     lists:foreach(fun ({Name, Key}) ->
-			  case lists:keyfind(Key, 1, Measures) of
-			      {Key, Value} when is_list(Value)-> %% note: precision/recall
+			  case lists:keyfind(Key, 1, Measures) of			      
+			      {Key, {Type, Value, Auc}} when Type == recall; 
+							     Type == precision;
+							     Type == auc -> 
 				  io:format("~s:~n", [Name]),
-				  lists:foreach(fun({Class, P}) ->
-						io:format(" - ~s: ~p ~n", [Class, P])
-					end, Value);
-			      
-			      {Key, {Type, Value, Auc}} when Type == recall; Type == precision-> 
-				  io:format("~p:~n", [Type]),
-				  lists:foreach(fun({Class, P}) ->
-						io:format(" - ~s: ~p ~n", [Class, P])
-					end, Value),
-				  io:format(" average: ~p~n", [Auc]);			      
-			      {Key, {auc, Value, Auc}} -> 
-				  io:format("area under ROC~n"),
 				  lists:foreach(fun({Class, {_, P}}) ->
 						io:format(" - ~s: ~p ~n", [Class, P])
 					end, Value),
 				  io:format(" average: ~p~n", [Auc]);			      
 			      {Key, Value} ->
 				  io:format("~s: ~p~n", [Name, Value]);
-			      {Key, Auc, Value} ->
-				  io:format("area under ROC~n"),
-				  lists:foreach(fun({Class, _, A}) ->
-							io:format("  ~s: ~p ~n", [Class, A])
-						end, Auc),
-				  io:format(" average: ~p~n", [Value]);
 			      _ ->
+				  rr_log:debug("measure not found ('~p')", [Key]),
 				  ok
 			  end
 		  end, Header).
