@@ -213,7 +213,7 @@ precision(Classes, Matrix) ->
     Precision = lists:foldl(fun (Class, Acc) ->
 				    [{Class, {0, precision_for_class(Class, Matrix)}}|Acc]
 			    end, [], Classes),
-    AvgPrecision = lists:foldl(fun ({_Class, 'n/a'}, Acc) ->
+    AvgPrecision = lists:foldl(fun ({_Class, {_, 'n/a'}}, Acc) ->
 				       Acc;
 				   ({_Class, {_, Value}}, Acc) ->
 				       Acc + Value * 1/NoClasses
@@ -235,7 +235,7 @@ recall(Classes, Matrix) ->
     Recall = lists:foldl(fun (Class, Acc) ->
 				 [{Class, {0, recall_for_class(Class, Matrix)}}|Acc]
 			 end, [], Classes),
-    AvgRecall = lists:foldl(fun ({_Class, 'n/a'}, Acc) ->
+    AvgRecall = lists:foldl(fun ({_Class, {_, 'n/a'}}, Acc) ->
 				    Acc;
 				({_Class, {_, Value}}, Acc) ->
 				    Acc + Value * 1/NoClasses
