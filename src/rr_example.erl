@@ -136,13 +136,13 @@ load(File, Core) ->
 load(File, Cores, Dataset) ->
     #rr_example{features = FeatureTable} = Dataset,
     {ClassId, Types} = case csv:next_line(File) of
-			   {ok, Types0, _} ->
+			   {row, Types0, _} ->
 			       parse_type_declaration(Types0);
 			   eof ->
 			       throw({error, features_type_error})
 		       end,
     Features = case csv:next_line(File) of
-		   {ok, Features0, _} ->
+		   {row, Features0, _} ->
 		       parse_feature_declaration(FeatureTable, Features0, ClassId, Types);
 		   eof ->
 		       throw({error, features_type_error})
@@ -171,7 +171,7 @@ parse_examples(Dataset, File, Cores, ClassId, Types) ->
 %% @private process that gets a line from the "File" and process each example
 parse_example_process(Parent, ExTable, File, ClassId, Types, Handler, Acc) ->
     case csv:next_line(File) of
-	{ok, Example, Id0} ->
+	{row, Example, Id0} ->
 	    {Class, Attributes} = take_feature(Example, ClassId),
 	    Id = Id0 - 2, %% NOTE: subtracting headers 
 	    ets:insert(ExTable, format_features(Attributes, Types, 1, Handler, [Id])),

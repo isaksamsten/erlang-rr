@@ -602,15 +602,25 @@ profile_tests() ->
      {"Profile iris dataset", 
       {timeout, 60, profile("../data/iris.txt", "PROFILE_IRIS.txt")}},
      {"Profile spambase dataset", 
-      {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE.txt")}}
+      {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE.txt")}},
+     {"Profile spambase dataset hellinger", 
+      {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE_HELL.txt", 
+			    [{score, fun rr_estimator:hellinger/2}])}}
     ].
-
 profile(In, Out) ->
+    profile(In, Out, []).
+
+profile(In, Out, Props) ->
     fun() ->
 	    File = csv:binary_reader(In),
-	    {Features, Examples, Dataset} = rr_example:load(File, 4),
+	    #rr_exset {
+	       features=Features, 
+	       examples=Examples, 
+	       exconf=Dataset
+	      } = rr_example:load(File, 4),
 	    NoFeatures = fun (NoFeatures) -> trunc(math:log(NoFeatures)/math:log(2)) end,
-	    {Build, _Evaluate, _} = rf:new([{no_features, NoFeatures}]),
+	    Rf = rf:new([{no_features, NoFeatures}] ++ Props),
+	    Build = rf:partial_build(Rf),
 	    eprof:start(),
 	    eprof:log(Out),
 	    eprof:profile(
