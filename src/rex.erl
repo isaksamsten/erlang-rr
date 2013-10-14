@@ -57,12 +57,10 @@ args(Key, Args, Error) ->
     end.
 
 classifier(Value, Error) ->
-    case rr:parse_args(string:tokens(Value, " ")) of
+    case rr:parse_string_args(Value) of
 	{Method, Args} ->
-	    _Opts = Method:args(Args, Error),
-	    Rf = Method:new([{no_trees, 1}, 
-			     {score, rf_rule:purity(0, 5)}, 
-			     {example_sampling, rr_sampling:triangle_variance_sample(0.3, 1, 1000, 30)}]),
+	    Opts = Method:args(Args, Error),
+	    Rf = Method:new(Opts),
 	    fun (ExSet) ->
 		    Pid = Method:build(Rf, ExSet),
 		    Method:get(Pid)		    

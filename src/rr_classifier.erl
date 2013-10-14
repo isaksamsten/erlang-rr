@@ -14,6 +14,9 @@ behaviour_info(callbacks) ->
      {build, 4},
      {evaluate, 4},
 
+     %% {partial_build, 1},
+     %% {partial_evaluate, 1}
+
      {serialize, 2},
      {unserialize, 1},
      {kill, 1}

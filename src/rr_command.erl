@@ -1,9 +1,9 @@
-%%% @author Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
+%%% @author Isak Karlsson <isak-kar@dsv.su.se>
 %%% @copyright (C) 2013, Isak Karlsson
 %%% @doc
 %%%
 %%% @end
-%%% Created : 10 Sep 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
+%%% Created : 10 Sep 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_command).
 -export([behaviour_info/1]).

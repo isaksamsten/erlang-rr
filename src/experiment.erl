@@ -32,7 +32,7 @@
 	  "Number of iterations to run each experiment"},
 	 {<<"tag">>, $t, "tag", {string, "experiment"},
 	  "Tag the experiment"},
-	 {<<"evaluation">>, $x, "evaluation", {string, "cv"},
+	 {<<"evaluation">>, $x, "evaluation", {string, "cv 10"},
 	  "Evaluation settings."},
 	 {<<"classifier">>, $c, "classifier", string,
 	  "Classifier settings."}]).	  
@@ -94,15 +94,19 @@ main(Args) ->
     ok.
 
 load_dir(Dir) ->
-    {ok, Filenames} = file:list_dir(Dir),
-    Files = lists:foldl(fun (File, Acc) ->
-				case filename:extension(File) of
-				    ".txt" -> [filename:join(Dir, File)|Acc];
-				    _ -> Acc
-				end
-			end, [], Filenames),
-    rr_log:debug("running experiment with ~p files", [length(Files)]),
-    lists:reverse(Files).
+    case file:list_dir(Dir) of
+	{ok, Filenames} ->
+	    Files = lists:foldl(fun (File, Acc) ->
+					case filename:extension(File) of
+					    ".txt" -> [filename:join(Dir, File)|Acc];
+					    _ -> Acc
+					end
+				end, [], Filenames),
+	    rr_log:debug("running experiment with ~p files", [length(Files)]),
+	    lists:reverse(Files);
+	_ ->
+	    rr:illegal("datasets", "could not find folder")
+    end.
 
 new(Props) ->
     Cores = proplists:get_value(cores, Props, erlang:system_info(schedulers)),
@@ -113,7 +117,7 @@ new(Props) ->
     Progress = proplists:get_value(progress, Props, fun (_, _) -> ok end),
     Loader = proplists:get_value(loader, Props, 
 				 fun (File) ->
-					 rr_example:load(csv:reader(File), Cores)
+					 rr_example:load(csv:binary_reader(File), Cores)
 				 end),
     #experiment {
        evaluate = Evaluate,
@@ -162,17 +166,21 @@ evaluation(Value, _Error) ->
 		end,
 	    fun (Dataset, Props) ->
 		    cross_validation:evaluate(Dataset, Props ++ [{progress, CvProgress}, {folds, Folds}])
-	    end
+	    end;
+	_ ->
+	    rr:illegal_option("classifier", "unknown evaluator string")
     end.
 
 classifier(Value, Error) ->
-    case rr:parse_args(string:tokens(Value, " ")) of
+    case rr:parse_string_args(Value) of
 	{Method, Args} ->
 	    Opts = Method:args(Args, Error),
 	    Rf = Method:new(Opts),
 	    Build = Method:partial_build(Rf),
 	    Evaluate = Method:partial_evaluate(Rf),
-	    [{build, Build}, {evaluate, rf:killer(Evaluate)}]
+	    [{build, Build}, {evaluate, rf:killer(Evaluate)}];
+	error ->
+	    rr:illegal("classifier", "unknown classifier string")
     end.
 
 

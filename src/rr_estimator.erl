@@ -267,7 +267,7 @@ hellinger_test() ->
     Distance = fun hellinger/2,
     A = element(1, Distance(Small,8)),
     B = element(1, Distance(Large,8)),
-    ?debugFmt("~p", [abs(A-B)]),
+%    ?debugFmt("~p", [abs(A-B)]),
     ?assert(A < B).
 
 jensen_test() ->
@@ -275,7 +275,7 @@ jensen_test() ->
     Distance = fun jensen_difference/2,
     A = element(1, Distance(Small,8)),
     B = element(1, Distance(Large,8)),
-    ?debugFmt("~p", [abs(A-B)]),
+ %   ?debugFmt("~p", [abs(A-B)]),
     ?assert(A < B).
 
 chord_test() ->
@@ -283,7 +283,7 @@ chord_test() ->
     Distance = fun squared_chord/2,
     A = element(1, Distance(Small,8)),
     B = element(1, Distance(Large,8)),
-    ?debugFmt("~p", [abs(A-B)]),
+  %  ?debugFmt("~p", [abs(A-B)]),
     ?assert(A < B).
 
 unbalance_test() ->
@@ -293,7 +293,7 @@ unbalance_test() ->
 
     Aj = element(1, hellinger(Small, 100000+99+4+100000-99)),
     Bj = element(1, hellinger(Large, 1000001+2+1+99999)),
-    ?debugFmt("~p andalso ~p", [abs(Ai-Bi), abs(Aj-Bj)]),
+   % ?debugFmt("~p andalso ~p", [abs(Ai-Bi), abs(Aj-Bj)]),
     ?assert(Ai > Bi andalso Aj < Bj).
 
 -endif.

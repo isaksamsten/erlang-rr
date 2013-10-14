@@ -8,11 +8,64 @@
 
 -export([
 	 evaluate/2,
-	 average_cross_validation/3
+	 average_cross_validation/3,
+
+	 help/0,
+	 main/1,
+	 args/2,
+	 parse_args/1
 	]).
+
+-behaviour(rr_command).
+-behaviour(rr_evaluator).
 
 %% @headerfile "rr.hrl"
 -include("rr.hrl").
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
+-define(CMD_SPEC, 
+	[{<<"classifier">>, $c, "classifier", string,
+	  "Classifier to evaluate"},
+	 {<<"folds">>, $f, "folds", {integer, 10},
+	  "Number of cross validation folds"}]).
+
+parse_args(Args) ->
+    rr:parse(Args, ?CMD_SPEC).
+
+args(Args, Error) ->
+    Classifier = args(<<"classifier">>, Args, Error),
+    Folds = args(<<"folds">>, Args, Error),
+    [{folds, Folds}] ++ Classifier.
+
+args(Key, Args, Error) ->
+    Value = proplists:get_value(Key, Args),
+    case Key of
+	<<"classifier">> ->
+	    classifier(Value, Error);
+	_ ->
+	    Value
+    end.
+
+classifier(Value, Error) ->
+    case rr:get_classifier(Value) of
+	{Classifier, Args} ->
+	    Opts = Classifier:args(Args, Error),
+	    Rf = Classifier:new(Opts),
+	    Build = Classifier:partial_build(Rf),
+	    Evaluate = Classifier:partial_evaluate(Rf),
+	    [{build, Build}, {evaluate, rf:killer(Evaluate)}];
+	error ->
+	    rr:illegal("classifier", "unknown classifier")
+    end.
+
+main(_) ->
+    throw(cannot_be_implemented).
+
+help() ->
+    "help for cross-validation".
 
 %% @doc
 %% Perform cross-validation on examples
@@ -120,4 +173,28 @@ average_list_item([Item|Rest], Folds, Acc) ->
 
 
 
+-ifdef(TEST).
 
+setup() ->
+    rr_config:init([{'rr.classifiers', [{"rf", rf, "he"}]}]).
+
+tear(_) ->
+    rr_config:stop().
+
+command_test_() ->
+    {setup,
+     fun setup/0,
+     fun tear/1,
+     [?_test(test_simple())]}.
+
+test_simple() ->
+    Opts = parse_args(["-c", "rf -c 10", "-f", "10"]),
+    Args = args(Opts, fun(_, _) -> ok end),
+    ?assertEqual(10, proplists:get_value(folds, Args)),
+    ?assertEqual(true, is_function(proplists:get_value(build, Args))),
+    ?assertEqual(true, is_function(proplists:get_value(evaluate, Args))).
+    
+			      
+
+
+-endif.

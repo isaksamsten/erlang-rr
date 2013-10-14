@@ -18,12 +18,12 @@
 	]).
 
 parse_args([]) ->
-    help;
+    rr_help;
 parse_args([Module|_]) ->
     list_to_atom(Module).
 
 main(Module) ->
-    Module:help(),
+    help(),
     ok.
 
 args(_,_,_) ->

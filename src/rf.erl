@@ -45,10 +45,6 @@
 -define(CMD_SPEC,
 	[{<<"help">>,           $h,           "help",         undefined,
 	  "Show this usage information."},
-	 {<<"examples">>,       undefined,    "examples",     undefined,
-	  "View example usages"},
-	 {<<"observer">>,        undefined,    "observer",     undefined,
-	  "Observe the execution (cpu/memory etc.)"},
 	 {<<"input">>,          $i,           "input",        string, 
 	  "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
 	 {<<"cores">>,          $c,           "cores",        {integer, erlang:system_info(schedulers)},
@@ -255,21 +251,15 @@ parse_args(Args) ->
 
 %% @todo refactor to use proplist
 main(Options) ->
-    case rr:any_opt([<<"help">>, <<"examples">>, <<"observer">>], Options) of
+    case rr:any_opt([<<"help">>], Options) of
 	<<"help">> ->
-	    help(),
-	    halt();
-	<<"examples">> ->
-	    io:format(show_examples()),
-	    halt();
-	<<"observer">> ->
-	    observer:start();
+	    help();
 	false ->
 	    ok
     end,
     InputFile = case proplists:get_value(<<"input">>, Options) of
 		    undefined ->
-			rr:illegal("no input file defined"),
+			rr:illegal("input", "no input file defined"),
 			halt();
 		    File0 -> File0
 		end,

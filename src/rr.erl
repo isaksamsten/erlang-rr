@@ -16,6 +16,7 @@
 -export([
 	 main/1,
 	 parse_args/1,
+	 parse_string_args/1,
 
 	 show_help/3,
 	 show_help/0,
@@ -31,19 +32,39 @@
 	 
 	 read_config/1,
 	 get_opt_name/2,
-	 any_opt/2
+	 any_opt/2,
+
+	 get_classifier/1,
+	 get_evaluator/1
 	]).
 
+get_classifier(Cstring) ->
+    parse_string_args(Cstring, 'rr.classifiers').
+
+get_evaluator(Estring) ->
+    parse_string_args(Estring, 'rr.evaluators').
+    
+
+parse_string_args(Value) ->
+    parse_string_args(Value, 'rr.modules').
+
+parse_string_args(Value, Config) ->
+    parse_args((catch string:tokens(Value, " ")), Config).
+
+parse_args(Args) ->
+    parse_args(Args, 'rr.modules').
+
 %% @doc returns the parse arguments and a suitable module
-parse_args([]) ->
-    error;
-parse_args([Key|Args]) ->
-    case lists:keyfind(Key, 1, rr_config:get_value(modules)) of
+parse_args([Key|Args], Config) ->
+    case lists:keyfind(Key, 1, rr_config:get_value(Config)) of
 	{Key, Atom, _} ->
 	    {Atom, Atom:parse_args(Args)};
 	false ->
 	    error
-    end.
+    end;
+parse_args(_, _) ->
+    error.
+
 	    
 main(Args) ->
     Props = read_config("rr.config"),
@@ -84,12 +105,13 @@ initialize(Props) ->
 
 show_help(options, CmdSpec, Application) ->
     io:format(standard_error, "~s~n", [show_information()]),
-    getopt:usage(CmdSpec, Application).
+    getopt:usage(CmdSpec, Application),
+    halt(2).
 
 show_help() ->
     io:format(standard_error, "~s~n", [show_information()]),
     io:format(standard_error, "Commands:~n", []),
-    Modules = rr_config:get_value(modules),
+    Modules = rr_config:get_value('rr.modules'),
     Sorted = lists:sort(fun({A,_,_}, {B,_,_}) -> length(A) > length(B) end, Modules),
     Longest = length(element(1, hd(Sorted))),
     lists:foreach(
@@ -98,7 +120,8 @@ show_help() ->
 	 ({Module, _, Desc}) ->
 	      io:format(standard_error, "  ~s    ~s~n", 
 			[string:left(Module, length(Module) + Longest - length(Module)), Desc])
-      end, Modules).
+      end, Modules),
+    halt(2).
 					 
 
 show_information() -> 
@@ -137,7 +160,7 @@ illegal(Argument, Error) ->
     halt().
 
 illegal(Argument, Error, Args) ->
-    io:format(standard_error, "rr: '~s': ~s. ~n", [Argument, io_lib:format(Error, Args)]),
+    io:format(standard_error, "rr: for argument '~s', ~s. ~n", [Argument, io_lib:format(Error, Args)]),
     halt().
 
 illegal_option(Argument, Option) ->
@@ -145,7 +168,7 @@ illegal_option(Argument, Option) ->
 
 illegal(Error) ->
     io:format(standard_error, "rr: ~s. ~nPlease consult the manual.~n", [Error]),
-    halt().
+    halt(2).
 
 %% @doc calculates the number of seconds between now() and Time
 seconds(Time) ->
