@@ -6,7 +6,6 @@
 %%% Created : 12 May 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rf).
 -export([
-	 main/1,
 	 parse_args/1,
 	 
 	 help/0, 
@@ -43,23 +42,8 @@
 -endif.
 
 -define(CMD_SPEC,
-	[{<<"help">>,           $h,           "help",         undefined,
-	  "Show this usage information."},
-	 {<<"input">>,          $i,           "input",        string, 
-	  "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
-	 {<<"cores">>,          $c,           "cores",        {integer, erlang:system_info(schedulers)},
+	[{<<"cores">>,          $c,           "cores",        {integer, erlang:system_info(schedulers)},
 	  "Number of cores used by the algorightm for constructing the model."},
-
-	 {<<"mode">>,           $x,           "mode",        atom,
-	  "Mode for building and/or evaluation. Available options include: 'cv', 'split', 'build' and 'evaluate'."},
-
-	 {<<"ratio">>,          $r,           "ratio",       {float, 0.66},
-	  "Splitting ratio (i.e. the fraction of training examples). This argument is only valid when 'split' is activated."},
-	 {<<"folds">>,          undefined,    "folds",       {integer, 10},
-	  "Number of cross validation folds"},
-	 {<<"model_file">>,     undefined,    "model-file",  string,
-	  "File name when writing a model to file (only applicable when using the 'build' or 'evaluate'-argument')."},
-
 	 {<<"progress">>,       undefined,    "progress",    {string, <<"dots">>},
 	  "Show a progress bar while building a model. Available options include: 'dots', 'numeric' and 'none'. "},
 
@@ -100,14 +84,13 @@
 	 {<<"no_features">>,    undefined,    "no-features", {string, <<"default">>},
 	  "Number of features to inspect at each split. If set to log log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
 	 {<<"no_rules">>,       undefined,    "no-rules",    {string, <<"ss">>},
-	  "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used otherwise n is used."},
+	  "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used otherwise n is used."}
 
-	 {<<"output_predictions">>, $y,       "output-predictions", {boolean, false},
-	  "Write the predictions to standard out."},
-	 {<<"variable_importance">>, $v, "variable-importance",     {integer, 0},
-	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
-	 {<<"output">>,         $o,           "output",      {atom, default},
-	  "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"}
+%	 {<<"output_predictions">>, $y,       "output-predictions", {boolean, false},
+%	  "Write the predictions to standard out."},
+%	 {<<"variable_importance">>, $v, "variable-importance",     {integer, 0},
+%	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
+
 	]).
 
 %% @doc show help using rr:show_help()
@@ -173,7 +156,7 @@ evaluate(Conf, Model, Test, ExConf) ->
 %% @end
 serialize(Rf, Model) ->
     Dump = rr_ensemble:get_model(Model, Rf),
-    rr_system:serialize_model(Dump).
+    rr_system:serialize_model(rf, Dump).
 
 %% @doc unserialize a model into a "thing" fit for loading with rr_ensemble:load_model/1
 unserialize(Dump) ->
@@ -183,14 +166,8 @@ save(File, Rf, Model) ->
     Data = serialize(Rf, Model),
     file:write_file(File, Data).
 
-load(File) ->
-    case file:read_file(File) of
-	{ok, Binary} ->
-	    Model = unserialize(Binary),
-	    rr_ensemble:load_model(Model);
-	{error, Reason} ->
-	    {error, Reason}
-    end.		
+load(Model) ->
+    rr_ensemble:load_model(Model).
 
 %% @doc return a build fun
 partial_build(Rf) ->
@@ -248,84 +225,6 @@ new(Props) ->
 
 parse_args(Args) ->
     rr:parse(Args, ?CMD_SPEC).
-
-%% @todo refactor to use proplist
-main(Options) ->
-    case rr:any_opt([<<"help">>], Options) of
-	<<"help">> ->
-	    help();
-	false ->
-	    ok
-    end,
-    InputFile = case proplists:get_value(<<"input">>, Options) of
-		    undefined ->
-			rr:illegal("input", "no input file defined"),
-			halt();
-		    File0 -> File0
-		end,
-    Cores = proplists:get_value(<<"cores">>, Options),
-    Output = output(Options),
-    RfArgs = args(Options, fun rr:illegal_option/2),
-    Rf = rf:new([{base_learner, rf_tree}|RfArgs]),
-
-    rr_log:info("loading '~s' on ~p core(s)", [InputFile, Cores]),
-    LoadingTime = now(),
-    Csv = csv:binary_reader(InputFile),
-    ExSet = rr_example:load(Csv, Cores),
-    rr_log:debug("loading took '~p' second(s)", [rr:seconds(LoadingTime)]),
-
-
-    
-    Build = partial_build(Rf),
-    Evaluate = partial_evaluate(Rf),
-    
-    ExperimentTime = now(),
-    case proplists:get_value(<<"mode">>, Options) of
-	split ->
-	    Ratio = proplists:get_value(<<"ratio">>, Options),
-	    {Res, _Models} = 
-		split_validation:evaluate(ExSet,[{build, Build}, 
-						 {evaluate, killer(Evaluate)}, 
-						 {ratio, Ratio}]),
-	    Output(Res);
-	cv ->
-	    CvProgress = fun (Fold) -> 
-				 io:format(standard_error, "fold ~p ", [Fold])
-			 end,
-	    Folds = proplists:get_value(<<"folds">>, Options),
-	    {Res, _Models} = 
-		cross_validation:evaluate(ExSet, [{build, Build}, 
-						  {evaluate, killer(Evaluate)}, 
-						  {progress, CvProgress},
-						  {folds, Folds}]),
-	    Output(Res);
-	build ->
-	    Model = Build(ExSet#rr_exset.features,
-			  ExSet#rr_exset.examples,
-			  ExSet#rr_exset.exconf),
-	    File = proplists:get_value(<<"model_file">>, Options, "undefined-model.rr"),
-	    save(File, Rf, Model);
-	evaluate ->
-	    File = proplists:get_value(<<"model_file">>, Options),
-	    Cores = proplists:get_value(<<"cores">>, Options, 4),
-	    {Model, Conf} = load(File),
-	    Res = evaluate(Conf, Model, 
-			   ExSet#rr_exset.examples, 
-			   ExSet#rr_exset.exconf),
-	    Output(Res);
-	Other ->
-	    rr:illegal_option("mode", Other)
-    end,
-    rr_log:info("experiment took '~p' second(s)", [rr:seconds(ExperimentTime)]),
-    case proplists:get_value(<<"observer">>, Options) of
-	true -> rr_log:info("press ^c to exit"), receive wait -> wait end;
-	undefined -> ok
-    end,
-    csv:kill(Csv),
-    rr_example:kill(ExSet),
-    rr_config:stop(),
-    rr_log:stop(),
-    ok.
 
 %% @doc kill (to clean up unused models) after evaluation (to reduce
 %% memory footprint during cross validation)

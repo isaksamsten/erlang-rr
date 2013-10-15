@@ -5,13 +5,13 @@
 %%% @end
 %%% Created : 10 Sep 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
--module(rr_command).
+-module(rr_module).
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
     [
-     {parse_args, 1}, %% use rr:parse/2 to parse args
-     {args, 2} %% get all args which are used with this command
+     {main, 1}, %% run the algorithm
+     {help, 0}  %% return a string with help
     ];
 behaviour_info(_) ->
     undefined.

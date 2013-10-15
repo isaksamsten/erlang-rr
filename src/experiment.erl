@@ -32,7 +32,7 @@
 	  "Number of iterations to run each experiment"},
 	 {<<"tag">>, $t, "tag", {string, "experiment"},
 	  "Tag the experiment"},
-	 {<<"evaluation">>, $x, "evaluation", {string, "cv 10"},
+	 {<<"evaluator">>, $x, "evaluator", {string, "cv --folds 10"},
 	  "Evaluation settings."},
 	 {<<"classifier">>, $c, "classifier", string,
 	  "Classifier settings."}]).	  
@@ -45,20 +45,20 @@ parse_args(Args) ->
 
 args(Args, Error) ->
     Iterations = args(<<"iterations">>, Args, Error),
-    Evaluation = args(<<"evaluation">>, Args, Error),
+    Evaluation = args(<<"evaluator">>, Args, Error),
     Classifier = args(<<"classifier">>, Args, Error),
     
     [{iterations, Iterations},
-     {evaluate, Evaluation},
+     {evaluator, Evaluation},
      {classifier, Classifier}].
 
 args(Arg, Args, Error) ->
     Value = proplists:get_value(Arg, Args),
     case Arg of
-	<<"evaluation">> ->
-	    evaluation(Value, Error);
+	<<"evaluator">> ->
+	    rr:get_evaluator(Value, Error);
 	<<"classifier">> ->
-	    classifier(Value, Error);
+	    rr:get_classifier(Value, Error);
 	_ ->
 	    Value
     end.
@@ -110,7 +110,7 @@ load_dir(Dir) ->
 
 new(Props) ->
     Cores = proplists:get_value(cores, Props, erlang:system_info(schedulers)),
-    Evaluate = proplists:get_value(evaluate, Props),
+    Evaluate = proplists:get_value(evaluator, Props),
     Classifier = proplists:get_value(classifier, Props),
     Output = proplists:get_value(output, Props, fun (_,_,_) -> ok end),
     Iterations = proplists:get_value(iterations, Props, 10),
@@ -155,35 +155,6 @@ run([Dataset|Datasets], Evaluate, Classifier, Loader,
 	       end, [], lists:seq(1, Iterations)),
     run(Datasets, Evaluate, Classifier, Loader, 
 	Output, Progress, Iterations, [{Dataset, Result}|Acc]).
-		       
-evaluation(Value, _Error) ->    
-    case string:tokens(Value, " ") of
-	["cv", Folds0] ->
-	    {true, Folds} = rr_example:format_number(Folds0),
-	     CvProgress = 
-		fun (Fold) -> 
-			io:format(standard_error, "fold ~p ", [Fold])
-		end,
-	    fun (Dataset, Props) ->
-		    cross_validation:evaluate(Dataset, Props ++ [{progress, CvProgress}, {folds, Folds}])
-	    end;
-	_ ->
-	    rr:illegal_option("classifier", "unknown evaluator string")
-    end.
-
-classifier(Value, Error) ->
-    case rr:parse_string_args(Value) of
-	{Method, Args} ->
-	    Opts = Method:args(Args, Error),
-	    Rf = Method:new(Opts),
-	    Build = Method:partial_build(Rf),
-	    Evaluate = Method:partial_evaluate(Rf),
-	    [{build, Build}, {evaluate, rf:killer(Evaluate)}];
-	error ->
-	    rr:illegal("classifier", "unknown classifier string")
-    end.
-
-
 					 
 							
 							    

@@ -35,15 +35,48 @@
 	 any_opt/2,
 
 	 get_classifier/1,
-	 get_evaluator/1
+	 get_classifier/2,
+
+	 get_evaluator/1,
+	 get_evaluator/2,
+
+	 get_module/1
 	]).
+
+get_classifier(Value, Error) ->
+    case rr:get_classifier(Value) of
+	{Classifier, Args} ->
+	    Opts = Classifier:args(Args, Error),
+	    Rf = Classifier:new(Opts),
+	    Build = Classifier:partial_build(Rf),
+	    Evaluate = Classifier:partial_evaluate(Rf),
+	    [{build, Build}, 
+	     {evaluate, rf:killer(Evaluate)}, 
+	     {'$config', Rf}, 
+	     {'$module', Classifier}];
+	error ->
+	    Error("classifier", "unknown classifier")
+    end.
+
+get_evaluator(Value, Error) ->
+    case rr:get_evaluator(Value) of
+	{Evaluator, Args} ->
+	    Opts = Evaluator:args(Args, Error),
+	    fun (ExSet, NewOpts) ->
+		    Evaluator:evaluate(ExSet, NewOpts ++ Opts)
+	    end;
+	error ->
+	    Error("evaluator", "unknown evaluator")
+    end.
 
 get_classifier(Cstring) ->
     parse_string_args(Cstring, 'rr.classifiers').
 
 get_evaluator(Estring) ->
     parse_string_args(Estring, 'rr.evaluators').
-    
+
+get_module(MString) ->    
+    parse_string_args(MString, 'rr.modules').
 
 parse_string_args(Value) ->
     parse_string_args(Value, 'rr.modules').
@@ -65,25 +98,18 @@ parse_args([Key|Args], Config) ->
 parse_args(_, _) ->
     error.
 
-	    
 main(Args) ->
     Props = read_config("rr.config"),
     ok = initialize(Props),
-%    try
-	case parse_args(Args) of
-	    {Method, MethodArgs} ->
-		ok = Method:main(MethodArgs);
-	    error ->
-		io:format(standard_error, "invalid command specified~n", []),
-		show_help()
-	end.
-    %% catch 
-    %% 	_:Error ->
-    %% 	    io:format(standard_error, "unexpected error (please view the log-file)!~n", []),
-    %% 	    rr_log:log(error, "~p", [Error]),
-    %% 	    rr_log:debug("~p", [erlang:get_stacktrace()]),
-    %% 	    rr_log:stop()
-    %% end.
+    case parse_args(Args) of
+	{Method, MethodArgs} ->
+	    ok = Method:main(MethodArgs);
+	error ->
+	    io:format(standard_error, "invalid command specified~n", []),
+	    show_help()
+    end,
+    rr_config:stop(),
+    rr_log:stop().
 
 read_config(File) ->
     case rr_config:read_config_file(File) of
@@ -101,11 +127,17 @@ initialize(Props) ->
     rr_config:init(Props),
     rr_log:new(proplists:get_value('log.target', Props, std_err),
 	       proplists:get_value('log.level', Props, info)),
+    case code:add_pathz(filename:dirname(escript:script_name()) ++
+			    rr_config:get_value('rr.plugin.dir')) of
+	{error, _} ->
+	    rr_log:debug("plugin dir does not exist");
+	_ -> true
+    end,
     ok.
 
 show_help(options, CmdSpec, Application) ->
     io:format(standard_error, "~s~n", [show_information()]),
-    getopt:usage(CmdSpec, Application),
+    getopt:usage(CmdSpec, "rr " ++ Application),
     halt(2).
 
 show_help() ->

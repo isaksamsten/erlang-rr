@@ -27,38 +27,35 @@
 -endif.
 
 -define(CMD_SPEC, 
-	[{<<"classifier">>, $c, "classifier", string,
-	  "Classifier to evaluate"},
-	 {<<"folds">>, $f, "folds", {integer, 10},
-	  "Number of cross validation folds"}]).
+	[{<<"folds">>, $f, "folds", {integer, 10},
+	  "Number of cross validation folds"},
+	 {<<"progress">>, $p, "progress", {string, "default"},
+	  "Progress bar when running cross validation"}
+	]).
 
 parse_args(Args) ->
     rr:parse(Args, ?CMD_SPEC).
 
 args(Args, Error) ->
-    Classifier = args(<<"classifier">>, Args, Error),
     Folds = args(<<"folds">>, Args, Error),
-    [{folds, Folds}] ++ Classifier.
+    Progress = args(<<"progress">>, Args, Error),
+    [{folds, Folds},
+     {progress, Progress}].
 
 args(Key, Args, Error) ->
     Value = proplists:get_value(Key, Args),
     case Key of
-	<<"classifier">> ->
-	    classifier(Value, Error);
+	<<"folds">> ->
+	    Value;
+	<<"progress">> ->
+	    progress(Value, Error);
 	_ ->
-	    Value
+	    Error("cv", Key) 
     end.
 
-classifier(Value, Error) ->
-    case rr:get_classifier(Value) of
-	{Classifier, Args} ->
-	    Opts = Classifier:args(Args, Error),
-	    Rf = Classifier:new(Opts),
-	    Build = Classifier:partial_build(Rf),
-	    Evaluate = Classifier:partial_evaluate(Rf),
-	    [{build, Build}, {evaluate, rf:killer(Evaluate)}];
-	error ->
-	    rr:illegal("classifier", "unknown classifier")
+progress(_Value, _Error) ->
+    fun (Fold) -> 
+	    io:format(standard_error, "fold ~p ", [Fold])
     end.
 
 main(_) ->
@@ -188,13 +185,8 @@ command_test_() ->
      [?_test(test_simple())]}.
 
 test_simple() ->
-    Opts = parse_args(["-c", "rf -c 10", "-f", "10"]),
+    Opts = parse_args(["-f", "10"]),
     Args = args(Opts, fun(_, _) -> ok end),
     ?assertEqual(10, proplists:get_value(folds, Args)),
-    ?assertEqual(true, is_function(proplists:get_value(build, Args))),
-    ?assertEqual(true, is_function(proplists:get_value(evaluate, Args))).
-    
-			      
-
-
+    ?assertEqual(true, is_function(proplists:get_value(progress, Args))).
 -endif.
