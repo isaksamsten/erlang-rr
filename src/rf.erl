@@ -26,6 +26,7 @@
 	 unserialize/1,
 	 
 	 args/2,
+	 args/1,
 
 	 kill/1, 
 	 killer/1
@@ -92,6 +93,7 @@
 %	  "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
 
 	]).
+-define(NAME, "rf").
 
 %% @doc show help using rr:show_help()
 help() ->
@@ -223,9 +225,6 @@ new(Props) ->
        cores = Cores
       }.
 
-parse_args(Args) ->
-    rr:parse(Args, ?CMD_SPEC).
-
 %% @doc kill (to clean up unused models) after evaluation (to reduce
 %% memory footprint during cross validation)
 killer(Evaluate) ->
@@ -235,9 +234,35 @@ killer(Evaluate) ->
 	    Result
     end.
 
+
+%% @doc parse args for this classifier
+parse_args(Args) ->
+    rr:parse(?NAME, Args, ?CMD_SPEC).
+
+%% @doc default args function throws error if argument is not found
+args(Args) ->
+    args(Args, fun (Value, Reason) -> throw({bad_arg, "rf", Value, Reason}) end).
+		       
+%% @doc get all important args
+args(Rest, Error) ->
+    NoFeatures = args(<<"no_features">>, Rest, Error),
+    MinEx = args(<<"min_examples">>, Rest, Error),
+    MaxDepth = args(<<"max_depth">>, Rest, Error),
+    Progress = args(<<"progress">>, Rest, Error),
+    Args = [{no_features, NoFeatures},
+	    {progress, Progress},
+	    {no_cores, args(<<"cores">>, Rest, Error)},
+	    {no_trees, args(<<"no_trees">>, Rest, Error)},
+	    {score, args(<<"score">>, Rest, Error)},
+	    {missing_values, args(<<"missing">>, Rest, Error)},
+	    {pre_prune, rf_tree:example_depth_stop(MinEx, MaxDepth)},
+	    {feature_sampling, args(<<"feature_sampling">>, Rest, Error)},
+	    {example_sampling, args(<<"example_sampling">>, Rest, Error)},
+	    {distribute, args(<<"distribute">>, Rest, Error)},
+	    {base_learner, rf_tree}],
+    lists:filter(fun ({_Key, Value}) -> Value =/= undefined end, Args).
+
 %% @doc convert key from arguments to a function for the rf agorithm
-%% Proplist must contain: {no_features, NoFeatures}
-%% @end
 args(Key, Rest, Error) ->
     Value = proplists:get_value(Key, Rest),
     case Key of
@@ -263,25 +288,6 @@ args(Key, Rest, Error) ->
 	    Value
     end.
 
-%% @doc get all important args
-args(Rest, Prior) ->
-    NoFeatures = args(<<"no_features">>, Rest, Prior),
-    MinEx = args(<<"min_examples">>, Rest, Prior),
-    MaxDepth = args(<<"max_depth">>, Rest, Prior),
-    Progress = args(<<"progress">>, Rest, Prior),
-    Args = [{no_features, NoFeatures},
-	    {progress, Progress},
-	    {no_cores, args(<<"cores">>, Rest, Prior)},
-	    {no_trees, args(<<"no_trees">>, Rest, Prior)},
-	    {score, args(<<"score">>, Rest, Prior)},
-	    {missing_values, args(<<"missing">>, Rest, Prior)},
-	    {pre_prune, rf_tree:example_depth_stop(MinEx, MaxDepth)},
-	    {feature_sampling, args(<<"feature_sampling">>, Rest, Prior)},
-	    {example_sampling, args(<<"example_sampling">>, Rest, Prior)},
-	    {distribute, args(<<"distribute">>, Rest, Prior)},
-	    {base_learner, rf_tree}],
-    lists:filter(fun ({_Key, Value}) -> Value =/= undefined end, Args).
-
 example_sampling(Value, Error, Options) ->
     case rr_util:safe_iolist_to_binary(Value) of
 	<<"subagging">> ->
@@ -290,11 +296,11 @@ example_sampling(Value, Error, Options) ->
 	    fun rr_sampling:bootstrap_replicate/1;
 	<<"triangle-variance">> ->
 	    Option = args(<<"variance_options">>, Options, Error),
-	    [Threshold, A, B, C] = options(Option),
+	    [Threshold, A, B, C] = rr:parse_option_string(Option),
 	    rr_sampling:triangle_variance_sample(Threshold, A, B, C);
 	<<"uniform-variance">> ->
 	    Option = args(<<"variance_options">>, Options, Error),
-	    [Threshold, Min, Max] = options(Option),
+	    [Threshold, Min, Max] = rr:parse__option_string(Option),
 	    rr_sampling:uniform_variance_sample(Threshold, Min, Max);
 	<<"random">> ->
 	    fun rr_sampling:random/1;
@@ -305,11 +311,6 @@ example_sampling(Value, Error, Options) ->
 	Other ->
 	    Error("example-sampling", Other)		
     end.
-
-options(Option) ->
-    lists:map(fun (X) -> 
-		      element(2, rr_example:format_number(X)) 
-	      end, string:tokens(Option, ", ")).
 
 distribute(Value, Error) ->	
     case rr_util:safe_iolist_to_binary(Value) of
@@ -330,13 +331,6 @@ missing_values(Value, Error) ->
 	<<"left">> -> fun rf_missing:left/6;
 	<<"ignore">> -> fun rf_missing:ignore/6;
 	Other -> Error("missing", Other)
-    end.
-
-output(Options) ->
-    case proplists:get_value(<<"output">>, Options) of
-	default -> rr_result:default();
-	csv -> rr_result:csv();
-	Other -> rr:illegal_option("output", Other)
     end.
 
 progress(Value, Error) ->
@@ -453,31 +447,6 @@ rule_score(Value, Error) ->
 	<<"purity">> -> fun rf_rule:purity/2;
 	Other -> Error("rule-score", Other)					  
     end.
-
-show_examples() ->
-    "Example 1: 10-fold cross validation 'car' dataset:
-  > ./rr -i data/car.txt -x --folds 10 > result.txt
-
-Example 2: 0.66 percent training examples, 'heart' dataset. Missing
-values are handled by weighting a random selection towards the most
-dominant branch.
-  > ./rr -i data/heart.txt -s -r 0.66 --missing weighted > result.txt
-
-Example 3: 10-fold cross validation on a sparse dataset using re-sampled
-feature selection
-  > ./rr -i data/sparse.txt -x --resample > result.txt
-
-Example 4: 0.7 percent training examples, 'heart' dataset. Missing
-values are handled by by weighting examples with missing values
-towards the most dominant branch. Each node in the tree is composed
-of a rule (1..n conjunctions) and the 20 most importante variables
-are listed.
-  > ./rr -i data/heart.txt -s --ratio 0.7 --rule -v 20 > result.txt
-
-Example 5: 0.7 percent training examples, for multiple dataset and output
-evaluations csv-formated. This could be achieved using a bash-script:
-  > for f in data/*.txt; do ./rr -i \"$f\" -s -r 0.7 -o csv >> result.csv; 
-done~n".
 
 -ifdef(TEST).
 -ifdef(PROFILE).

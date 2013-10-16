@@ -15,7 +15,7 @@
 
 -export([
 	 parse_args/1,
-	 args/2
+	 args/1
 	]).
 
 -export([
@@ -33,12 +33,13 @@
 	 {<<"output">>,         $o,           "output",      {atom, default},
 	  "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"}
 	]).
+-define(NAME, "test").
 
 parse_args(Args) ->
-    rr:parse(Args, ?CMD_SPEC).
+    rr:parse(?NAME, Args, ?CMD_SPEC).
 
 help() ->
-    rr:show_help(options, ?CMD_SPEC, "test").
+    rr:show_help(options, ?CMD_SPEC, ?NAME).
 
 main(Args) ->
     Opts = args(Args, fun rr:illegal_option/2),
@@ -61,6 +62,9 @@ main(Args) ->
     rr_example:kill(Exset),
     ok.
 
+args(Args) ->
+    args(Args, fun (Value, Reason) -> throw({bad_arg, ?NAME, Value, Reason}) end).
+
 args(Args, Error) ->
     Evaluator = args(<<"evaluator">>, Args, Error),
     Classifier = args(<<"classifier">>, Args, Error),
@@ -75,9 +79,9 @@ args(Key, Opts, Error) ->
     Value = proplists:get_value(Key, Opts),
     case Key of
 	<<"classifier">> ->
-	    rr:get_classifier(Value, Error);
+	    rr_classifier:find(Value);
 	<<"evaluator">> ->
-	    rr:get_evaluator(Value, Error);
+	    rr_evaluator:find(Value);
 	<<"output">> ->
 	    output(Value, Error);
 	<<"dataset">> ->

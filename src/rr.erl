@@ -16,12 +16,14 @@
 -export([
 	 main/1,
 	 parse_args/1,
+	 parse_args/2,
 	 parse_string_args/1,
-
+	 parse_string_args/2,
+	 parse_option_string/1,
 	 show_help/3,
 	 show_help/0,
 
-	 parse/2,
+	 parse/3,
 	 warn/1,
 	 warn/2,
 	 illegal/1,
@@ -43,32 +45,6 @@
 	 get_module/1
 	]).
 
-get_classifier(Value, Error) ->
-    case rr:get_classifier(Value) of
-	{Classifier, Args} ->
-	    Opts = Classifier:args(Args, Error),
-	    Rf = Classifier:new(Opts),
-	    Build = Classifier:partial_build(Rf),
-	    Evaluate = Classifier:partial_evaluate(Rf),
-	    [{build, Build}, 
-	     {evaluate, rf:killer(Evaluate)}, 
-	     {'$config', Rf}, 
-	     {'$module', Classifier}];
-	error ->
-	    Error("classifier", "unknown classifier")
-    end.
-
-get_evaluator(Value, Error) ->
-    case rr:get_evaluator(Value) of
-	{Evaluator, Args} ->
-	    Opts = Evaluator:args(Args, Error),
-	    fun (ExSet, NewOpts) ->
-		    Evaluator:evaluate(ExSet, NewOpts ++ Opts)
-	    end;
-	error ->
-	    Error("evaluator", "unknown evaluator")
-    end.
-
 get_classifier(Cstring) ->
     parse_string_args(Cstring, 'rr.classifiers').
 
@@ -82,10 +58,16 @@ parse_string_args(Value) ->
     parse_string_args(Value, 'rr.modules').
 
 parse_string_args(Value, Config) ->
-    parse_args((catch string:tokens(Value, " ")), Config).
+    parse_args((catch string:tokens(string:strip(Value), " ")), Config).
 
 parse_args(Args) ->
     parse_args(Args, 'rr.modules').
+
+parse_option_string(Option) ->
+    lists:map(fun (X) -> 
+		      element(2, rr_example:format_number(X)) 
+	      end, string:tokens(Option, ", ")).
+
 
 %% @doc returns the parse arguments and a suitable module
 parse_args([Key|Args], Config) ->
@@ -101,15 +83,41 @@ parse_args(_, _) ->
 main(Args) ->
     Props = read_config("rr.config"),
     ok = initialize(Props),
-    case parse_args(Args) of
+    case rr_module:find(Args) of
 	{Method, MethodArgs} ->
-	    ok = Method:main(MethodArgs);
+	    case execute(Method, MethodArgs) of
+		ok ->
+		    halt(0);
+		{error, _Reason} ->
+		    halt(1)
+	    end;
 	error ->
 	    io:format(standard_error, "invalid command specified~n", []),
 	    show_help()
     end,
     rr_config:stop(),
     rr_log:stop().
+
+execute(Method, MethodArgs) ->
+    try
+	Method:main(MethodArgs)
+    catch
+	throw:{bad_arg, Where, Arg, Value} ->
+	    io:format(standard_error, "rr: invalid value ('~s') to argument ('~s') in command '~s'~n", [Value, Arg, Where]),
+	    {error, bad_arg};
+	throw:{invalid_option, Where, R} ->
+	    rr:illegal(io_lib:format("unrecognized option '~s' in command '~s'", [R, Where])),
+	    {error, bad_arg};
+	throw:{missing_option_arg, Where, R} ->
+	    rr:illegal(io_lib:format("missing argument to option '~s' in command '~s'", [R, Where])),
+	    {error, bad_arg};
+	throw:{unkown_arg_error, Where} ->
+	    rr:illegal(io_lib:format("unknown error in command '~s'", [Where]));
+	throw:{module_not_found, _MString} ->
+	    rr:illegal("could not find the specified module"),
+	    {error, bad_module}
+	    %% todo: catch these?
+    end.
 
 read_config(File) ->
     case rr_config:read_config_file(File) of
@@ -199,21 +207,21 @@ illegal_option(Argument, Option) ->
     illegal(io_lib:format("unrecognized option '~s' for '~s'", [Option, Argument])).
 
 illegal(Error) ->
-    io:format(standard_error, "rr: ~s. ~nPlease consult the manual.~n", [Error]),
+    io:format(standard_error, "rr: ~s. ~n", [Error]),
     halt(2).
 
 %% @doc calculates the number of seconds between now() and Time
 seconds(Time) ->
     timer:now_diff(erlang:now(), Time)/1000000.
 
-parse(Args, Options) ->
+parse(Command, Args, Options) ->
     case getopt:parse(Options, Args) of
 	{ok, {Parsed, _}} -> 
 	    Parsed;
 	{error, {invalid_option, R}} ->
-	    rr:illegal(io_lib:format("unrecognized option '~s'", [R]));
+	    throw({invalid_option, Command, R});
 	{error, {missing_option_arg, R}} ->
-	    rr:illegal(io_lib:format("missing argument to option '~s'", [rr:get_opt_name(R, Options)]));
+	    throw({missing_option_arg, Command, R});
 	{error, _} ->
-	    rr:illegal("unknown error")
+	    throw({unkown_arg_error, Command})
     end.

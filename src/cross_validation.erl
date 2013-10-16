@@ -10,9 +10,7 @@
 	 evaluate/2,
 	 average_cross_validation/3,
 
-	 help/0,
-	 main/1,
-	 args/2,
+	 args/1,
 	 parse_args/1
 	]).
 
@@ -32,9 +30,13 @@
 	 {<<"progress">>, $p, "progress", {string, "default"},
 	  "Progress bar when running cross validation"}
 	]).
+-define(NAME, "cv").
 
 parse_args(Args) ->
-    rr:parse(Args, ?CMD_SPEC).
+    rr:parse(?NAME, Args, ?CMD_SPEC).
+
+args(Args) ->
+    args(Args, fun (Value, Reason) -> throw({bad_arg, ?NAME, Value, Reason}) end).
 
 args(Args, Error) ->
     Folds = args(<<"folds">>, Args, Error),
@@ -57,12 +59,6 @@ progress(_Value, _Error) ->
     fun (Fold) -> 
 	    io:format(standard_error, "fold ~p ", [Fold])
     end.
-
-main(_) ->
-    throw(cannot_be_implemented).
-
-help() ->
-    "help for cross-validation".
 
 %% @doc
 %% Perform cross-validation on examples
@@ -167,7 +163,6 @@ average_list_item([Item|Rest], Folds, Acc) ->
 		     end
 	     end,
     average_list_item(Rest, Folds, NewAcc).
-
 
 
 -ifdef(TEST).

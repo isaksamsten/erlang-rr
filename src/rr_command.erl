@@ -11,9 +11,7 @@
 behaviour_info(callbacks) ->
     [
      {parse_args, 1}, %% use rr:parse/2 to parse args
-     {args, 2} %% get all args which are used with this command
+     {args, 1} %% get all args which are used with this command (throws {bad_arg, ModuleName, ArgName, Value})
     ];
 behaviour_info(_) ->
     undefined.
-
-
