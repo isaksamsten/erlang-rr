@@ -6,8 +6,8 @@
 %%% Created :  4 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr).
 -author('isak-kar@dsv.su.se').
--define(DATE, "2013-09-11").
--define(MAJOR_VERSION, "2").
+-define(DATE, "2013-10-16").
+-define(MAJOR_VERSION, "3").
 -define(MINOR_VERSION, "0").
 -define(REVISION, "0.0").
 
@@ -22,6 +22,7 @@
 	 parse_option_string/1,
 	 show_help/3,
 	 show_help/0,
+	 all_modules/0,
 
 	 parse/3,
 	 warn/1,
@@ -37,39 +38,47 @@
 	 any_opt/2,
 
 	 get_classifier/1,
-	 get_classifier/2,
-
 	 get_evaluator/1,
-	 get_evaluator/2,
-
 	 get_module/1
 	]).
 
+%% @doc get classifier from the available classifiers using a CString
+%% (e.g. "rf -n 100") would return {rf, [....]} @end
 get_classifier(Cstring) ->
     parse_string_args(Cstring, 'rr.classifiers').
 
+%% @doc get evaluator from the available evaluator
 get_evaluator(Estring) ->
     parse_string_args(Estring, 'rr.evaluators').
 
+%% @doc get evaluator from the available modules
 get_module(MString) ->    
     parse_string_args(MString, 'rr.modules').
 
+%% @doc legacy
+%% @deprecated
 parse_string_args(Value) ->
     parse_string_args(Value, 'rr.modules').
 
+%% @doc get the module and its (parsed) arguments
+-spec parse_string_args(string(), atom()) -> {atom(), [{any(), any()},...]}.
 parse_string_args(Value, Config) ->
     parse_args((catch string:tokens(string:strip(Value), " ")), Config).
 
+%% @doc legacy
+%% @deprecated
 parse_args(Args) ->
     parse_args(Args, 'rr.modules').
 
+%% @doc parse an option string (i.e. a string with comma or space
+%% separated numbers) Example: "1,2,3" would return [1,2,3] @end
 parse_option_string(Option) ->
     lists:map(fun (X) -> 
 		      element(2, rr_example:format_number(X)) 
 	      end, string:tokens(Option, ", ")).
 
-
 %% @doc returns the parse arguments and a suitable module
+-spec parse_args([Command::string(), ...], atom()) -> {atom(), [{any(), any()}, ...]}.
 parse_args([Key|Args], Config) ->
     case lists:keyfind(Key, 1, rr_config:get_value(Config)) of
 	{Key, Atom, _} ->
@@ -80,6 +89,7 @@ parse_args([Key|Args], Config) ->
 parse_args(_, _) ->
     error.
 
+%% @doc run the specified modules
 main(Args) ->
     Props = read_config("rr.config"),
     ok = initialize(Props),
@@ -98,6 +108,7 @@ main(Args) ->
     rr_config:stop(),
     rr_log:stop().
 
+%% @doc execute the selected module
 execute(Method, MethodArgs) ->
     try
 	Method:main(MethodArgs)
@@ -119,6 +130,7 @@ execute(Method, MethodArgs) ->
 	    %% todo: catch these?
     end.
 
+%% @doc read a configuration file
 read_config(File) ->
     case rr_config:read_config_file(File) of
 	{ok, Props} ->
@@ -131,6 +143,8 @@ read_config(File) ->
 	    halt()
     end.
 
+%% @doc initialize configurations (for rr_config) and add the
+%% plugin-dir to the loadpath @end
 initialize(Props) ->
     rr_config:init(Props),
     rr_log:new(proplists:get_value('log.target', Props, std_err),
@@ -138,32 +152,51 @@ initialize(Props) ->
     case code:add_pathz(filename:dirname(escript:script_name()) ++
 			    rr_config:get_value('rr.plugin.dir')) of
 	{error, _} ->
-	    rr_log:debug("plugin dir does not exist");
+	    %rr_log:debug("plugin dir does not exist");
+	    error;
 	_ -> true
     end,
     ok.
 
+%% @doc show help
 show_help(options, CmdSpec, Application) ->
     io:format(standard_error, "~s~n", [show_information()]),
     getopt:usage(CmdSpec, "rr " ++ Application),
     halt(2).
 
+%% @private show help for modules
 show_help() ->
     io:format(standard_error, "~s~n", [show_information()]),
-    io:format(standard_error, "Commands:~n", []),
-    Modules = rr_config:get_value('rr.modules'),
+    io:format(standard_error, "Global commands:~n", []),
+    Longest = find_longest_module_name(all_modules()),
+    write_help_for_modules(1, Longest, rr_config:get_value('rr.modules')),
+
+    io:format(standard_error, "~nLocal commands:~n", []),
+    io:format(standard_error, "  classifiers:~n", []),
+    write_help_for_modules(3, Longest-2, rr_config:get_value('rr.classifiers')),
+
+    io:format(standard_error, "~n  evaluators:~n", []),
+    write_help_for_modules(3, Longest-2, rr_config:get_value('rr.evaluators')),
+    halt(2).
+
+all_modules() ->
+    rr_config:get_value('rr.modules') ++ 
+	rr_config:get_value('rr.classifiers') ++ 
+	rr_config:get_value('rr.evaluators').
+
+find_longest_module_name(Modules) ->
     Sorted = lists:sort(fun({A,_,_}, {B,_,_}) -> length(A) > length(B) end, Modules),
-    Longest = length(element(1, hd(Sorted))),
+    length(element(1, hd(Sorted))).
+
+write_help_for_modules(Pad, Longest, Modules) ->
     lists:foreach(
       fun({_, _, undefined}) ->
 	      ok;
 	 ({Module, _, Desc}) ->
-	      io:format(standard_error, "  ~s    ~s~n", 
+	      io:format(standard_error, string:right("~s    ~s~n", 11+Pad), 
 			[string:left(Module, length(Module) + Longest - length(Module)), Desc])
-      end, Modules),
-    halt(2).
+      end, Modules).
 					 
-
 show_information() -> 
     io_lib:format("rr (Random Rule Learner) ~s.~s.~s (build date: ~s)
 Copyright (C) 2013+ ~s~n", [?MAJOR_VERSION, ?MINOR_VERSION, ?REVISION, ?DATE, ?AUTHOR]).

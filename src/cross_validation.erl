@@ -9,7 +9,8 @@
 -export([
 	 evaluate/2,
 	 average_cross_validation/3,
-
+	 
+	 help/0,
 	 args/1,
 	 parse_args/1
 	]).
@@ -31,6 +32,9 @@
 	  "Progress bar when running cross validation"}
 	]).
 -define(NAME, "cv").
+
+help() ->
+    rr:show_help(options, ?CMD_SPEC, "cv").
 
 parse_args(Args) ->
     rr:parse(?NAME, Args, ?CMD_SPEC).

@@ -18,10 +18,20 @@
 	 args/2
 	]).
 
+get_help(Module) ->
+    get_help(Module, rr:all_modules()).
+
+get_help(_, []) ->
+    rr_help;
+get_help(Name, [{Name, Module, _}|_]) ->
+    Module;
+get_help(Module, [_|Rest]) ->
+    get_help(Module, Rest).
+
 parse_args([]) ->
     rr_help;
 parse_args([Module|_]) ->
-    element(1, rr:get_module(Module)).
+    get_help(Module).
 
 main(Module) ->
     Module:help(),
@@ -32,7 +42,3 @@ args(_,_) ->
 help() ->
     rr:show_help(),
     ok.
-
-    
-    
-

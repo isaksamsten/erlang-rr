@@ -21,15 +21,19 @@
 kill(Model) ->
     Model ! {exit, self()}.
 
+%% @doc get a model descriptor
 get_model(Model, Conf) ->
     Models = get_base_classifiers(Model),
     [{version, ?VERSION},
      {base_models, Models},
      {config, Conf}].
+
+%% @doc get all base classifiers in this ensemble
 get_base_classifiers(Model) ->
     Collect = fun (BaseModels, _) -> BaseModels end,
     perform(Model, {collect_models, Collect, fun lists:append/2}).
 
+%% @load a model from get_model/2 descriptor
 load_model(Model) ->
     case proplists:get_value(version, Model) of
 	?VERSION ->
@@ -37,7 +41,7 @@ load_model(Model) ->
 	    Conf = proplists:get_value(config, Model),
 	    {load_evaluation_coordinator(Models, Conf#rr_ensemble.cores, Conf), Conf};
 	_ ->
-	    throw({error, invalid_version})
+	    invalid_version
     end.
 
 %% @doc load a set of base learners and put an ensemble in evaluator state

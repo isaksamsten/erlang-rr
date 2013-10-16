@@ -112,18 +112,21 @@ default() ->
 
 default_output({cv, _, Data}, Header) ->
     OutputFolds = rr_config:get_value('output.cv.folds', false),
-    default_output_cv(Data, OutputFolds, Header).
+    default_output_cv(Data, OutputFolds, Header);
+default_output({split, {{ratio, Fraction}, Data}}, Header) ->
+    default_output_measures(io_lib:format("test set (~.2f%)", [100*(1-Fraction)]), Data, Header).
+
 
 default_output_cv([], _, _) -> 
     done;
 default_output_cv([{{_, Fold}, Measures}|Rest], OutputFolds, Header) ->
     if OutputFolds == true ->
-	    default_output_measures(Fold, Measures, Header),
+	    default_output_measures(io_lib:format("fold ~p", [Fold]), Measures, Header),
 	    io:format("~n"),
 	    default_output_cv(Rest, OutputFolds, Header);
        OutputFolds == false ->
 	    if Fold == average ->
-		    default_output_measures(Fold, Measures, Header),
+		    default_output_measures(io_lib:format("fold ~p", [Fold]), Measures, Header),
 		    default_output_cv(Rest, OutputFolds, Header);
 	       true ->
 		    default_output_cv(Rest, OutputFolds, Header)
@@ -131,7 +134,7 @@ default_output_cv([{{_, Fold}, Measures}|Rest], OutputFolds, Header) ->
     end.
 		    
 default_output_measures(Fold, Measures, Header) ->
-    io:format("fold ~p ~n", [Fold]),
+    io:format("~s ~n", [Fold]),
     lists:foreach(fun ({Name, Key}) ->
 			  case lists:keyfind(Key, 1, Measures) of			      
 			      {Key, {Type, Value, Auc}} when Type == recall; 
