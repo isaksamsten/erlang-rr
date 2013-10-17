@@ -17,6 +17,8 @@
 	 evaluate/4,
 	 partial_evaluate/1,
 
+	 variable_importance/2,
+
 	 predict/4,
 	 save/3,
 	 load/1,
@@ -109,6 +111,10 @@ get(Model) ->
 %% @doc build a model
 build(Rf, Features, Examples, ExConf) ->
     rr_ensemble:generate_model(Features, Examples, ExConf, Rf).
+
+%% @doc
+variable_importance(Model, Rf) ->
+    rr_ensemble:variable_importance(Model, Rf).
 
 build(Rf, ExSet) ->
     build(Rf, ExSet#rr_exset.features, ExSet#rr_exset.examples, ExSet#rr_exset.exconf).
@@ -449,6 +455,16 @@ rule_score(Value, Error) ->
     end.
 
 -ifdef(TEST).
+variable_importance_test() ->
+    File = csv:binary_reader("../data/iris.txt"),
+    ExSet = rr_example:load(File, 4),
+    NoFeatures = fun (NoFeatures) -> trunc(math:log(NoFeatures)/math:log(2)) end,
+    Rf = rf:new([{no_features, NoFeatures}, {no_trees, 500}, {score, fun rr_estimator:info_gain/2}]),
+    Model = rf:build(Rf, ExSet),
+    Vi = rf:variable_importance(Model, Rf),
+    {MaxFeature, MaxScore} = rr_util:max(fun ({K, V}) -> V end, dict:to_list(Vi)),
+    ?assertEqual(4, MaxFeature).				      
+
 -ifdef(PROFILE).
 profile_test_() ->
     profile_tests().
