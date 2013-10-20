@@ -54,7 +54,7 @@
 	 classes/1,
 	 majority/1,
 	 randomize/1,
-	 cross_validation/3,
+%	 cross_validation/3,
 	 split_dataset/2,
 	 parse_example_process/7,
 	 example_value_handler/2,
@@ -93,7 +93,6 @@ predictions(Table, [{Real, _, Ids}|Rest], Acc) ->
 			  [{exid(ExId), Real, Predictions}|NewAcc]
 		  end, Acc, Ids)).
 
-
 %% @doc create new example dataset
 new() ->
     #rr_example{
@@ -112,13 +111,11 @@ kill(Dataset) ->
        examples = ExTable, 
        values = ExValues,
        predictions = PredictionsTable } = Dataset,
-    
-    
+
     ets:delete(FeatureTable),
     ets:delete(ExTable),
     ets:delete(ExValues),
     ets:delete(PredictionsTable).
-    
 
 %% @doc a dataset from File using Core cores (creates a new dataset)
 -spec load(string(), number()) -> {features(), examples(), #rr_example{}}.
@@ -127,7 +124,7 @@ load(File, Core) ->
     {Features, Examples} = load(File, Core, ExConf),
     #rr_exset {
        features = Features,
-       examples = randomize(Examples),
+       examples = Examples,
        exconf = ExConf
       }.
 
@@ -163,7 +160,7 @@ parse_examples(Dataset, File, Cores, ClassId, Types) ->
 %    Handler ! {stop, Self, rr_example:count(Examples)},
  %   receive
   %  	{value_handler_stop, Self} ->
-	    Examples.
+    Examples.
  %   end.
 
 
@@ -173,14 +170,17 @@ parse_example_process(Parent, ExTable, File, ClassId, Types, Handler, Acc) ->
     case csv:next_line(File) of
 	{row, Example, Id0} ->
 	    {Class, Attributes} = take_feature(Example, ClassId),
-	    Id = Id0 - 2, %% NOTE: subtracting headers 
-	    ets:insert(ExTable, format_features(Attributes, Types, 1, Handler, [Id])),
+	    Id = Id0 - 2,
+	    insert_features(ExTable, Attributes, Types, Handler, Id),
 	    parse_example_process(Parent, ExTable, File, ClassId, Types, Handler,
 				  update_class_distribution(Class, Id, Acc));
 	eof ->
 	    Parent ! {done, Parent, Acc}
     end.
 
+insert_features(ExTable, Attributes, Types, Handler, Id) ->
+    ets:insert(ExTable, format_features(Attributes, Types, 1, Handler, [Id])).
+    
 %% @private collect the results from process parsing the examples
 collect_parse_example_processes(_, 0, Examples) ->
     format_class_distribution(Examples);
@@ -504,7 +504,6 @@ find_numeric_split([], _, _, _, _, {Threshold, _}, _) ->
     Threshold;
 find_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId, 
 			    Gain, Total, {OldThreshold, OldGain}, Dist) ->
-
     {both, Left, Right} = Dist, 
     Dist0 = case lists:keytake(Class, 1, Left) of
 		{value, {Class, Num, _}, ClassRest} ->
@@ -645,6 +644,8 @@ count(Examples) ->
     lists:foldl(fun({_, Count, _}, Old) ->
 			Count + Old
 		end, 0, Examples).
+
+%% @doc clone example id
 clone(ExId) ->
     {exid(ExId), exid(ExId)}.
 
@@ -666,13 +667,16 @@ count(Class, Examples) ->
 %% @doc return the majority class and its count
 -spec majority(examples()) -> {Class::atom(), Count::number()}.
 majority(Examples) ->
-    {Class, Count, _} = lists:foldl(fun({Class, Count, _}, {_OldClass, OldCount, _} = Old) ->
-					    case Count > OldCount of 
-						true -> {Class, Count, []};
-						false -> Old
-					    end
-				    end, hd(Examples), tl(Examples)),
+    {Class, Count, _} = rr_util:max(fun({_, Count, _}) -> Count end, Examples),
     {Class, Count}.
+			    
+    %% {Class, Count, _} = lists:foldl(fun({Class, Count, _}, {_OldClass, OldCount, _} = Old) ->
+    %% 					    case Count > OldCount of 
+    %% 						true -> {Class, Count, []};
+    %% 						false -> Old
+    %% 					    end
+    %% 				    end, hd(Examples), tl(Examples)),
+    %% {Class, Count}.
 
 %% @doc get examples with Class
 get_class(Class, Examples) ->
@@ -769,11 +773,9 @@ split_dataset(Examples, Ratio) ->
     lists:foldl(fun({Class, Count, Ids}, 
 		    {TrainAcc, TestAcc}) ->
 			{Train, Test} = lists:split(round(Count * Ratio), Ids),
-			
 			{[{Class, length(Train), Train}|TrainAcc],
 			 [{Class, length(Test), Test}|TestAcc]}
 		end, {[], []}, Examples).
-
 
 %% @doc 
 %% take a subset of Size from Examples. If size is within [0, 1],
@@ -791,7 +793,7 @@ subset(Examples, Size) when is_float(Size), Size =< 1.0, Size >= 0.0 ->
 subset(Examples, Size) ->
     Total = count(Examples),
     Fraction = Size/Total,
-    if Fraction >= 1 -> Examples; true ->  subset(Examples, Fraction) end.
+    if Fraction >= 1 -> Examples; true -> subset(Examples, Fraction) end.
 
 %% @doc shuffle the data set (for example, before splitting)
 -spec randomize(examples()) -> examples().
@@ -807,72 +809,6 @@ shuffle(List) ->
 %% @doc randomly permute a list of items
 shuffle_list(Ids0) ->
     [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> {random:uniform(), Id} end, Ids0))].
-
-%% @doc generate a dictionary of Folds folds.
--spec generate_folds(examples(), integer()) -> dict().
-generate_folds(Examples, Folds) ->
-    generate_folds(Examples, Folds, 1, dict:new()).
-
-%% @private
-generate_folds([], _, _, Acc) ->
-    Acc;
-generate_folds([{Class, _, ExIds}|Rest], Folds, CurrentFold, Acc) ->
-    {ClassFolds, NewCurrentFold} = generate_folds_for_class(Class, ExIds, Folds, CurrentFold, 
-							    make_default_folds(Folds, Class, dict:new())),
-    NewAcc = dict:merge(fun (_, A, B) -> A ++ B end, ClassFolds, Acc),
-    generate_folds(Rest, Folds, NewCurrentFold, NewAcc).
-
-%% @private
-make_default_folds(0, _, Acc) ->
-    Acc;
-make_default_folds(Fold, Class, Acc) ->
-    make_default_folds(Fold - 1, Class, dict:store(Fold, [{Class, 0, []}], Acc)).
-
-%% @private
-generate_folds_for_class(_, [], _, Current, Acc ) ->
-    {Acc, Current};
-generate_folds_for_class(Class, [Id|ExIds], Folds, CurrentFold, Acc) ->
-    Current = if Folds < CurrentFold -> 1; true -> CurrentFold end,
-    generate_folds_for_class(Class, ExIds, Folds, Current + 1,
-			     dict:update(Current, fun ([{C, N, Ids}]) ->
-							  [{C, N+1, [Id|Ids]}]
-						  end, Acc)).
-%% @private
-init_folds(Folds, Init, Test) ->
-    Init0 = dict:fetch(Init, Folds),
-    TestSet0 = dict:fetch(Test, Folds),
-    Rest0 = dict:erase(Init, Folds),
-    {Init0, TestSet0, dict:erase(Test, Rest0)}.
-
-%% @doc merge all folds in Folds expect for test
--spec merge_folds(dict(), integer()) -> {Test::examples(), Train::examples()}.
-merge_folds(Folds, Test) ->
-    {Init, TestSet, Rest} = case Test of
-				1 -> 
-				    init_folds(Folds, 2, Test);
-				_Other ->
-				    init_folds(Folds, 1, Test)
-			    end,
-    Train = dict:fold(fun (_, Fold, Acc) ->
-			      lists:zipwith(fun ({Class, Ca, Ia}, {Class, Cb, Ib}) ->
-						    {Class, Ca+Cb, Ia++Ib}
-					    end, Fold, Acc)
-		      end, Init, Rest),
-    {TestSet, Train}.
-
-%% @doc stratified cross validation
--spec cross_validation(fun((Train::examples(), Test::examples(), Fold::integer()) -> []), integer(), examples()) -> [].
-cross_validation(Fun, NoFolds, Examples) ->
-    Folds = generate_folds(Examples, NoFolds),
-    cross_validation(Fun, Folds, NoFolds, NoFolds, []).
-
-%% @private
-cross_validation(_Fun, _Folds, _NoFolds, 0, Acc) -> 
-    lists:reverse(Acc);
-cross_validation(Fun, Folds, NoFolds, CurrentFold, Acc) -> 
-    {Test, Train} = merge_folds(Folds, CurrentFold),
-    Result = Fun(Train, Test, NoFolds - CurrentFold + 1),
-    cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, [Result|Acc]).
 
 %% @doc sample one example from all examples
 sample_example([{_Class, _, ExIds}]) ->
@@ -987,5 +923,8 @@ bootstrap_test() ->
     ?assertEqual(count(Examples), SumInBagA + SumInBagB),
     ?assertEqual(round((SumOutBagA + SumOutBagB) / (SumInBagA + SumInBagB) * 100)/100 , 0.36).
     
+majority_test() ->
+    Examples = mock_examples([{a, 100}, {b, 10}, {c, 1000}]),
+    ?assertEqual({c, 1000}, majority(Examples)).
 
 -endif.

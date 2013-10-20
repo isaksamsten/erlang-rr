@@ -6,6 +6,7 @@
 %%% Created : 25 Jun 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 
 -module(rr_util).
+
 -export([
 	 weighted_random/1,
 	 weighted_random/2,
@@ -57,31 +58,28 @@ partition([Model|Models], [Part|Parts]) ->
     partition(Models, Parts ++ [[Model|Part]]).
 
 min(Fun, List) ->
-    FirstMin = Fun(hd(List)),
-    FirstValue = hd(List),
-    {_, Min} = lists:foldl(fun (Value, {OldMin, OldValue}) ->
-				   U = Fun(Value),
-				   if U < OldMin ->
-					   {U, Value};
-				      true ->
-					   {OldMin, OldValue}
-				   end
-			   end, {FirstMin, FirstValue}, tl(List)),
+    {_, Min} = lists:foldl(
+		 fun (Value, {OldMin, OldValue}) ->
+			 U = Fun(Value),
+			 if U < OldMin ->
+				 {U, Value};
+			    true ->
+				 {OldMin, OldValue}
+			 end
+		 end, {Fun(hd(List)), hd(List)}, tl(List)),
     Min.
 
 
 max(Fun, List) ->
-    FirstMax = Fun(hd(List)),
-    FirstValue = hd(List),
-    {_, Min} = lists:foldl(fun (Value, {OldMax, OldValue}) ->
+    {_, Max} = lists:foldl(fun (Value, {OldMax, OldValue}) ->
 				   U = Fun(Value),
 				   if U > OldMax ->
 					   {U, Value};
 				      true ->
 					   {OldMax, OldValue}
 			end
-			   end, {FirstMax, FirstValue}, tl(List)),
-    Min.
+			   end, {Fun(hd(List)), hd(List)}, tl(List)),
+    Max.
 
 %% @doc randomly permute a list (public)
 shuffle(List) ->

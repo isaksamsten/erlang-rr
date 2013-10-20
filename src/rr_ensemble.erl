@@ -8,7 +8,8 @@
 -module(rr_ensemble).
 -author('isak-kar@dsv.su.se').
 -compile(export_all). %% TODO: export
--define(VERSION, '1.0').
+
+-define(VERSION, '1.1').
 
 %% @headerfile "rf_tree.hrl"
 -include("rf_tree.hrl").
@@ -90,7 +91,7 @@ oob_accuracy(Model, Conf) ->
     A = perform(Model, {oob_accuracy, TreeFun, fun lists:append/2}),
     lists:sum(A)/Conf#rr_ensemble.no_classifiers.
 
-%% @doc get #rules
+%% @doc get # of rules
 no_rules(Model, _) ->
     lists:sum(perform(Model, {
 			no_rules, 
@@ -99,11 +100,7 @@ no_rules(Model, _) ->
 			end,
 			fun lists:append/2
 		       })).
-			    
 		    
-							  
-    
-
 %% @doc
 %% Calculate the base Test accuracy for each model. This function relies
 %% on the (public) ets-table (predictions) to be filled o/w Second will contain [0.0,...], which
@@ -167,6 +164,7 @@ predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
     predict_all(Actual, Rest, Model, ExConf, Conf, dict:update(Actual, fun(Predictions) ->
 								 [{Prediction, Probs}|Predictions]
 							 end, [{Prediction, Probs}], Dict)).
+
 %% @doc predict the class for Example
 -spec predict_majority(pid(), exid(), #rr_example{}, #rr_ensemble{}) -> 
 			      {Predition::tuple(), Rest::[]}.
@@ -298,7 +296,8 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Conf) ->
 %% @doc transision into 'base_evaluator_process', at {completed, Coordinator}
 base_build_process(Coordinator, Features, Examples, ExConf, Conf) ->
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-    random:seed({A,B,C}),
+    random:seed({A, B, C}),
+%    random:seed({round(random:uniform()*1000),round(random:uniform()*1000),round(random:uniform()*1000)}),
     base_build_process(Coordinator, Features, Examples, ExConf, Conf, dict:new(), []).
 
 base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImportance, Models) ->
@@ -315,13 +314,12 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
 			      _-> rr_eval:accuracy(Base:evaluate_model(Model, OutBag, ExConf, BaseConf))
 			  end,
 	    Rem = if T > 10 -> round(T/10); true -> 1 end, %% todo: refactor (let progress decide)
-	    case Id rem Rem of
-		0 ->
-		    Progress(Id, T);
-		_ ->
-		    ok
-	    end,
-	    BaseModel = #rr_base{id = Id, model = Model, accuracy = OOBAccuracy, no_rules = NoRules}, %{Id, Model, OOBAccuracy}
+	    case Id rem Rem of 0 -> Progress(Id, T); _ -> ok end,
+	    BaseModel = #rr_base {
+			   id = Id, 
+			   model = Model, 
+			   accuracy = OOBAccuracy, 
+			   no_rules = NoRules},
 	    base_build_process(Coordinator, Features, Examples, ExConf, 
 			       Conf, NewVariableImportance, [BaseModel|Models]);
 	{completed, Coordinator} ->

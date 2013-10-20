@@ -5,6 +5,7 @@
 %%% @end
 %%% Created :  8 Apr 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
 -module(rf_branch).
+
 -export([
 	 
 	 %% standard approaches
@@ -65,7 +66,6 @@ random() ->
 -spec all() -> branch_fun().
 all() ->
     fun all/5.
-
 
 %% @doc evaluate a subset of n random features
 -spec subset(features(), examples(), integer(), #rr_example{}, #rf_tree{}) -> branch().

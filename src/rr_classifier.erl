@@ -20,6 +20,7 @@
 -module(rr_classifier).
 -export([
 	 behaviour_info/1,
+	 kill/2,
 	 find/1
 	]).
 
@@ -29,14 +30,11 @@
 
 behaviour_info(callbacks) ->
     [
-     %% @spec new(Arguments) -> ModelDescriptor::any().
      {new, 1},
 
-     %% @spec build(ModelDescripor, #exset{}) -> Model :: any().
      {build, 2},
      {build, 4},
 
-     %% @spec evaluate(ModelDescriptor :: any(), Model :: any(), ...) -> [...].
      {evaluate, 4},
 
      {partial_build, 1},
@@ -57,9 +55,18 @@ find(CString) ->
 	    Build = Classifier:partial_build(Rf),
 	    Evaluate = Classifier:partial_evaluate(Rf),
 	    [{build, Build}, 
-	     {evaluate, rf:killer(Evaluate)}, 
+	     {evaluate, kill(Classifier, Evaluate)}, 
 	     {'$config', Rf}, 
 	     {'$module', Classifier}];
 	error ->
 	    throw({module_not_found, CString})
+    end.
+
+%% @doc kill (to clean up unused models) after evaluation (to reduce
+%% memory footprint during cross validation)
+kill(Classifier, Evaluate) ->
+    fun (Model, Test, ExConf) ->
+	    Result = Evaluate(Model, Test, ExConf),
+	    Classifier:kill(Model),
+	    Result
     end.

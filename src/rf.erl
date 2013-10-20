@@ -30,8 +30,7 @@
 	 args/2,
 	 args/1,
 
-	 kill/1, 
-	 killer/1
+	 kill/1
 	]).
 
 -behaviour(rr_command).
@@ -109,6 +108,7 @@ get(Model) ->
     rr_ensemble:get_base_classifiers(Model).
 
 %% @doc build a model
+%% @deprecate
 build(Rf, Features, Examples, ExConf) ->
     rr_ensemble:generate_model(Features, Examples, ExConf, Rf).
 
@@ -230,16 +230,6 @@ new(Props) ->
        base_learner = {BaseLearner, Tree},
        cores = Cores
       }.
-
-%% @doc kill (to clean up unused models) after evaluation (to reduce
-%% memory footprint during cross validation)
-killer(Evaluate) ->
-    fun (Model, Test, ExConf) ->
-	    Result = Evaluate(Model, Test, ExConf),
-	    kill(Model),
-	    Result
-    end.
-
 
 %% @doc parse args for this classifier
 parse_args(Args) ->
