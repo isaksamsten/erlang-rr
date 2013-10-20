@@ -446,6 +446,7 @@ rule_score(Value, Error) ->
 
 -ifdef(TEST).
 variable_importance_test() ->
+    random:seed({10, 10, 10}),
     File = csv:binary_reader("../data/iris.txt"),
     ExSet = rr_example:load(File, 4),
     NoFeatures = fun (NoFeatures) -> trunc(math:log(NoFeatures)/math:log(2)) end,
