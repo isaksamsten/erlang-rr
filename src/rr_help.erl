@@ -15,7 +15,7 @@
 	 parse_args/1,
 
 	 help/0,
-	 args/2
+	 args/1
 	]).
 
 get_help(Module) ->
@@ -37,8 +37,9 @@ main(Module) ->
     Module:help(),
     ok.
 
-args(_,_) ->
-    ok.
+args(_) ->
+    [].
+
 help() ->
     rr:show_help(),
     ok.

@@ -23,8 +23,7 @@
 
 behaviour_info(callbacks) ->
     [
-     {main, 1}, %% run the algorithm
-     {help, 0}  %% return a string with help
+     {main, 1} %% run the algorithm
     ];
 behaviour_info(_) ->
     undefined.

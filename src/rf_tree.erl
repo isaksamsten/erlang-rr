@@ -164,7 +164,7 @@ value_split(ExConf, Feature, Examples, Distribute, Missing) ->
 			     none; %% TODO: sample from those with value
 			 (_, {categoric, _FeatureId}, _Ex) ->
 			     none; %% TODO: same..
-			 (Me, Ff, Ex) ->
+			 (Me, _Ff, Ex) ->
 			     rr_example:sample_split_value(Me, Ex)
 		     end).
 

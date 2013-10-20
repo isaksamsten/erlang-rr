@@ -9,8 +9,8 @@
 
 -export([
 	 main/1,
-	 args/2,
-	 args/3,
+	 args/1,
+
 	 help/0,
 	 parse_args/1,
 	 
@@ -20,6 +20,8 @@
 
 -define(E, 2.718281828459045).
 -behaviour(rr_command).
+-behaviour(rr_module).
+
 -include("km.hrl").
 
 -define(CMD_SPEC,
@@ -49,10 +51,8 @@ new(Props) ->
 help() ->
     ok.
 
-args(_, _, _) ->
-    [].
-args(_, _) ->
-    {no, no}.
+args(_) ->
+    no.
 
 parse_args(Args) ->
     rr:parse(Args, ?CMD_SPEC).

@@ -153,27 +153,27 @@ default_output_measures(Fold, Measures, Header) ->
 			  end
 		  end, Header).
 
-output_variable_importance([], _, _) ->
-    ok;
-output_variable_importance([{FeatureId, Score}|Rest], N, No) ->
-    if N >= No ->
-	    ok;
-       true ->
-	    io:format("~p: ~p ~n", [rr_example:feature_name(FeatureId), Score]),
-	    output_variable_importance(Rest, N + 1, No)
-    end.
+%% output_variable_importance([], _, _) ->
+%%     ok;
+%% output_variable_importance([{FeatureId, Score}|Rest], N, No) ->
+%%     if N >= No ->
+%% 	    ok;
+%%        true ->
+%% 	    io:format("~p: ~p ~n", [rr_example:feature_name(FeatureId), Score]),
+%% 	    output_variable_importance(Rest, N + 1, No)
+%%     end.
 
-output_predictions([]) ->
-    ok;
-output_predictions([{Class, _, ExIds}|Examples]) ->
-    output_predictions_for_class(Class, ExIds),
-    output_predictions(Examples).
+%% output_predictions([]) ->
+%%     ok;
+%% output_predictions([{Class, _, ExIds}|Examples]) ->
+%%     output_predictions_for_class(Class, ExIds),
+%%     output_predictions(Examples).
 
-output_predictions_for_class(_, []) ->
-    ok;
-output_predictions_for_class(Class, [ExId|Rest]) ->
-    io:format("~p \t ~p \t", [ExId, Class]),
-    Predictions = ets:lookup_element(predictions, ExId, 2),
-    {Pred, Prob} = hd(Predictions),
-    io:format("~p (~p) ~n", [Pred, Prob]),
-    output_predictions_for_class(Class, Rest).
+%% output_predictions_for_class(_, []) ->
+%%     ok;
+%% output_predictions_for_class(Class, [ExId|Rest]) ->
+%%     io:format("~p \t ~p \t", [ExId, Class]),
+%%     Predictions = ets:lookup_element(predictions, ExId, 2),
+%%     {Pred, Prob} = hd(Predictions),
+%%     io:format("~p (~p) ~n", [Pred, Prob]),
+%%     output_predictions_for_class(Class, Rest).

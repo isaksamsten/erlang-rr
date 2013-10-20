@@ -7,13 +7,14 @@
 
 -module(rex).
 -behaviour(rr_command).
+-behaviour(rr_module).
 -include("rex.hrl").
+
 -export([
 	 parse_args/1,
 	 main/1,
 	 help/0,
-	 args/2,
-	 args/3,
+	 args/1,
 	 new/1,
 	 run/2
 	]).
@@ -28,13 +29,13 @@
 	 {<<"classifier">>,      $c,        "classifer",       {string, "rf -n 1"},
 	  "Random Forest classifier options"}
 	]).
-		    
+-define(NAME, "rex").
 
 parse_args(Args) ->
-    rr:parse(Args, ?CMD_SPEC).
+    rr:parse(?NAME, Args, ?CMD_SPEC).
 
 main(Args) ->
-    Opts = args(Args, fun rr:invalid_option/2),
+    Opts = args(Args),
     Rex = new(Opts),
     run(Rex, args(<<"input">>, Args, fun rr:invalid_option/2)).
     
@@ -42,7 +43,8 @@ main(Args) ->
 help() ->
     rr:show_help(options, ?CMD_SPEC, "rf").
 
-args(Args, Error) ->
+args(Args) ->
+    Error = fun (Value, Reason) -> throw({bad_arg, "rf", Value, Reason}) end,
     [{min_confidence, args(<<"min_confidence">>, Args, Error)},
      {min_coverage, args(<<"min_coverage">>, Args, Error)},
      {classifier, args(<<"classifier">>, Args, Error)}].

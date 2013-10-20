@@ -75,7 +75,7 @@ average_value_for_feature({Type, F}, [Ex|Rest], Total, Acc) ->
 kmean(Features, Examples, Conf) ->
     #km{k=K, iterations = Iterations} = Conf,
     Flat = rr_example:flatten(Examples),
-    {Rand, Other} = lists:split(K, rr_example:shuffle(Flat)),
+    {Rand, _Other} = lists:split(K, rr_example:shuffle(Flat)),
     Centroids = insert_centroids(K, Rand, []),
     kmean(Features, Centroids, Flat, different, Iterations).
 
@@ -142,7 +142,7 @@ closest(Features, Centroids, Ex) ->
 			       end, {undefined, inf}, Centroids),
     Closest.
 
-insert_centroids(N, [], Acc) ->
+insert_centroids(_, [], Acc) ->
     Acc;
 insert_centroids(N, [Centroid|Rest], Acc) ->
     Vector = rr_example:vector(Centroid),

@@ -443,36 +443,5 @@ unpack(Candidate) ->
 %%  oversample NoFeatures * 1+Oversample and calculate their gain, weight a random selection of
 %%  NoFeatures from the Oversample population according to their calculated weight
 %% @end
-oversample(NoFeatures, Oversample) ->
-    ok.
-
-%% TODO: remove?
-%% depth(NoFeatures) ->
-%%     fun (Features, Examples, Total, ExConf, Conf) ->
-%% 	    #rf_tree{score = Score, split = Split, distribute = Distribute, 
-%% 		     missing_values = Missing, depth = Depth} = Conf,
-%% 	    DepthRatio = 1 / (math:log(3+Depth)),
-%% 	    NewNoFeatures = case round(NoFeatures * DepthRatio) of
-%% 				X when X =< 1 -> 1;
-%% 				X when X >= NoFeatures -> NoFeatures;
-%% 				X -> X
-%% 			    end,
-%% 	    NewFeatures = rr_example:random_features(Features, NewNoFeatures),
-%% 	    rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing)
-%%     end.
-				       
-%% depth_rule(NoRules, RuleScore) ->
-%%     Rule = rule(NoRules, RuleScore),
-%%     Subset = subset(),
-%%     fun (Features, Examples, Total, ExConf, Conf) ->
-%% 	    #rf_tree {
-%% 	       depth=Depth,
-%% 	       no_features = NoFeatures
-%% 	      } = Conf,
-%% 	    FeatureCount = NoFeatures(length(Features)),
-%% 	    if Depth >= FeatureCount -> 
-%% 		    Rule(Features, Examples, Total, ExConf, Conf);
-%% 	       true ->
-%% 		    Subset(Features, Examples, Total, ExConf, Conf)
-%% 	    end
-%%     end.
+%%oversample(NoFeatures, Oversample) ->
+%%    ok.

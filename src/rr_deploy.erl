@@ -16,7 +16,7 @@
 
 -export([
 	 parse_args/1,
-	 args/2
+	 args/1
 	]).
 
 -export([
@@ -32,19 +32,21 @@
 	 {<<"output">>, $o, "output", string,
 	    "Name for the deployed model."}]).
 
+-define(NAME, "deploy").
+
 %% @doc parse the arguments
 parse_args(Args) ->
-    rr:parse(Args, ?CMD_SPEC).
+    rr:parse(?NAME, Args, ?CMD_SPEC).
 
 %% @doc show help
 help() ->
     rr:show_help(options, ?CMD_SPEC, "deploy").
 
-args(_, _) ->
+args(_) ->
     [].
 
 main(Args) ->
-    Classifier = rr:get_classifier(proplists:get_value(<<"classifier">>, Args), fun  rr:illegal_option/2),
+    Classifier = rr_classifier:find(proplists:get_value(<<"classifier">>, Args)),
     Dataset = proplists:get_value(<<"dataset">>, Args),
     Output = proplists:get_value(<<"output">>, Args),
     Cores = erlang:system_info(schedulers),
@@ -55,8 +57,10 @@ main(Args) ->
     Config = proplists:get_value('$config', Classifier),
     Module = proplists:get_value('$module', Classifier),
     Model = Build(ExSet#rr_exset.features, ExSet#rr_exset.examples, ExSet#rr_exset.exconf),
-    Module:save(Output, Config, Model),
-    rr_log:info("deployed model to '~p'", [Output]),
+    Data = Module:serialize(Config, Model),
+    file:write_file(Output, Data),
+    rr_log:info("deployed model to '~s'", [Output]),
+    rr_log:stop(),
     ok.
     
     

@@ -15,7 +15,7 @@
 %%% evaluation metrics.
 %%%
 %%% @end
-%%% Created : 10 Sep 2013 by Isak Karlsson <isak@dhcp-159-53.dsv.su.se>
+%%% Created : 10 Sep 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rr_classifier).
 -export([
@@ -31,18 +31,15 @@
 behaviour_info(callbacks) ->
     [
      {new, 1},
+     {kill, 1},
 
      {build, 2},
-     {build, 4},
-
      {evaluate, 4},
-
      {partial_build, 1},
      {partial_evaluate, 1},
 
      {serialize, 2},
-     {unserialize, 1},
-     {kill, 1}
+     {unserialize, 1}
     ].
 
 %% @doc find the classifier for the CString.

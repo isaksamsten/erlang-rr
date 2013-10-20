@@ -15,11 +15,11 @@
 -include("rr.hrl").
 
 -export([
+	 %% rr_command
 	 parse_args/1,
-	 args/2
-	]).
-
--export([
+	 args/1,
+	 
+	 %% rr_module 
 	 main/1,
 	 help/0
 	]).
@@ -30,29 +30,31 @@
 	 {<<"model">>, $m, "model", string,
 	    "Name of the deployed model to employ."}]).
 
+-define(NAME, "employ").
+
 %% @doc parse the arguments
 parse_args(Args) ->
-    rr:parse(Args, ?CMD_SPEC).
+    rr:parse(?NAME, Args, ?CMD_SPEC).
 
 %% @doc show help
 help() ->
     rr:show_help(options, ?CMD_SPEC, "employ").
 
-args(_, _) ->
+args(_) ->
     [].
 
 main(Args) ->
     Dataset = proplists:get_value(<<"dataset">>, Args),
     ModelFile = proplists:get_value(<<"model">>, Args),
     {Module, Dump} = load(ModelFile),
-    {Model, Conf} = Module:load(Dump),
+    {Model, Conf} = Module:unserialize(Dump),
     Cores = erlang:system_info(schedulers),
     rr_log:info("loading '~s' on ~p core(s)", [Dataset, Cores]),
     Csv = csv:binary_reader(Dataset),
     ExSet = rr_example:load(Csv, Cores),
     Res = Module:evaluate(Conf, Model, ExSet#rr_exset.examples, ExSet#rr_exset.exconf),
     Output = rr_result:default(),
-    Output(Res),
+    Output({split, {{ratio, 0.0}, Res}}),
     ok.
     
 load(File) ->

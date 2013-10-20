@@ -6,30 +6,27 @@
 %%% Created : 12 May 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rf).
 -export([
-	 parse_args/1,
-	 
+	 %% rr_command behaviour
+	 parse_args/1,	 
 	 help/0, 
-	 new/1,  
-	 build/4,
-	 build/2,
-	 partial_build/1,
-
-	 evaluate/4,
-	 partial_evaluate/1,
-
-	 variable_importance/2,
-
-	 predict/4,
-	 save/3,
-	 load/1,
-	 
-	 get/1,
-	 serialize/2,
-	 unserialize/1,
-	 
 	 args/2,
 	 args/1,
 
+	 %% rr_classifier behaviour
+	 new/1,  
+	 build/2,
+	 evaluate/4,
+	 partial_build/1,
+	 partial_evaluate/1,
+	 serialize/2,
+	 unserialize/1,
+
+	 %% other
+	 build/4,
+	 
+	 variable_importance/2,
+	 predict/4,
+	 get/1,
 	 kill/1
 	]).
 
@@ -104,6 +101,7 @@ help() ->
 kill(Model) ->
     rr_ensemble:kill(Model).
 
+%% @doc get the underlying model
 get(Model) ->
     rr_ensemble:get_base_classifiers(Model).
 
@@ -164,17 +162,10 @@ evaluate(Conf, Model, Test, ExConf) ->
 %% @end
 serialize(Rf, Model) ->
     Dump = rr_ensemble:get_model(Model, Rf),
-    rr_system:serialize_model(rf, Dump).
+    rr_system:serialize_model(?MODULE, Dump).
 
-%% @doc unserialize a model into a "thing" fit for loading with rr_ensemble:load_model/1
-unserialize(Dump) ->
-    rr_system:unserialize_model(Dump).
-
-save(File, Rf, Model) ->
-    Data = serialize(Rf, Model),
-    file:write_file(File, Data).
-
-load(Model) ->
+%% @doc unserialize a model into a Model
+unserialize(Model) ->
     rr_ensemble:load_model(Model).
 
 %% @doc return a build fun
@@ -454,7 +445,7 @@ variable_importance_test() ->
     Model = rf:build(Rf, ExSet),
     Vi = rf:variable_importance(Model, Rf),
     {MaxFeature, MaxScore} = rr_util:max(fun ({K, V}) -> V end, dict:to_list(Vi)),
-    ?assertEqual(4, MaxFeature).				      
+    ?assertEqual(true,  MaxFeature == 3 orelse MaxFeature == 4).
 
 -ifdef(PROFILE).
 profile_test_() ->
