@@ -82,10 +82,7 @@ evaluate(ExSet, Props) ->
 		   undefined -> throw({badarg, evaluate});
 		   Evaluate0 -> Evaluate0
 	       end,
-    %% AutoKill = case proplists:get_value(auto_kill, Props, true) of
-    %% 		   true -> Evaluate;
-    %% 		   false -> killer(Evaluate)
-    %% 	       end,
+
     NoFolds = proplists:get_value(folds, Props, 10),
     Average = proplists:get_value(average, Props, fun average_cross_validation/2),
     Progress = proplists:get_value(progress, Props, fun (_) -> ok end),

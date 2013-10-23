@@ -6,7 +6,6 @@
 %%% Created : 13 Feb 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(rf_tree).
--author('isak-kar@dsv.su.se').
 -export([
 	 %% model
 	 generate_model/4,
@@ -20,12 +19,7 @@
 
 	 %% prune
 	 example_depth_stop/2,
-	 chisquare_prune/1,
-	 
-	 %% metrics
-	 info/0,
-	 gini/0,
-	 gini_info/1
+	 chisquare_prune/1
 	]).
 
 %% @headerfile "rf_tree.hrl"
@@ -35,7 +29,7 @@
 -spec example_depth_stop(integer(), integer()) -> prune_fun().
 example_depth_stop(MaxExamples, MaxDepth) ->
     fun(Examples, Depth) ->
-	    (Examples =< MaxExamples) or (Depth > MaxDepth)
+	    (Examples =< MaxExamples) orelse (Depth > MaxDepth)
     end.
 
 %% @doc pre-prune if the split is not significantly better than no split
@@ -71,12 +65,13 @@ predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
 -spec predict(ExId::exid(), tree(), #rr_example{},  #rf_tree{}, []) -> prediction().
 predict(_, #rf_leaf{id=NodeNr, class=Class, score=Score}, _ExConf, _Conf, Acc) ->
     {{Class, Score, []}, [NodeNr|Acc]};
-predict(ExId, #rf_node{id=NodeNr, 
-		       feature=F, 
-		       distribution={LeftExamples, RightExamples, {Majority, Count}},
-		       left=Left, 
-		       right=Right}, 
-	ExConf, Conf, Acc) ->
+predict(ExId, Node, ExConf, Conf, Acc) ->
+    #rf_node { 
+       id=NodeNr, 
+       feature=F, 
+       distribution={LeftExamples, RightExamples, {Majority, Count}},
+       left=Left, 
+       right=Right} = Node,
     #rf_tree{distribute=Distribute, missing_values=Missing} = Conf,
     NewAcc = [NodeNr|Acc],
     case Distribute(ExConf, F, ExId) of
@@ -168,37 +163,13 @@ value_split(ExConf, Feature, Examples, Distribute, Missing) ->
 			     rr_example:sample_split_value(Me, Ex)
 		     end).
 
-
 %% @doc make a determinisc split in the numeric data set
 -spec deterministic_split(#rr_example{}, features(), examples(), distribute_fun(), missing_fun()) -> split().
 deterministic_split(ExConf, Feature, Examples, Distribute, Missing) ->
     rr_example:split(ExConf, Feature, Examples, Distribute, Missing, 
 		     fun (Me, {numeric, FeatureId}, Ex) ->
-			     rr_example:find_numeric_split(Me, FeatureId, Ex, info());
+			     rr_example:find_numeric_split(Me, FeatureId, Ex, fun rr_estimator:info/2);
 			 (Me, Ff, Ex) ->
 			     rr_example:sample_split_value(Me, Ff, Ex)
 		     end).
 
-%% @doc random choice between gini-impurity and entropy
--spec gini_info(float()) -> score_fun().
-gini_info(Fraction) ->
-    Gini = gini(),
-    Info = info(),
-    fun (Split, Total) ->
-	    Random = random:uniform(),
-	    if Random =< Fraction ->
-		    Gini(Split, Total);
-	       true ->
-		    Info(Split, Total)
-	    end
-    end.
-
-%% @doc return a scoring function for the gini-importance
--spec gini() -> score_fun().
-gini() ->
-    fun rr_estimator:gini/2.
-
-%% @doc return score function for information gain
--spec info() -> score_fun().
-info() ->
-    fun rr_estimator:info_gain/2.

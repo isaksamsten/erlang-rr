@@ -18,8 +18,7 @@
 -spec evaluate(features(), examples(), #rr_example{}, any()) -> result_set().
 evaluate(Features, Examples, ExConf, Props) ->
     Build = case proplists:get_value(build, Props) of
-		undefined ->
-		    throw({badarg, build});
+		undefined -> throw({badarg, build});
 		BuildFun -> BuildFun
 	    end,
     Evaluate = case proplists:get_value(evaluate, Props) of

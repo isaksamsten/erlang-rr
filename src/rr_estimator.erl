@@ -18,6 +18,8 @@
 	 squared_chord/2,
 	 jensen_difference/2,
 
+	 gini_info/1,
+
 	 %% rule learner
 	 purity/2,
 	 laplace/2,
@@ -28,9 +30,7 @@
 	 ]).
 
 -ifdef(TEST).
-
 -include_lib("eunit/include/eunit.hrl").
-
 -endif.
 
 %% @headerfile "rf_tree.hrl"
@@ -160,7 +160,19 @@ info_content(Side, Total) ->
 -spec info(examples(), integer()) -> number().
 info(Examples, Total) -> info_content(Examples, Total).
     
-
+%% @doc random choice between gini-impurity and entropy
+-spec gini_info(float()) -> score_fun().
+gini_info(Fraction) ->
+    Gini = fun gini/2,
+    Info = fun info/2,
+    fun (Split, Total) ->
+	    Random = random:uniform(),
+	    if Random =< Fraction ->
+		    Gini(Split, Total);
+	       true ->
+		    Info(Split, Total)
+	    end
+    end.
 
 %% @doc calculate the entropy
 -spec entropy(examples()) -> number().

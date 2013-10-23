@@ -182,17 +182,15 @@ partial_evaluate(Rf) ->
 
 %% @doc create a new rf-model
 new(Props) ->
-    NoFeatures = proplists:get_value(
-		   no_features, Props,
-		   fun (T) -> 
-			   trunc(math:log(T)/math:log(2)) + 1 
-		   end),
+    LogFeatures = fun (T) -> trunc(math:log(T)/math:log(2)) + 1 end,
+    NoFeatures = proplists:get_value(no_features, Props,
+				     LogFeatures),		   
     Cores = proplists:get_value(no_cores, Props, 
 				erlang:system_info(schedulers)),
     Missing = proplists:get_value(missing_values, Props, 
 				  fun rf_missing:weighted/6),
     Progress = proplists:get_value(progress, Props, fun (_, _) -> ok end),
-    Score = proplists:get_value(score, Props, rf_tree:info()),
+    Score = proplists:get_value(score, Props, fun rr_estimator:info_gain/2),
     NoTrees = proplists:get_value(no_trees, Props, 100),
     Prune = proplists:get_value(pre_prune, Props, 
 				rf_tree:example_depth_stop(2, 1000)),
@@ -339,9 +337,9 @@ progress(Value, Error) ->
 score(Value, Error, Options) ->
     WeightFactor = proplists:get_value(weight_factor, Options, 0.5),
     case rr_util:safe_iolist_to_binary(Value) of
-	<<"info">> -> rf_tree:info();
-	<<"gini">> -> rf_tree:gini();
-	<<"gini-info">> -> rf_tree:gini_info(WeightFactor);
+	<<"info">> -> fun rr_estimator:info_gain/2;
+	<<"gini">> -> fun rr_esitmator:gini/2;
+	<<"gini-info">> -> rr_estimator:gini_info(WeightFactor);
 	<<"hellinger">> -> fun rr_estimator:hellinger/2;
 	<<"squared-chord">> -> fun rr_estimator:squared_chord/2;
 	<<"jensen-difference">> -> fun rr_estimator:jensen_difference/2;
