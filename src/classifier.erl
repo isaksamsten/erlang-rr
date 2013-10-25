@@ -17,8 +17,11 @@
 %%% @end
 %%% Created : 10 Sep 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
--module(rr_classifier).
+-module(classifier).
+-include("rr.hrl").
+
 -export([
+         update_model/2,
          behaviour_info/1,
          kill/2,
          find/1
@@ -36,7 +39,7 @@ behaviour_info(callbacks) ->
      {build, 2},
      {evaluate, 2},
      
-     {serialize, 2},
+     {serialize, 1},
      {unserialize, 1}
     ].
 
@@ -56,6 +59,11 @@ find(CString) ->
         error ->
             throw({module_not_found, CString})
     end.
+
+%% @doc update a classifier by assigning it a built model
+update_model(Classifier, Model) ->
+    Classifier#classifier{model = Model}.
+    
 
 %% @doc kill (to clean up unused models) after evaluation (to reduce
 %% memory footprint during cross validation)

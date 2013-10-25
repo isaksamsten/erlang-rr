@@ -1,3 +1,9 @@
+-record(classifier, {
+          module :: atom(),
+          model :: undefined | any(),
+          config :: any()
+         }).
+
 -record(rr_ensemble, {
           model :: pid(),
           progress :: any(),
@@ -46,7 +52,7 @@
 %% * score = the score of this split (less is better)
 %% * split = [Left, Right]
 %%
--record(rr_candidate, {
+-record(candidate, {
           feature :: {Feature::feature(), Value::atom()},
           score :: score(), 
           split :: split()

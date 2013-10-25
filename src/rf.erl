@@ -16,7 +16,7 @@
          new/1,  
          build/2,
          evaluate/2,
-         serialize/2,
+         serialize/1,
          unserialize/1,
 
          variable_importance/2,
@@ -26,7 +26,7 @@
         ]).
 
 -behaviour(rr_command).
--behaviour(rr_classifier).
+-behaviour(classifier).
 
 %% @headerfile "rf.hrl"
 -include("rf.hrl").
@@ -152,8 +152,8 @@ evaluate(Rf, Test) ->
 %% serialize configuration Rf togheter with Model 
 %% (i.e. remember both the model and the conf that built it) 
 %% @end
-serialize(Rf, Model) ->
-    Dump = rr_ensemble:get_model(Model, Rf),
+serialize(Rf) ->
+    Dump = rr_ensemble:get_model(Rf),
     rr_system:serialize_model(?MODULE, Dump).
 
 %% @doc unserialize a model into a Model

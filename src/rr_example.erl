@@ -610,7 +610,7 @@ best_split(_, [], _, _, _, _, _, _) ->
     no_features;
 best_split(Me, [F|Features], Examples, Total, Score, Split, Distribute, Missing) ->
     {T, ExSplit} = Split(Me, F, Examples, Distribute, Missing),
-    Cand = #rr_candidate{feature={F, T}, score=Score(ExSplit, Total), split=ExSplit},
+    Cand = #candidate{feature={F, T}, score=Score(ExSplit, Total), split=ExSplit},
     best_split(Me, Features, Examples, Total, Score, Split, Distribute, Missing, Cand).
 
 best_split(_, [], _, _, _, _, _, _, Acc) ->
@@ -618,12 +618,12 @@ best_split(_, [], _, _, _, _, _, _, Acc) ->
 best_split(Me, [F|Features], Examples, Total, Score, Split, Distribute, Missing, OldCand) ->
     Cand = case Split(Me, F, Examples, Distribute, Missing) of
                {Threshold, ExSplit} ->
-                   #rr_candidate{feature = {F, Threshold}, 
+                   #candidate{feature = {F, Threshold}, 
                                  score = Score(ExSplit, Total), 
                                  split = ExSplit}                      
            end,
     best_split(Me, Features, Examples, Total, Score, Split, Distribute, Missing, 
-               case element(1, Cand#rr_candidate.score) < element(1, OldCand#rr_candidate.score) of
+               case element(1, Cand#candidate.score) < element(1, OldCand#candidate.score) of
                    true -> Cand;
                    false -> OldCand
                end).
@@ -890,8 +890,8 @@ best_split_test() ->
                     split(M, F, E, Dm, DM, S)
             end,
     Cand = best_split(#rr_example{}, [1,2], Examples, 20, rf_tree:info(), Split, D, M),
-    ?assertEqual(Cand#rr_candidate.feature, {2, 0.5}),
-    ?assertEqual(Cand#rr_candidate.score, {13.46023334018513,6.730116670092565,6.730116670092565}).
+    ?assertEqual(Cand#candidate.feature, {2, 0.5}),
+    ?assertEqual(Cand#candidate.score, {13.46023334018513,6.730116670092565,6.730116670092565}).
 
 subset_test() ->
     Examples = mock_examples([{a, 10}, {b, 20}]),
