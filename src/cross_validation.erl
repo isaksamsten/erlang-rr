@@ -6,6 +6,9 @@
 %%% Created :  2 Aug 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(cross_validation).
 
+%% @headerfile "rr.hrl"
+-include("dataset.hrl").
+
 -export([
          %% rr_evaluator behaviour
          evaluate/2,
@@ -22,9 +25,6 @@
 
 -behaviour(rr_command).
 -behaviour(rr_evaluator).
-
-%% @headerfile "rr.hrl"
--include("rr.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -260,4 +260,8 @@ test_simple() ->
     Args = args(Opts, fun(_, _) -> ok end),
     ?assertEqual(10, proplists:get_value(folds, Args)),
     ?assertEqual(true, is_function(proplists:get_value(progress, Args))).
+
+test_classification_dataset() ->
+    ok.
+
 -endif.

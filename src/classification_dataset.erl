@@ -116,10 +116,18 @@ update_examples(Dataset, Examples) ->
 %% Both versions are stratified
 %% @end
 -spec split(#dataset{}, {ratio | folds, number()}) -> any().
-split(Dataset, {folds, Folds}) ->
+split(Dataset, {folds, Folds}) when Folds > 1 ->
     new_folds(examples(Dataset), Dataset, Folds, 1, dict:new());
-split(_Dataset, {ratio, _Ratio}) ->
-    ok;
+split(Dataset, {ratio, Ratio}) when Ratio < 1 andalso Ratio > 0 ->
+    Examples = examples(Dataset),
+    {Train, Test} = lists:foldl(fun({Class, Count, Ids}, 
+                                    {TrainAcc, TestAcc}) ->
+                                        {Train, Test} = lists:split(round(Count * Ratio), Ids),
+                                        {[{Class, length(Train), Train}|TrainAcc],
+                                         [{Class, length(Test), Test}|TestAcc]}
+                                end, {[], []}, Examples),
+    {update_examples(Dataset, Train),
+     update_examples(Dataset, Test)};
 split(Dataset, Folds) when is_integer(Folds) ->
     split(Dataset, {folds, Folds});
 split(Dataset, Ratio) when is_float(Ratio) ->
@@ -149,23 +157,53 @@ new_folds_for_class(Class, [Id|Examples], Folds, CurrentFold, Acc) ->
                                                      [{Class, N+1, [Id|Ids]}]
                                              end, Acc)).
 
-%% @doc merges a list of [#dataset{},...] into one #dataset
+%% @doc merges a list of [#dataset{}, #dataset{},...] into one #dataset
+merge([Dataset]) ->
+    Dataset;
 merge(Datasets) ->
     Examples = lists:foldl(fun (Fold, Acc) -> 
                                    lists:zipwith(fun merge/2, examples(Fold), Acc) 
-                           end, [], Datasets),
+                           end, examples(hd(Datasets)), tl(Datasets)),
     update_examples(hd(Datasets), Examples).
 
+%% @private
 merge({Class, Ca, Ia}, {Class, Cb, Ib}) ->
     {Class, Ca + Cb, Ia ++ Ib}.
 
-                                   
-
-
--ifdef(test).
+-ifdef(TEST).
 
 classification_test_() ->
     dataset_tests().
+
+dataset_tests() ->
+    Dataset = load(csv:binary_reader("../data/iris.txt"), csv),
+    [
+     {"Test loading",
+      {timeout, 30, test_loaded(Dataset)}},
+     {"Test feature value",
+      {timeout, 30, test_get_featurevalue(Dataset)}},
+     {"Test split into folds",
+      {timeout, 30, test_split_folds(Dataset)}},
+     {"Test split into train test",
+      {timeout, 30, test_split_ratio(Dataset)}}
+    ] ++ [{lists:flatten(io_lib:format("Test merge ~p folds", [F])),
+           {timeout, 30, test_merge(Dataset, F)}} || F <- lists:seq(2, 10)].
+
+test_split_folds(Dataset) ->
+    Folds = split(Dataset, {folds, 10}),
+    ?_assertEqual(10, dict:size(Folds)).
+
+test_split_ratio(Dataset) ->
+    {Train, Test} = split(Dataset, {ratio, 0.5}),
+    ?_assert(no_examples(Train) == no_examples(Test)).
+
+test_merge(Dataset, F) ->
+    Folds = split(Dataset, {folds, F}),
+    First = dict:fetch(1, Folds),
+    ToMerge = dict:fold(fun (_Fold, Fold, Acc) -> [Fold|Acc] end, [], dict:erase(1, Folds)),
+    Merge = merge(ToMerge),
+    ?_assertEqual(150-no_examples(First), no_examples(Merge)).
+                                
 
 test_get_featurevalue(Dataset) ->
     ?_assertEqual(5.1, value(Dataset, 1, {numeric, 1})).
