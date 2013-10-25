@@ -19,10 +19,10 @@
 
 -module(rr_classifier).
 -export([
-	 behaviour_info/1,
-	 kill/2,
-	 find/1
-	]).
+         behaviour_info/1,
+         kill/2,
+         find/1
+        ]).
 
 -type classifier_key() :: build | evaluate | '$config' | '$module'.
 -type classifier_attr() :: {classifier_key(), fun()}.
@@ -34,10 +34,8 @@ behaviour_info(callbacks) ->
      {kill, 1},
 
      {build, 2},
-     {evaluate, 4},
-     {partial_build, 1},
-     {partial_evaluate, 1},
-
+     {evaluate, 2},
+     
      {serialize, 2},
      {unserialize, 1}
     ].
@@ -46,24 +44,24 @@ behaviour_info(callbacks) ->
 -spec find(string()) -> classifier_attrs().
 find(CString) ->
     case rr:get_classifier(CString) of
-	{Classifier, Args} ->
-	    Opts = Classifier:args(Args),
-	    Rf = Classifier:new(Opts),
-	    Build = Classifier:partial_build(Rf),
-	    Evaluate = Classifier:partial_evaluate(Rf),
-	    [{build, Build}, 
-	     {evaluate, kill(Classifier, Evaluate)}, 
-	     {'$config', Rf}, 
-	     {'$module', Classifier}];
-	error ->
-	    throw({module_not_found, CString})
+        {Classifier, Args} ->
+            Opts = Classifier:args(Args),
+            Rf = Classifier:new(Opts),
+            Build = Classifier:partial_build(Rf),
+            Evaluate = Classifier:partial_evaluate(Rf),
+            [{build, Build}, 
+             {evaluate, kill(Classifier, Evaluate)}, 
+             {'$config', Rf}, 
+             {'$module', Classifier}];
+        error ->
+            throw({module_not_found, CString})
     end.
 
 %% @doc kill (to clean up unused models) after evaluation (to reduce
 %% memory footprint during cross validation)
 kill(Classifier, Evaluate) ->
     fun (Model, Test, ExConf) ->
-	    Result = Evaluate(Model, Test, ExConf),
-	    Classifier:kill(Model),
-	    Result
+            Result = Evaluate(Model, Test, ExConf),
+            Classifier:kill(Model),
+            Result
     end.

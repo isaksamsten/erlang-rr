@@ -6,11 +6,12 @@
 %%% Created : 23 Oct 2013 by Isak Karlsson <isak@dhcp-158-243.dsv.su.se>
 
 -module(classification_dataset).
--include("dataset.hrl").
+-include("rr.hrl").
+
 -behaviour(dataset).
 -export([
+         load/1,
          load/2,
-         load/3,
 
          value/3,
          vector/2,
@@ -30,11 +31,11 @@
 -endif.
 
 %% @doc ....
-load(Source, Reader, Options) ->
+load(Source, Options) ->
     NewOptions = [{map, {fun update_class_distribution/2, dict:new()}},
                   {reduce, {fun reduce_class_distributions/2, dict:new()}},
                   {target, class}] ++ Options,
-    {Features, Examples, Database} = dataset:load(Source, Reader, NewOptions),
+    {Features, Examples, Database} = dataset:load(Source, NewOptions),
     FormattedExamples = format_class_distribution(Examples),
     #dataset {
        target = class,
@@ -47,8 +48,8 @@ load(Source, Reader, Options) ->
       }.
 
 %% @doc ....
-load(Source, Reader) ->
-    load(Source, Reader, [{cores, 4}]).
+load(Source) ->
+    load(Source, [{cores, 4}]).
 
 %% @private format a class distribution by sorting the list formed by a dict()
 format_class_distribution(Examples) ->
@@ -176,7 +177,7 @@ classification_test_() ->
     dataset_tests().
 
 dataset_tests() ->
-    Dataset = load(csv:binary_reader("../data/iris.txt"), csv),
+    Dataset = load(csv:binary_reader("../data/iris.txt")),
     [
      {"Test loading",
       {timeout, 30, test_loaded(Dataset)}},

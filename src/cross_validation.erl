@@ -7,14 +7,12 @@
 -module(cross_validation).
 
 %% @headerfile "rr.hrl"
--include("dataset.hrl").
+-include("rr.hrl").
 
 -export([
          %% rr_evaluator behaviour
          evaluate/2,
 
-         %% public api
-         cross_validation/3,
          average_cross_validation/3,
 
          %% rr_command behaviour
@@ -72,8 +70,8 @@ progress(_Value, _Error) ->
 %% @doc
 %% Perform cross-validation on examples
 %% @end
--spec evaluate(example_set(), any()) -> result_set().
-evaluate(ExSet, Props) ->
+%-spec evaluate(example_set(), any()) -> result_set().
+evaluate(Dataset, Props) ->
     Build = case proplists:get_value(build, Props) of
                 undefined -> throw({badarg, build});
                 Build0 -> Build0
@@ -82,69 +80,34 @@ evaluate(ExSet, Props) ->
                    undefined -> throw({badarg, evaluate});
                    Evaluate0 -> Evaluate0
                end,
-
     NoFolds = proplists:get_value(folds, Props, 10),
     Average = proplists:get_value(average, Props, fun average_cross_validation/2),
     Progress = proplists:get_value(progress, Props, fun (_) -> ok end),
-    #rr_exset {
-       features = Features,
-       examples = Examples,
-       exconf = ExConf
-      } = ExSet,
+    Module = Dataset#dataset.module,
     Total0 = cross_validation(
                fun (Train, Test, Fold) ->
                        Progress(Fold),
-                       Model = Build(Features, Train, ExConf),
-                       Result = Evaluate(Model, Test, ExConf),
-                       {{{fold, Fold}, Result}, Model}
-               end, NoFolds, Examples),
+                       Model = Build(Train),
+                       Result = Evaluate(Model, Test),
+                       {{{fold, Fold}, Result}, Model}                       
+               end, NoFolds, Module, Dataset),
     {Total, Models} = lists:unzip(Total0),
     Avg = Average(Total, NoFolds),
     {{cv, NoFolds, Total ++ [Avg]}, Models}.
 
 %% @doc stratified cross validation
--spec cross_validation(fun((Train::examples(), Test::examples(), Fold::integer()) -> []), integer(), examples()) -> [].
-cross_validation(Fun, NoFolds, Examples) ->
-    Folds = generate_folds(Examples, NoFolds),
-    cross_validation(Fun, Folds, NoFolds, NoFolds, []).
+cross_validation(Fun, NoFolds, Module, Dataset) ->
+    Folds = Module:split(Dataset, {folds, NoFolds}),
+    cross_validation(Fun, Folds, NoFolds, NoFolds, Module, []).
 
 %% @private
-cross_validation(_Fun, _Folds, _NoFolds, 0, Acc) -> 
-    lists:reverse(Acc);
-cross_validation(Fun, Folds, NoFolds, CurrentFold, Acc) -> 
+cross_validation(_Fun, _Folds, _NoFolds, 0, _, Results) -> 
+    lists:reverse(Results);
+cross_validation(Fun, Folds, NoFolds, CurrentFold, Module, Results) -> 
     {Test, Train} = merge_folds(Folds, CurrentFold),
-    Result = Fun(Train, Test, NoFolds - CurrentFold + 1),
-    cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, [Result|Acc]).
+    Result = Fun(Module:merge(Train), Test, NoFolds - CurrentFold + 1),
+    cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, Module, [Result|Results]).
 
-%% @doc generate a dictionary of Folds folds.
--spec generate_folds(examples(), integer()) -> dict().
-generate_folds(Examples, Folds) ->
-    generate_folds(Examples, Folds, 1, dict:new()).
-
-%% @private
-generate_folds([], _, _, Acc) ->
-    Acc;
-generate_folds([{Class, _, ExIds}|Rest], Folds, CurrentFold, Acc) ->
-    {ClassFolds, NewCurrentFold} = generate_folds_for_class(Class, ExIds, Folds, CurrentFold, 
-                                                            make_default_folds(Folds, Class, dict:new())),
-    NewAcc = dict:merge(fun (_, A, B) -> A ++ B end, ClassFolds, Acc),
-    generate_folds(Rest, Folds, NewCurrentFold, NewAcc).
-
-%% @private
-make_default_folds(0, _, Acc) ->
-    Acc;
-make_default_folds(Fold, Class, Acc) ->
-    make_default_folds(Fold - 1, Class, dict:store(Fold, [{Class, 0, []}], Acc)).
-
-%% @private
-generate_folds_for_class(_, [], _, Current, Acc ) ->
-    {Acc, Current};
-generate_folds_for_class(Class, [Id|ExIds], Folds, CurrentFold, Acc) ->
-    Current = if Folds < CurrentFold -> 1; true -> CurrentFold end,
-    generate_folds_for_class(Class, ExIds, Folds, Current + 1,
-                             dict:update(Current, fun ([{C, N, Ids}]) ->
-                                                          [{C, N+1, [Id|Ids]}]
-                                                  end, Acc)).
 %% @private
 init_folds(Folds, Init, Test) ->
     Init0 = dict:fetch(Init, Folds),
@@ -161,11 +124,7 @@ merge_folds(Folds, Test) ->
                                 _Other ->
                                     init_folds(Folds, 1, Test)
                             end,
-    Train = dict:fold(fun (_, Fold, Acc) ->
-                              lists:zipwith(fun ({Class, Ca, Ia}, {Class, Cb, Ib}) ->
-                                                    {Class, Ca+Cb, Ia++Ib}
-                                            end, Fold, Acc)
-                      end, Init, Rest),
+    Train = dict:fold(fun (_, Fold, Acc) -> [Fold|Acc] end, [Init], Rest),
     {TestSet, Train}.
 
 %% @private default method for averaging the results of cross-validation
@@ -261,7 +220,13 @@ test_simple() ->
     ?assertEqual(10, proplists:get_value(folds, Args)),
     ?assertEqual(true, is_function(proplists:get_value(progress, Args))).
 
-test_classification_dataset() ->
-    ok.
+classification_dataset_test() ->
+    Dataset = classification_dataset:load(csv:binary_reader("../data/iris.txt")),
+    Module = classification_dataset,
+    Result = cross_validation(fun (Train, Test, _) ->
+                                 {Module:no_examples(Train), Module:no_examples(Test)}
+                         end, 10, Module, Dataset),
+    ?assertEqual(10, length(Result)).
+
 
 -endif.

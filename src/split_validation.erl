@@ -10,21 +10,21 @@
 -behaviour(rr_evaluator).
 
 -export([
-	 evaluate/2,
+         evaluate/2,
 
-	 help/0,
-	 parse_args/1,
-	 args/1
-	]).
+         help/0,
+         parse_args/1,
+         args/1
+        ]).
 
 %% @headerfile "rr.hrl"
 -include("rr.hrl").
 
 -define(NAME, "sv").
 -define(CMD_SPEC, 
-	[{<<"ratio">>, $f, "ratio", {float, 0.66},
-	  "Split dataset into two parts - one for building the model and one for testing it."}
-	]).
+        [{<<"ratio">>, $f, "ratio", {float, 0.66},
+          "Split dataset into two parts - one for building the model and one for testing it."}
+        ]).
 
 help() ->
     rr:show_help(options, ?CMD_SPEC, "sv").
@@ -42,31 +42,26 @@ args(Args, Error) ->
 args(Key, Args, Error) ->
     Value = proplists:get_value(Key, Args),
     case Key of
-	<<"ratio">> ->
-	    Value;
-	_ ->
-	    Error("sv", Key)
+        <<"ratio">> ->
+            Value;
+        _ ->
+            Error("sv", Key)
     end.
-
 
 %% @doc split examples and train and evaluate
 -spec evaluate(example_set(), any()) -> result_set().
-evaluate(ExSet, Props) ->
+evaluate(Dataset, Props) ->
     Build = case proplists:get_value(build, Props) of
-		undefined -> throw({badarg, build});
-		Build0 -> Build0
-	    end,
+                undefined -> throw({badarg, build});
+                Build0 -> Build0
+            end,
     Evaluate = case proplists:get_value(evaluate, Props) of
-		   undefined -> throw({badarg, evaluate});
-		   Evaluate0 -> Evaluate0
-	       end,
-    #rr_exset {
-       features = Features,
-       examples = Examples,
-       exconf = ExConf
-      } = ExSet,
+                   undefined -> throw({badarg, evaluate});
+                   Evaluate0 -> Evaluate0
+               end,
     Ratio = proplists:get_value(ratio, Props, 0.66),
-    {Train, Test} = rr_example:split_dataset(Examples, Ratio),
-    Model = Build(Features, Train, ExConf),
-    Result = Evaluate(Model, Test, ExConf),
+    Module = Dataset#dataset.module,
+    {Train, Test} = Module:split(Dataset, {ratio, Ratio}),
+    Model = Build(Train),
+    Result = Evaluate(Model, Test),
     {{split, {{ratio, Ratio}, Result}}, Model}.

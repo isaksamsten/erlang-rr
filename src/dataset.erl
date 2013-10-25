@@ -14,11 +14,11 @@
 %%% Created : 23 Oct 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 
 -module(dataset).
+-include("rr.hrl").
 
--include("dataset.hrl").
 -export([
-	 behaviour_info/1
-	]).
+         behaviour_info/1
+        ]).
 -compile(export_all).
 
 -ifdef(TEST).
@@ -28,8 +28,8 @@
 %% @private
 behaviour_info(callbacks) ->
     [
-     {load, 2}, 
-     {load, 3},
+     {load, 1}, 
+     {load, 2},
 
      {value, 3},
      {vector, 2},
@@ -64,7 +64,7 @@ kill(#dataset{database = Database}) ->
     ets:delete(Database#database.values).
 
 %% @doc
-%% Load the Source using the Reader.
+%% Load Source file
 %% 
 %% === Options ===
 %% ```[ 
@@ -78,20 +78,21 @@ kill(#dataset{database = Database}) ->
 %% where (sensible) default options are provided for `store_examples' and `cores'.
 %%
 %% @end
-load(Source, Reader, Options) ->
+load({Reader, Source}, Options) ->
     Database = new_database(),
     Cores = proplists:get_value(cores, Options, erlang:system_info(schedulers)),
     Map = proplists:get_value(map, Options),
     Reduce = proplists:get_value(reduce, Options),
     Target = proplists:get_value(target, Options),
     Store = proplists:get_value(store_example, Options, fun insert_features/2),
-    load(Source, Reader, Database, Map, Reduce, Store, Target, Cores).
+    io:format("~p ~n",[Source]),
+    load(Reader, Source, Database, Map, Reduce, Store, Target, Cores).
 
 %% @private
-load(Source, Reader, Database, Map, Reduce, Store, Target, Cores) ->
+load(Reader, Source, Database, Map, Reduce, Store, Target, Cores) ->
     {ok, TargetId, Types} = parse_type_declaration(element(2, Reader:next_line(Source)), Target),
     {ok, Features} = parse_feature_declaration(element(2, Reader:next_line(Source)), Types, TargetId,
-					       Database#database.features),
+                                               Database#database.features),
     {ok, Examples} = parse_examples(Source, Reader, Database, Types, Map, Reduce, Store, TargetId, Cores),
     {Features, Examples, Database}.
 
@@ -106,14 +107,14 @@ parse_type_declaration([], TargetId, _IdId, _, _, Acc) ->
 parse_type_declaration([Type0|Rest], ClassId, Id, Inc, Target, Acc) ->
     Type = list_to_atom(string:to_lower(Type0)),
     case Type of
-	Type when Type =:= numeric; Type =:= categoric ->
-	    parse_type_declaration(Rest, ClassId, Id, Inc + 1, Target, [Type|Acc]);
-	Type when Type =:= Target; ClassId =:= missing ->
-	    parse_type_declaration(Rest, Inc, Id, Inc + 1, Target, Acc);
-	Type when Type =:= id ->
-	    parse_type_declaration(Rest, ClassId, Id, Inc, Target, Acc); % NOTE: not working
-	_ ->
-	    {error, {bad_types, Id}}
+        Type when Type =:= numeric; Type =:= categoric ->
+            parse_type_declaration(Rest, ClassId, Id, Inc + 1, Target, [Type|Acc]);
+        Type when Type =:= Target; ClassId =:= missing ->
+            parse_type_declaration(Rest, Inc, Id, Inc + 1, Target, Acc);
+        Type when Type =:= id ->
+            parse_type_declaration(Rest, ClassId, Id, Inc, Target, Acc); % NOTE: not working
+        _ ->
+            {error, {bad_types, Id}}
     end.
 
 %% @private parse a feature declaration according to the type declaration
@@ -121,9 +122,9 @@ parse_feature_declaration(Features0, Types, TargetId, FeatureDatabase) ->
     {TargetName, Features} = cherrypick(Features0, TargetId),
     ets:insert(FeatureDatabase, {0, TargetName}),
     if length(Features) =/= length(Types) ->
-	    {error, {bad_features, length(Features)}};
+            {error, {bad_features, length(Features)}};
        true ->
-	    {ok, parse_feature_declaration(Features, Types, FeatureDatabase, 1, [])}
+            {ok, parse_feature_declaration(Features, Types, FeatureDatabase, 1, [])}
     end.
 
 %% @private
@@ -149,16 +150,16 @@ spawn_parse_example_processes(Source, Reader, Database, Types, Map, Store, Targe
 %% @private
 parse_example_process(Parent, Source, Reader, Database, Types, TargetId, Store, {Map, Acc}) ->
     case Reader:next_line(Source) of
-	{row, Example, Row} ->
-	    {Class, Attributes} = cherrypick(Example, TargetId),
-	    Id = Row - 2,
-	    AttributeList = parse_example_attributes(Attributes, Types, 1, [Id]),
-	    ok = Store(Database, AttributeList),
-	    NewAcc = Map({Class, Id}, Acc),
-	    parse_example_process(Parent, Source, Reader, Database, 
+        {row, Example, Row} ->
+            {Class, Attributes} = cherrypick(Example, TargetId),
+            Id = Row - 2,
+            AttributeList = parse_example_attributes(Attributes, Types, 1, [Id]),
+            ok = Store(Database, AttributeList),
+            NewAcc = Map({Class, Id}, Acc),
+            parse_example_process(Parent, Source, Reader, Database, 
                                   Types, TargetId, Store, {Map, NewAcc});
-	eof ->
-	    Parent ! {done, Parent, Acc}
+        eof ->
+            Parent ! {done, Parent, Acc}
     end.
 
 %% @private collect the results from process parsing the examples
@@ -166,11 +167,11 @@ collect_parse_example_processes(_, 0, {_, Acc}) ->
     {ok, Acc};
 collect_parse_example_processes(Self, Cores, {Reduce, Acc}) ->
     receive
-	{done, Self, Part} ->
-	    NewAcc = Reduce(Part, Acc),
-	    collect_parse_example_processes(Self, Cores - 1, {Reduce, NewAcc});
-	{error, Self, Reason} ->
-	    {error, Reason}
+        {done, Self, Part} ->
+            NewAcc = Reduce(Part, Acc),
+            collect_parse_example_processes(Self, Cores - 1, {Reduce, NewAcc});
+        {error, Self, Reason} ->
+            {error, Reason}
     end.
 
 %% @private insert feature values into database
@@ -183,10 +184,10 @@ parse_example_attributes([], [], _, Acc) ->
     lists:reverse(Acc);
 parse_example_attributes([Value|Values], [Type|Types], Column, Acc) ->
     FeatureValue = case format_attribute_value(Type, Value) of
-		       '?' -> '?';
-		       error -> throw({error, {invalid_number_format, Column, Value}});
-		       FormattedValue -> FormattedValue
-		   end,
+                       '?' -> '?';
+                       error -> throw({error, {invalid_number_format, Column, Value}});
+                       FormattedValue -> FormattedValue
+                   end,
     parse_example_attributes(Values, Types, Column + 1, [FeatureValue|Acc]).
 
 %% @doc determine if a string is a number or missing (?)
@@ -196,14 +197,14 @@ format_attribute_value(numeric, Value) ->
     L = if is_binary(Value) -> binary_to_list(Value); true -> Value end,
     Float = (catch erlang:list_to_float(L)),
     case is_number(Float) of
-	true -> Float;
-	false ->
-	    Int = (catch erlang:list_to_integer(L)),
-	    case is_number(Int) of
-		true -> Int;
-		false ->
-		    error
-	    end
+        true -> Float;
+        false ->
+            Int = (catch erlang:list_to_integer(L)),
+            case is_number(Int) of
+                true -> Int;
+                false ->
+                    error
+            end
     end;
 format_attribute_value(categoric, Value) ->
     list_to_binary(Value).
