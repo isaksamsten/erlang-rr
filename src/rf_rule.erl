@@ -15,8 +15,8 @@
 	 purity/2
 	]).
 
-%% @headerfile "rf_tree.hrl"
--include("rf_tree.hrl").
+%% @headerfile "rf.hrl"
+-include("rf.hrl").
 
 %% @doc generate one best rule
 -spec best(features(), examples(), number(), #rr_example{}, Conf::#rf_tree{}, integer(), integer(), score_fun()) -> #rr_candidate{}.

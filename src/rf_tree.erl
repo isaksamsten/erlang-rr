@@ -22,8 +22,8 @@
 	 chisquare_prune/1
 	]).
 
-%% @headerfile "rf_tree.hrl"
--include("rf_tree.hrl").
+%% @headerfile "rf.hrl"
+-include("rf.hrl").
 
 %% @doc prune if to few examples or to deep tree
 -spec example_depth_stop(integer(), integer()) -> prune_fun().

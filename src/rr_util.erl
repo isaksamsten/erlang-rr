@@ -24,7 +24,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-
 %% @doc List should be sorted with the highest Weight first and the weights should sum to 1
 -spec weighted_random([{Weight::float(), Item::any()},...]) -> Item::any().
 weighted_random(List) ->
@@ -89,9 +88,7 @@ shuffle(List) ->
 shuffle_list(Ids0) ->
     [Id || {_, Id} <- lists:keysort(1, lists:map(fun (Id) -> {random:uniform(), Id} end, Ids0))].
 
-
 -ifdef(TEST).
-
 weighted_list() ->
      [{0.40, a}, {0.25, b}, {0.15, c}, {0.1, d}, {0.05, e}, {0.05, f}].
 

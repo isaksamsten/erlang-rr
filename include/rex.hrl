@@ -1,4 +1,4 @@
--include("rf_tree.hrl").
+-include("rf.hrl").
 
 -record(rex, {
 	  classifier :: any(),

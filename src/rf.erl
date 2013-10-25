@@ -33,8 +33,8 @@
 -behaviour(rr_command).
 -behaviour(rr_classifier).
 
-%% @headerfile "rf_tree.hrl"
--include("rf_tree.hrl").
+%% @headerfile "rf.hrl"
+-include("rf.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

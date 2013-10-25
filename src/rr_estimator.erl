@@ -33,8 +33,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-%% @headerfile "rf_tree.hrl"
--include("rf_tree.hrl").
+%% @headerfile "rf.hrl"
+-include("rf.hrl").
 
 %% @doc
 gini({both, Left, Right}, Total) ->

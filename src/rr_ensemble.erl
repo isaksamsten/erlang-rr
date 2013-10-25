@@ -11,8 +11,8 @@
 
 -define(VERSION, '1.1').
 
-%% @headerfile "rf_tree.hrl"
--include("rf_tree.hrl").
+%% @headerfile "rf.hrl"
+-include("rf.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
