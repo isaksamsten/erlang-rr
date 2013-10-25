@@ -72,41 +72,33 @@ progress(_Value, _Error) ->
 %% @end
 %-spec evaluate(example_set(), any()) -> result_set().
 evaluate(Dataset, Props) ->
-    Build = case proplists:get_value(build, Props) of
-                undefined -> throw({badarg, build});
-                Build0 -> Build0
-            end,
-    Evaluate = case proplists:get_value(evaluate, Props) of
-                   undefined -> throw({badarg, evaluate});
-                   Evaluate0 -> Evaluate0
-               end,
+    Classifier = proplist:get_value(classifier, Props),
     NoFolds = proplists:get_value(folds, Props, 10),
     Average = proplists:get_value(average, Props, fun average_cross_validation/2),
     Progress = proplists:get_value(progress, Props, fun (_) -> ok end),
-    Module = Dataset#dataset.module,
     Total0 = cross_validation(
                fun (Train, Test, Fold) ->
                        Progress(Fold),
-                       Model = Build(Train),
-                       Result = Evaluate(Model, Test),
+                       Model = classifier:build(Classifier, Train),
+                       Result = classifier:evaluate(Model, Test),
                        {{{fold, Fold}, Result}, Model}                       
-               end, NoFolds, Module, Dataset),
+               end, NoFolds, Dataset),
     {Total, Models} = lists:unzip(Total0),
     Avg = Average(Total, NoFolds),
     {{cv, NoFolds, Total ++ [Avg]}, Models}.
 
 %% @doc stratified cross validation
-cross_validation(Fun, NoFolds, Module, Dataset) ->
-    Folds = Module:split(Dataset, {folds, NoFolds}),
-    cross_validation(Fun, Folds, NoFolds, NoFolds, Module, []).
+cross_validation(Fun, NoFolds, Dataset) ->
+    Folds = dataset:split(Dataset, {folds, NoFolds}),
+    cross_validation(Fun, Folds, NoFolds, NoFolds, []).
 
 %% @private
-cross_validation(_Fun, _Folds, _NoFolds, 0, _, Results) -> 
+cross_validation(_Fun, _Folds, _NoFolds, 0, Results) -> 
     lists:reverse(Results);
-cross_validation(Fun, Folds, NoFolds, CurrentFold, Module, Results) -> 
+cross_validation(Fun, Folds, NoFolds, CurrentFold,  Results) -> 
     {Test, Train} = merge_folds(Folds, CurrentFold),
-    Result = Fun(Module:merge(Train), Test, NoFolds - CurrentFold + 1),
-    cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, Module, [Result|Results]).
+    Result = Fun(dataset:merge(Train), Test, NoFolds - CurrentFold + 1),
+    cross_validation(Fun, Folds, NoFolds, CurrentFold - 1, [Result|Results]).
 
 %% @private
 init_folds(Folds, Init, Test) ->
@@ -222,11 +214,9 @@ test_simple() ->
 
 classification_dataset_test() ->
     Dataset = classification_dataset:load(csv:binary_reader("../data/iris.txt")),
-    Module = classification_dataset,
     Result = cross_validation(fun (Train, Test, _) ->
-                                 {Module:no_examples(Train), Module:no_examples(Test)}
-                         end, 10, Module, Dataset),
+                                 {dataset:no_examples(Train), dataset:no_examples(Test)}
+                         end, 10, Dataset),
     ?assertEqual(10, length(Result)).
-
 
 -endif.

@@ -21,10 +21,18 @@
 -include("rr.hrl").
 
 -export([
-         update_model/2,
          behaviour_info/1,
          kill/2,
-         find/1
+         find/1,
+
+         %% public api
+         update/3,
+         
+         kill/1,
+         build/2,
+         evaluate/2,
+         serialize/1,
+         unserialize/1
         ]).
 
 -type classifier_key() :: build | evaluate | '$config' | '$module'.
@@ -61,8 +69,8 @@ find(CString) ->
     end.
 
 %% @doc update a classifier by assigning it a built model
-update_model(Classifier, Model) ->
-    Classifier#classifier{model = Model}.
+update(Target, Classifier, Model) ->
+    {Target, Classifier#classifier{model = Model}}.
     
 
 %% @doc kill (to clean up unused models) after evaluation (to reduce
@@ -73,3 +81,27 @@ kill(Classifier, Evaluate) ->
             Classifier:kill(Model),
             Result
     end.
+
+%%% public api
+
+%% @doc
+kill({Target, Classifier}) ->
+    Target:kill(Classifier).
+
+%% @doc
+build({Target, Classifier}, Dataset) ->
+    Target:build(Classifier, Dataset).
+
+%% @doc
+evaluate({Target, Classifier}, Dataset) ->
+    Target:evaluate(Classifier, Dataset).
+
+%% @doc
+serialize({Target, Classifier}) ->
+    Target:serialize(Classifier).
+
+%% @doc
+unserialize({Target, Classifier}) -> 
+    Target:unserialize(Classifier).
+
+

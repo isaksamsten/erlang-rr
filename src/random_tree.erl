@@ -56,24 +56,24 @@ new(Props) ->
     Distribute = proplists:get_value(distribute, Props,
                                      fun rr_example:distribute/3),
     Split = proplists:get_value(split, Props, fun rf_tree:random_split/5),
-    #classifier{
-       module = ?MODULE, 
-       config = #rf_tree{
-                   score = Score,
-                   prune = Prune,
-                   branch = FeatureSampling,
-                   split = Split,
-                   distribute = Distribute,
-                   missing_values = Missing,
-                   no_features = NoFeatures
-                  }}.
+    {?MODULE, #classifier{
+                 model = undefined,
+                 config = #rf_tree{
+                             score = Score,
+                             prune = Prune,
+                             branch = FeatureSampling,
+                             split = Split,
+                             distribute = Distribute,
+                             missing_values = Missing,
+                             no_features = NoFeatures
+                            }}}.
 
 build(RandomTree, Dataset) ->
     #dataset{target = class, module = Module} = Dataset,
     Info = rr_estimator:info(Module:examples(Dataset), Module:no_examples(Dataset)),
     Config = RandomTree#classifier.config,
     Model = build_node(Config, Dataset, dict:new(), 0, Info, 1, 1, 1),
-    classifier:update(RandomTree, Model).
+    classifier:update(?MODULE, RandomTree, Model).
 
 evaluate(RandomTree, Dataset) ->
     RandomTree,

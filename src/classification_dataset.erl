@@ -37,15 +37,15 @@ load(Source, Options) ->
                   {target, class}] ++ Options,
     {Features, Examples, Database} = dataset:load(Source, NewOptions),
     FormattedExamples = format_class_distribution(Examples),
-    #dataset {
-       target = class,
-       module = ?MODULE,
-       features = Features,
-       no_features = length(Features),
-       no_examples = count(FormattedExamples),
-       examples = FormattedExamples,
-       database = Database
-      }.
+    {?MODULE, #dataset {
+                 target = class,
+                 module = ?MODULE,
+                 features = Features,
+                 no_features = length(Features),
+                 no_examples = count(FormattedExamples),
+                 examples = FormattedExamples,
+                 database = Database
+                }}.
 
 %% @doc ....
 load(Source) ->
@@ -104,7 +104,7 @@ count(Examples) ->
 
 %% @private update the example ids in Dataset
 update_examples(Dataset, Examples) ->
-    Dataset#dataset{examples = Examples, no_examples = count(Examples)}.
+    {?MODULE, Dataset#dataset{examples = Examples, no_examples = count(Examples)}}.
 
 %% @doc
 %%
@@ -162,10 +162,12 @@ new_folds_for_class(Class, [Id|Examples], Folds, CurrentFold, Acc) ->
 merge([Dataset]) ->
     Dataset;
 merge(Datasets) ->
-    Examples = lists:foldl(fun (Fold, Acc) -> 
-                                   lists:zipwith(fun merge/2, examples(Fold), Acc) 
-                           end, examples(hd(Datasets)), tl(Datasets)),
-    update_examples(hd(Datasets), Examples).
+    {?MODULE, First} = hd(Datasets),
+    Examples = lists:foldl(
+                 fun ({?MODULE, Fold}, Acc) -> 
+                         lists:zipwith(fun merge/2, examples(Fold), Acc) 
+                 end, examples(First), tl(Datasets)),
+    update_examples(First, Examples).
 
 %% @private
 merge({Class, Ca, Ia}, {Class, Cb, Ib}) ->
@@ -191,27 +193,27 @@ dataset_tests() ->
            {timeout, 30, test_merge(Dataset, F)}} || F <- lists:seq(2, 10)].
 
 test_split_folds(Dataset) ->
-    Folds = split(Dataset, {folds, 10}),
+    Folds = dataset:split(Dataset, {folds, 10}),
     ?_assertEqual(10, dict:size(Folds)).
 
 test_split_ratio(Dataset) ->
-    {Train, Test} = split(Dataset, {ratio, 0.5}),
-    ?_assert(no_examples(Train) == no_examples(Test)).
+    {Train, Test} = dataset:split(Dataset, {ratio, 0.5}),
+    ?_assert(dataset:no_examples(Train) == dataset:no_examples(Test)).
 
 test_merge(Dataset, F) ->
-    Folds = split(Dataset, {folds, F}),
+    Folds = dataset:split(Dataset, {folds, F}),
     First = dict:fetch(1, Folds),
     ToMerge = dict:fold(fun (_Fold, Fold, Acc) -> [Fold|Acc] end, [], dict:erase(1, Folds)),
     Merge = merge(ToMerge),
-    ?_assertEqual(150-no_examples(First), no_examples(Merge)).
+    ?_assertEqual(150-dataset:no_examples(First), dataset:no_examples(Merge)).
                                 
 
 test_get_featurevalue(Dataset) ->
-    ?_assertEqual(5.1, value(Dataset, 1, {numeric, 1})).
+    ?_assertEqual(5.1, dataset:value(Dataset, 1, {numeric, 1})).
     
 test_loaded(Dataset) ->
-    Features = Dataset#dataset.features,
-    Classes = [Class || {Class, _, _} <- Dataset#dataset.examples],
+    Features = dataset:features(Dataset),
+    Classes = [Class || {Class, _, _} <- dataset:examples(Dataset)],
     ?_assertEqual([{numeric,1},{numeric,2},{numeric,3},{numeric,4}], Features),
     ?_assertEqual(['Iris-setosa', 'Iris-versicolor', 'Iris-virginica'], 
                   lists:sort(Classes)).

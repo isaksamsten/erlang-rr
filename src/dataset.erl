@@ -17,9 +17,23 @@
 -include("rr.hrl").
 
 -export([
-         behaviour_info/1
+         behaviour_info/1,
+         load/2,
+         kill/1,
+
+         value/3,
+         vector/2,
+         
+         examples/1,
+         features/1,
+
+         no_examples/1,
+         no_features/1,
+     
+         merge/1,
+         split/2
         ]).
--compile(export_all).
+
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -214,6 +228,40 @@ format_attribute_value(categoric, Value) ->
 cherrypick(List, N) ->
     {L1, [Item|L2]} = lists:split(N - 1, List),
     {list_to_atom(Item), L1 ++ L2}.
+
+%%% public api
+
+%% @doc
+examples({Target, Dataset}) ->
+    Target:examples(Dataset).
+
+%% @doc
+features({Target, Dataset}) ->
+    Target:features(Dataset).
+
+%% @doc
+vector({Target, Dataset}, Example) ->
+    Target:vector(Dataset, Example).
+
+%% @doc
+value({Target, Dataset}, Example, Feature) ->
+    Target:value(Dataset, Example, Feature).
+
+%% @doc
+no_examples({Target, Dataset}) ->
+    Target:no_examples(Dataset).
+
+%% @doc
+no_features({Target, Dataset}) ->
+    Target:no_features(Dataset).
+
+%% @doc
+split({Target, Dataset}, Config) ->
+    Target:split(Dataset, Config).
+
+%% @doc
+merge([{Target, _} = Head|Rest]) ->
+    Target:merge([Head|Rest]).
 
 -ifdef(TEST).
 
