@@ -13,15 +13,6 @@
          load/1,
          load/2,
 
-         value/3,
-         vector/2,
-
-         no_features/1,
-         no_examples/1,
-         
-         examples/1,
-         features/1,
-
          split/2,
          merge/1
         ]).
@@ -37,15 +28,15 @@ load(Source, Options) ->
                   {target, class}] ++ Options,
     {Features, Examples, Database} = dataset:load(Source, NewOptions),
     FormattedExamples = format_class_distribution(Examples),
-    {?MODULE, #dataset {
-                 target = class,
-                 module = ?MODULE,
-                 features = Features,
-                 no_features = length(Features),
-                 no_examples = count(FormattedExamples),
-                 examples = FormattedExamples,
-                 database = Database
-                }}.
+    #dataset {
+       target = class,
+       module = ?MODULE,
+       features = Features,
+       no_features = length(Features),
+       no_examples = count(FormattedExamples),
+       examples = FormattedExamples,
+       database = Database
+      }.
 
 %% @doc ....
 load(Source) ->
@@ -69,42 +60,13 @@ reduce_class_distributions(Part, Acc) ->
                        {CountA + CountB, IdsA ++ IdsB}
                end, Acc, Part).
 
-%% @doc get a feature value
-value(#dataset{target = class, database = Database}, Example, Feature) ->
-    ets:lookup_element(Database#database.examples, 
-                       example:id(Example), 
-                       feature:id(Feature) + 1).
-
-%% @doc get the feature vector for an example
-vector(#dataset{target = class, database = Database}, Example) ->
-    case ets:lookup(Database#database.examples, example:id(Example)) of
-        [Tuple] -> tl(tuple_to_list(Tuple));
-        [] -> false
-    end.
-
-%% @doc get the examples in the dataset
-examples(#dataset{target = class, examples = Examples}) ->
-    Examples.
-
-%% @doc get the features in the dataset
-features(#dataset{target = class, features = Features}) ->
-    Features.
-
-%% @doc get number of features
-no_features(#dataset{target = class, no_features = NoFeatures}) ->
-    NoFeatures.
-
-%% @doc get the number of examples
-no_examples(#dataset{target = class, no_examples = NoExamples}) ->
-    NoExamples.
-
 %% @private
 count(Examples) ->
     lists:foldl(fun ({_, C, _}, Acc) -> C + Acc end, 0, Examples).
 
 %% @private update the example ids in Dataset
 update_examples(Dataset, Examples) ->
-    {?MODULE, Dataset#dataset{examples = Examples, no_examples = count(Examples)}}.
+    Dataset#dataset{examples = Examples, no_examples = count(Examples)}.
 
 %% @doc
 %%
@@ -118,9 +80,9 @@ update_examples(Dataset, Examples) ->
 %% @end
 -spec split(#dataset{}, {ratio | folds, number()}) -> any().
 split(Dataset, {folds, Folds}) when Folds > 1 ->
-    new_folds(examples(Dataset), Dataset, Folds, 1, dict:new());
+    new_folds(dataset:examples(Dataset), Dataset, Folds, 1, dict:new());
 split(Dataset, {ratio, Ratio}) when Ratio < 1 andalso Ratio > 0 ->
-    Examples = examples(Dataset),
+    Examples = dataset:examples(Dataset),
     {Train, Test} = lists:foldl(fun({Class, Count, Ids}, 
                                     {TrainAcc, TestAcc}) ->
                                         {Train, Test} = lists:split(round(Count * Ratio), Ids),
@@ -162,11 +124,11 @@ new_folds_for_class(Class, [Id|Examples], Folds, CurrentFold, Acc) ->
 merge([Dataset]) ->
     Dataset;
 merge(Datasets) ->
-    {?MODULE, First} = hd(Datasets),
+    First = hd(Datasets),
     Examples = lists:foldl(
-                 fun ({?MODULE, Fold}, Acc) -> 
-                         lists:zipwith(fun merge/2, examples(Fold), Acc) 
-                 end, examples(First), tl(Datasets)),
+                 fun (Fold, Acc) -> 
+                         lists:zipwith(fun merge/2, dataset:examples(Fold), Acc) 
+                 end, dataset:examples(First), tl(Datasets)),
     update_examples(First, Examples).
 
 %% @private
@@ -206,7 +168,6 @@ test_merge(Dataset, F) ->
     ToMerge = dict:fold(fun (_Fold, Fold, Acc) -> [Fold|Acc] end, [], dict:erase(1, Folds)),
     Merge = merge(ToMerge),
     ?_assertEqual(150-dataset:no_examples(First), dataset:no_examples(Merge)).
-                                
 
 test_get_featurevalue(Dataset) ->
     ?_assertEqual(5.1, dataset:value(Dataset, 1, {numeric, 1})).

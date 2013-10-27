@@ -17,7 +17,9 @@
 
 %% @doc get the id of a feature
 id({_Type, Id}) ->
-    Id.
+    Id;
+id(Id) -> Id.
+
 
 %% @doc get the type of a feature
 type({Type, _Id}) ->

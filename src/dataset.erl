@@ -26,6 +26,7 @@
          
          examples/1,
          features/1,
+         database/1,
 
          no_examples/1,
          no_features/1,
@@ -45,44 +46,25 @@ behaviour_info(callbacks) ->
      {load, 1}, 
      {load, 2},
 
-     {value, 3},
-     {vector, 2},
-
-     {examples, 1},
-     {features, 1},
-
-     {no_examples, 1},
-     {no_features, 1},
-     
      {merge, 1},
      {split, 2}
     ].
-
-%% @doc create a new dataset
-new_database() ->
-    #database {
-       examples = ets:new(examples, [public, {read_concurrency, true}]),
-       features = ets:new(features, [public]),
-       predictions = ets:new(predictions, [public]),
-       values = ets:new(values, [public])
-      }.
 
 %% @doc 
 %% reclaim the memory occupied by the ets tables. This should always
 %% be done for used dataset.
 %% @end
 kill(#dataset{database = Database}) ->
-    ets:delete(Database#database.features),
-    ets:delete(Database#database.examples),
-    ets:delete(Database#database.predictions),
-    ets:delete(Database#database.values).
-
+    Module = element(1, Database),
+    Module:kill(Database).
+    
 %% @doc
 %% Load Source file
 %% 
 %% === Options ===
 %% ```[ 
-%%     {cores, integer()}, 
+%%     {cores, integer()},
+%%     {database, atom()} 
 %%     {map, fun({integer(), integer()}, Acc::any()) -> Acc::any(), Acc::any()},
 %%     {reduce, fun(MapPart::any(), Acc::any()) -> Acc::any(), Acc:any()},
 %%     {target, class | regression | atom()},
@@ -93,21 +75,18 @@ kill(#dataset{database = Database}) ->
 %%
 %% @end
 load({Reader, Source}, Options) ->
-    Database = new_database(),
+    Database = proplists:get_value(database, Options, dense_database),
     Cores = proplists:get_value(cores, Options, erlang:system_info(schedulers)),
     Map = proplists:get_value(map, Options),
     Reduce = proplists:get_value(reduce, Options),
     Target = proplists:get_value(target, Options),
-    Store = proplists:get_value(store_example, Options, fun insert_features/2),
-    io:format("~p ~n",[Source]),
-    load(Reader, Source, Database, Map, Reduce, Store, Target, Cores).
+    load(Reader, Source, Database:new(), Map, Reduce, Target, Cores).
 
 %% @private
-load(Reader, Source, Database, Map, Reduce, Store, Target, Cores) ->
+load(Reader, Source, Database, Map, Reduce, Target, Cores) ->
     {ok, TargetId, Types} = parse_type_declaration(element(2, Reader:next_line(Source)), Target),
-    {ok, Features} = parse_feature_declaration(element(2, Reader:next_line(Source)), Types, TargetId,
-                                               Database#database.features),
-    {ok, Examples} = parse_examples(Source, Reader, Database, Types, Map, Reduce, Store, TargetId, Cores),
+    {ok, Features} = parse_feature_declaration(element(2, Reader:next_line(Source)), Types, TargetId, Database),
+    {ok, Examples} = parse_examples(Source, Reader, Database, Types, Map, Reduce, TargetId, Cores),
     {Features, Examples, Database}.
 
 %% @private parse a type declaration
@@ -132,46 +111,44 @@ parse_type_declaration([Type0|Rest], ClassId, Id, Inc, Target, Acc) ->
     end.
 
 %% @private parse a feature declaration according to the type declaration
-parse_feature_declaration(Features0, Types, TargetId, FeatureDatabase) ->
+parse_feature_declaration(Features0, Types, TargetId, Database) ->
     {TargetName, Features} = cherrypick(Features0, TargetId),
-    ets:insert(FeatureDatabase, {0, TargetName}),
+    insert_feature(Database, {0, TargetName}),
     if length(Features) =/= length(Types) ->
             {error, {bad_features, length(Features)}};
        true ->
-            {ok, parse_feature_declaration(Features, Types, FeatureDatabase, 1, [])}
+            {ok, parse_feature_declaration(Features, Types, Database, 1, [])}
     end.
 
 %% @private
 parse_feature_declaration([], [], _, _, Acc) ->
     lists:reverse(Acc);
-parse_feature_declaration([Feature|Features], [Type|Types], FeatureDatabase, Inc, Acc) ->
-    ets:insert(FeatureDatabase, {Inc, Feature}),
-    parse_feature_declaration(Features, Types, FeatureDatabase, Inc + 1, [{Type, Inc}|Acc]).
+parse_feature_declaration([Feature|Features], [Type|Types], Database, Inc, Acc) ->
+    insert_feature(Database, {Inc, Feature}),
+    parse_feature_declaration(Features, Types, Database, Inc + 1, [{Type, Inc}|Acc]).
 
 %% @private 
-parse_examples(Source, Reader, Database, Types, Map, Reduce, Store, TargetId, Cores) ->
-    spawn_parse_example_processes(Source, Reader, Database, Types, Map, Store, TargetId, Cores),
+parse_examples(Source, Reader, Database, Types, Map, Reduce, TargetId, Cores) ->
+    spawn_parse_example_processes(Source, Reader, Database, Types, Map, TargetId, Cores),
     collect_parse_example_processes(self(),Cores, Reduce).
 
 %% @private
-spawn_parse_example_processes(Source, Reader, Database, Types, Map, Store, TargetId, Cores) ->
+spawn_parse_example_processes(Source, Reader, Database, Types, Map, TargetId, Cores) ->
     Self = self(),
     [spawn_link(
-       fun() -> parse_example_process(Self, Source, Reader, Database,
-                                      Types, TargetId, Store, Map) end)
+       fun() -> parse_example_process(Self, Source, Reader, Database, Types, TargetId, Map) end)
      || _ <-lists:seq(1, Cores)].
 
 %% @private
-parse_example_process(Parent, Source, Reader, Database, Types, TargetId, Store, {Map, Acc}) ->
+parse_example_process(Parent, Source, Reader, Database, Types, TargetId, {Map, Acc}) ->
     case Reader:next_line(Source) of
         {row, Example, Row} ->
             {Class, Attributes} = cherrypick(Example, TargetId),
             Id = Row - 2,
             AttributeList = parse_example_attributes(Attributes, Types, 1, [Id]),
-            ok = Store(Database, AttributeList),
+            insert_example(Database, AttributeList),
             NewAcc = Map({Class, Id}, Acc),
-            parse_example_process(Parent, Source, Reader, Database, 
-                                  Types, TargetId, Store, {Map, NewAcc});
+            parse_example_process(Parent, Source, Reader, Database, Types, TargetId, {Map, NewAcc});
         eof ->
             Parent ! {done, Parent, Acc}
     end.
@@ -187,11 +164,6 @@ collect_parse_example_processes(Self, Cores, {Reduce, Acc}) ->
         {error, Self, Reason} ->
             {error, Reason}
     end.
-
-%% @private insert feature values into database
-insert_features(Database, Attributes) ->
-    ets:insert(Database#database.examples, list_to_tuple(Attributes)),
-    ok.
 
 %% @private format example values according to their correct type
 parse_example_attributes([], [], _, Acc) ->
@@ -231,36 +203,47 @@ cherrypick(List, N) ->
 
 %%% public api
 
-%% @doc
-examples({Target, Dataset}) ->
-    Target:examples(Dataset).
+%% @private insert feature values into database
+insert_example(Database, Attributes) ->
+    Target = element(1, Database),
+    Target:insert_example(Database, Attributes).
+
+%% @private insert feature values into database
+insert_feature(Database, Attributes) ->
+    Target = element(1, Database),
+    Target:insert_feature(Database, Attributes).
 
 %% @doc
-features({Target, Dataset}) ->
-    Target:features(Dataset).
+vector(#dataset{database = Database}, Example) ->
+    Target = element(1, Database),
+    Target:vector(Database, Example).
 
 %% @doc
-vector({Target, Dataset}, Example) ->
-    Target:vector(Dataset, Example).
+value(#dataset{database = Database}, Example, Feature) ->
+    Target = element(1, Database),
+    Target:value(Database, Example, Feature).
+
+%% @doc get the examples in the dataset
+examples(#dataset{examples = Examples}) -> Examples.
+
+%% @doc get the features in the dataset
+features(#dataset{features = Features}) -> Features.
+
+%% @doc ..
+database(#dataset{database = Database}) -> Database.
 
 %% @doc
-value({Target, Dataset}, Example, Feature) ->
-    Target:value(Dataset, Example, Feature).
+no_examples(#dataset{no_examples = NoExamples}) -> NoExamples.
 
 %% @doc
-no_examples({Target, Dataset}) ->
-    Target:no_examples(Dataset).
+no_features(#dataset{no_features = NoFeatures}) -> NoFeatures.
 
 %% @doc
-no_features({Target, Dataset}) ->
-    Target:no_features(Dataset).
-
-%% @doc
-split({Target, Dataset}, Config) ->
+split(#dataset{module = Target} = Dataset, Config) ->
     Target:split(Dataset, Config).
 
 %% @doc
-merge([{Target, _} = Head|Rest]) ->
+merge([#dataset{module = Target} = Head|Rest]) ->
     Target:merge([Head|Rest]).
 
 -ifdef(TEST).

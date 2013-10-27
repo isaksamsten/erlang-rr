@@ -25,9 +25,6 @@
          kill/2,
          find/1,
 
-         %% public api
-         update/3,
-         
          kill/1,
          build/2,
          evaluate/2,
@@ -68,11 +65,6 @@ find(CString) ->
             throw({module_not_found, CString})
     end.
 
-%% @doc update a classifier by assigning it a built model
-update(Target, Classifier, Model) ->
-    {Target, Classifier#classifier{model = Model}}.
-    
-
 %% @doc kill (to clean up unused models) after evaluation (to reduce
 %% memory footprint during cross validation)
 kill(Classifier, Evaluate) ->
@@ -85,23 +77,29 @@ kill(Classifier, Evaluate) ->
 %%% public api
 
 %% @doc
-kill({Target, Classifier}) ->
+kill(Classifier) ->
+    Target = target(Classifier),
     Target:kill(Classifier).
 
 %% @doc
-build({Target, Classifier}, Dataset) ->
+build(Classifier, Dataset) ->
+    Target = target(Classifier),
     Target:build(Classifier, Dataset).
 
 %% @doc
-evaluate({Target, Classifier}, Dataset) ->
+evaluate(Classifier, Dataset) ->
+    Target = target(Classifier),
     Target:evaluate(Classifier, Dataset).
 
 %% @doc
-serialize({Target, Classifier}) ->
+serialize(Classifier) ->
+    Target = target(Classifier),
     Target:serialize(Classifier).
 
 %% @doc
-unserialize({Target, Classifier}) -> 
+unserialize(Classifier) -> 
+    Target = target(Classifier),
     Target:unserialize(Classifier).
 
-
+target(C) -> element(1, C).
+     
