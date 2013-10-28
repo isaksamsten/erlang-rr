@@ -7,8 +7,7 @@
 
 -module(random_tree).
 -behaviour(classifier).
-
-%% TODO: insert the rf.hrl stuff here - its only used in this module.... 
+%% TODO: insert the rf.hrl stuff here - its only used in this module....
 %% @headerfile "rf.hrl"
 -include("rf.hrl").
 
@@ -17,7 +16,7 @@
          new/1,
          build/2,
          evaluate/2,
-         
+
          kill/1,
          serialize/1,
          unserialize/1,
@@ -25,37 +24,68 @@
          %% model
          evaluate_model/4,
          predict/5,
-         
-         %% split strategies
-         random_split/5,
-         deterministic_split/5,
-         value_split/5,
 
          %% prune
          example_depth_stop/2,
-         chisquare_prune/1
+         chisquare_prune/1,
+
+         %% standard approaches
+         random/0,
+         all/0,
+         subset/0,
+         random_subset/2,
+
+         %% multi-feature approaches
+         correlation/0,
+         random_correlation/1,
+         rule/2,
+         random_rule/3,
+         choose_rule/2,
+
+         %% example sampling approaches
+         sample_examples/3,
+
+         %% resampling approahces
+         weka/0,
+         resample/2,
+         hell/0,
+
+         %% significance approaches
+         random_chisquare/1,
+         randomly_resquare/2,
+         chisquare/1,
+         chisquare_decrease/2
+
         ]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-%% todo: refactor away rr_example dependency (and use a dataset instead)
+-record(random_tree, {
+          prune,
+          pre_prune,
+          depth = 0,
+          branch,
+          score,
+          split,
+          distribute,
+          missing_values,
+          no_features,
+
+          model = undefined
+         }).
 
 new(Props) ->
     LogFeatures = fun (T) -> trunc(math:log(T)/math:log(2)) + 1 end,
-    NoFeatures = proplists:get_value(no_features, Props,
-                                     LogFeatures),                 
-    Missing = proplists:get_value(missing_values, Props, 
-                                  fun rf_missing:weighted/6),
+    NoFeatures = proplists:get_value(no_features, Props, LogFeatures),
+    Missing = proplists:get_value(missing_values, Props, fun rf_missing:weighted/6),
     Score = proplists:get_value(score, Props, fun rr_estimator:info_gain/2),
     Prune = proplists:get_value(pre_prune, Props, example_depth_stop(2, 1000)),
-    FeatureSampling = proplists:get_value(feature_sampling, Props,
-                                          fun subset/5),
-    Distribute = proplists:get_value(distribute, Props,
-                                     fun distribute/3),
-    Split = proplists:get_value(split, Props, fun random_split/5),
-    #rf_tree{
+    FeatureSampling = proplists:get_value(feature_sampling, Props, fun subset/5),
+    Distribute = proplists:get_value(distribute, Props, fun tree:distribute/3),
+    Split = proplists:get_value(split, Props, fun tree:random_split/5),
+    #random_tree{
        score = Score,
        prune = Prune,
        branch = FeatureSampling,
@@ -69,12 +99,15 @@ build(RandomTree, Dataset) ->
     Features = dataset:features(Dataset),
     Examples = dataset:examples(Dataset),
     Info = rr_estimator:info(Examples, dataset:no_examples(Dataset)),
-    Model = build_decision_node(Features, Examples, dict:new(), 0, Info, Dataset, RandomTree, 1, 1),
-    Model.%%    classifier:update(RandomTree, Model).
+    {Model, Importance, Sum, NoRules} = build_decision_node(Features, Examples, dict:new(), 0, Info, Dataset, RandomTree, 1, 1),
+    {RandomTree#random_tree{model = Model}, Importance, Sum, NoRules}.
 
 evaluate(RandomTree, Dataset) ->
-    RandomTree,
-    Dataset.
+    Model = RandomTree#random_tree.model,
+    Examples = dataset:examples(Dataset),
+    lists:foldl(fun({Class, _, ExampleIds}, Acc) ->
+                        predict_all(Class, ExampleIds, Model, Dataset, RandomTree, Acc)
+                end, dict:new(), Examples).
 
 %% @doc has no effect
 kill(_) -> ok.
@@ -88,7 +121,6 @@ unserialize(Dump) ->
     Dump.
 
 %% @doc prune if to few examples or to deep tree
--spec example_depth_stop(integer(), integer()) -> prune_fun().
 example_depth_stop(MaxExamples, MaxDepth) ->
     fun(Examples, Depth) ->
             (Examples =< MaxExamples) orelse (Depth > MaxDepth)
@@ -101,57 +133,48 @@ chisquare_prune(Sigma) ->
             K < Sigma
     end.
 
-evaluate_model(Model, Examples, ExConf, Conf) ->
+evaluate_model(Model, Examples, Dataset, Config) ->
     lists:foldl(fun({Class, _, ExampleIds}, Acc) ->
-                        predict_all(Class, ExampleIds, Model, ExConf, Conf, Acc)
+                        predict_all(Class, ExampleIds, Model, Dataset, Config, Acc)
                 end, dict:new(), Examples).
 
 %% @private
 predict_all(_, [], _, _ExConf, _Conf, Dict) ->
     Dict;
-predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
-    {Prediction, _NodeNr} = predict(Example, Model, ExConf, Conf, []),
-    predict_all(Actual, Rest, Model, ExConf, Conf,
+predict_all(Actual, [Example|Rest], Model, Dataset, Config, Dict) ->
+    {Prediction, _NodeNr} = predict(Example, Model, Dataset, Config, []),
+    predict_all(Actual, Rest, Model, Dataset, Config,
                 dict:update(Actual, fun (Predictions) ->
-                                            [{Prediction, 0}|Predictions] 
+                                            [{Prediction, 0}|Predictions]
                                     end, [{Prediction, 0}], Dict)). %% note: no other prob (fix?)
 
 %% @doc predict an example according to a decision tree
--spec predict(ExId::exid(), tree(), #rr_example{},  #rf_tree{}, []) -> prediction().
 predict(_, #rf_leaf{id=NodeNr, class=Class, score=Score}, _ExConf, _Conf, Acc) ->
     {{Class, Score, []}, [NodeNr|Acc]};
-predict(ExId, Node, ExConf, Conf, Acc) ->
-    #rf_node { 
-       id=NodeNr, 
-       feature=F, 
+predict(ExId, Node, Dataset, Config, Acc) ->
+    #rf_node {
+       id=NodeNr,
+       feature=F,
        distribution={LeftExamples, RightExamples, {Majority, Count}},
-       left=Left, 
+       left=Left,
        right=Right} = Node,
-    #rf_tree{distribute=Distribute, missing_values=Missing} = Conf,
+    #random_tree{distribute=Distribute, missing_values=Missing} = Config,
     NewAcc = [NodeNr|Acc],
-    case Distribute(ExConf, F, ExId) of
+    case Distribute(Dataset, F, ExId) of
         {'?', _} ->
-            case Missing(predict, ExConf, F, ExId, LeftExamples, RightExamples) of
+            case Missing(predict, Dataset, F, ExId, LeftExamples, RightExamples) of
                 {left, _} ->
-                    predict(ExId, Left, ExConf, Conf, NewAcc);
+                    predict(ExId, Left, Dataset, Config, NewAcc);
                 {right, _} ->
-                    predict(ExId, Right, ExConf, Conf, NewAcc);
+                    predict(ExId, Right, Dataset, Config, NewAcc);
                 ignore ->
                     {{Majority, laplace(Count, LeftExamples+RightExamples)}, NewAcc}
             end;
         {left, _} ->
-            predict(ExId, Left, ExConf, Conf, NewAcc);
+            predict(ExId, Left, Dataset, Config, NewAcc);
         {right, _} ->
-            predict(ExId, Right, ExConf, Conf, NewAcc)
+            predict(ExId, Right, Dataset, Config, NewAcc)
     end.
-
-
-majority(Examples) ->
-    {Class, Count, _} = rr_util:max(fun({_, Count, _}) -> Count end, Examples),
-    {Class, Count}.
-
-count(Examples) ->
-    lists:foldl(fun({_, Count, _}, Old) -> Count + Old end, 0, Examples).
 
 %% @private create a node
 make_node(Id, Feature, Dist, Score, Left, Right) ->
@@ -161,451 +184,435 @@ make_node(Id, Feature, Dist, Score, Left, Right) ->
 make_leaf(Id, [], Class) ->
     #rf_leaf{id=Id, score=0, distribution={0, 0}, class=Class};
 make_leaf(Id, Covered, {Class, C}) ->
-    N = count(Covered),
+    N = tree:count(Covered),
     #rf_leaf{id=Id, score=laplace(C, N), distribution={C, N-C}, class=Class}.
 
 %% @private induce a decision tree
 build_decision_node([], [], Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
     {make_leaf(Id, [], error), Importance, Total, NoNodes};
 build_decision_node([], Examples, Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
-    {make_leaf(Id, Examples, majority(Examples)), Importance, Total, NoNodes};
+    {make_leaf(Id, Examples, tree:majority(Examples)), Importance, Total, NoNodes};
 build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
     {make_leaf(Id, Examples, {Class, Count}), Importance, Total, NoNodes};
 build_decision_node(Features, Examples, Importance, Total, Error, ExConf, Conf, Id, NoNodes) ->
-    #rf_tree{prune=Prune, pre_prune = _PrePrune, branch=Branch, depth=Depth} = Conf,
-    NoExamples = count(Examples),
+    #random_tree{prune=Prune, pre_prune = _PrePrune, branch=Branch, depth=Depth} = Conf,
+    NoExamples = tree:count(Examples),
     case Prune(NoExamples, Depth) of
         true ->
-            {make_leaf(Id, Examples, majority(Examples)), Importance, Total, NoNodes};
+            {make_leaf(Id, Examples, tree:majority(Examples)), Importance, Total, NoNodes};
         false ->
             case rf_branch:unpack(Branch(Features, Examples, NoExamples, ExConf, Conf)) of
                 no_information ->
-                    {make_leaf(Id, Examples, majority(Examples)), Importance, Total, NoNodes};
+                    {make_leaf(Id, Examples, tree:majority(Examples)), Importance, Total, NoNodes};
                 #candidate{split={_, _}} ->
-                    {make_leaf(Id, Examples, majority(Examples)), Importance, Total, NoNodes};
-                #candidate{feature={Feature, _} = FeatureValue, 
-                           score={Score, LeftError, RightError}, 
-                           split={both, LeftExamples, RightExamples}}  -> 
+                    {make_leaf(Id, Examples, tree:majority(Examples)), Importance, Total, NoNodes};
+                #candidate{feature={Feature, _} = FeatureValue,
+                           score={Score, LeftError, RightError},
+                           split={both, LeftExamples, RightExamples}}  ->
                     NewReduction = Error - (LeftError + RightError),
                     NewImportance = dict:update_counter(feature:id(Feature), NewReduction, Importance),
 
-                    {LeftNode, LeftImportance, TotalLeft, NoLeftNodes} = 
-                        build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError, 
-                                            ExConf, Conf#rf_tree{depth=Depth + 1}, Id + 1, NoNodes),
+                    {LeftNode, LeftImportance, TotalLeft, NoLeftNodes} =
+                        build_decision_node(Features, LeftExamples, NewImportance, Total + NewReduction, LeftError,
+                                            ExConf, Conf#random_tree{depth=Depth + 1}, Id + 1, NoNodes),
 
-                    {RightNode, RightImportance, TotalRight, NoRightNodes} = 
-                        build_decision_node(Features, RightExamples, LeftImportance, TotalLeft, RightError, 
-                                            ExConf, Conf#rf_tree{depth=Depth + 1}, Id + 2, NoLeftNodes),
-                    Distribution = {count(LeftExamples), count(RightExamples), majority(Examples)},
+                    {RightNode, RightImportance, TotalRight, NoRightNodes} =
+                        build_decision_node(Features, RightExamples, LeftImportance, TotalLeft, RightError,
+                                            ExConf, Conf#random_tree{depth=Depth + 1}, Id + 2, NoLeftNodes),
+                    Distribution = {tree:count(LeftExamples), tree:count(RightExamples), tree:majority(Examples)},
                     {make_node(Id, FeatureValue, Distribution, Score, LeftNode, RightNode), RightImportance, TotalRight, NoRightNodes+1}
-            end    
+            end
     end.
+
+subset() ->
+    fun subset/5.
+
+correlation() ->
+    fun correlation/5.
+
+random() ->
+    fun random/5.
+
+all() ->
+    fun all/5.
+
+
+%% @doc evaluate a subset of n random features
+subset(Features, Examples, Total, ExConf, Conf) ->
+    #random_tree {
+       score = Score,
+       split = Split,
+       distribute = Distribute,
+       missing_values = Missing,
+       no_features = NoFeatures
+      } = Conf,
+    NewFeatures = rr_example:random_features(Features, NoFeatures(length(Features))),
+    {tree:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing), NewFeatures}.
+
+%% @doc evaluate the combination of (n*n)-1 features
+correlation(Features, Examples, Total, ExConf, Conf) ->
+    #rf_tree {
+       score = Score,
+       split = Split,
+       distribute = Distribute,
+       missing_values = Missing,
+       no_features = NoFeatures
+      } = Conf,
+    Select = NoFeatures(length(Features)),
+    FeaturesA = rr_example:random_features(Features, Select),
+    FeaturesB = rr_example:random_features(Features, Select),
+
+    Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB, A =/= B],
+    rr_example:best_split(ExConf, Combination, Examples, Total,
+                          Score, Split, Distribute, Missing).
+
+%% @doc tandomly pick either a subset brancher or a correlation brancher
+random_correlation(Fraction) ->
+    Corr = correlation(),
+    Sub = subset(),
+    random(Corr, Sub, Fraction).
+
+%% @doc evalate one randomly selected feature (maximum diversity)
+random (Features, Examples, Total, ExConf, Conf) ->
+    #rf_tree {
+       score = Score,
+       split = Split,
+       distribute = Distribute,
+       missing_values = Missing
+      } = Conf,
+    NoFeatures = length(Features),
+    Feature = [lists:nth(random:uniform(NoFeatures), Features)],
+    rr_example:best_split(ExConf, Feature, Examples, Total,
+                          Score, Split, Distribute, Missing).
+
+%% @doc evaluate all features to find the best split point
+all (Features, Examples, Total, ExConf, Conf) ->
+    #rf_tree {
+       score = Score,
+       split = Split,
+       distribute = Distribute,
+       missing_values = Missing
+      } = Conf,
+    rr_example:best_split(ExConf, Features, Examples, Total,
+                          Score, Split, Distribute, Missing).
+
+%% @doc generate a rule at each branch
+rule(NoRules, RuleScore) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            NewConf = Conf#rf_tree {
+                        split = fun rf_tree:deterministic_split/5
+                       },
+            #rf_tree{
+               no_features = NoFeatures
+              } = Conf,
+            FeatureCount = length(Features),
+            rf_rule:best(Features, Examples, Total, ExConf, NewConf,
+                         NoFeatures(FeatureCount), NoRules(FeatureCount), RuleScore)
+    end.
+
+%% @doc randomly pick a subset-brancher or a rule-bracher at each node
+random_rule(NoRules, RuleScore, Prob) ->
+    Rule = rule(NoRules, RuleScore),
+    Sub = subset(),
+    random(Rule, Sub, Prob).
+
+%% @doc choose either rule or subset depending on which is best
+choose_rule(NoRules, RuleScore) ->
+    Rule = rule(NoRules, RuleScore),
+    Sub = subset(),
+    n([Rule, Sub], fun sig/3).
+
+%% @doc choose the candidate which is most significant
+sig([#candidate{split = As}=A, #candidate{split=Bs} = B], Examples, Total) ->
+    Achi = rr_estimator:chisquare(As, Examples, Total),
+    Bchi = rr_estimator:chisquare(Bs, Examples, Total),
+    if Achi > Bchi ->
+            A;
+       true ->
+            B
+    end.
+
+%% @doc sample a set of examples of Size, if we can
+%% find a significant split use it o/w retry @end
+sample_examples(NoFeatures, Size, Sigma) ->
+    Do = sample_examples(NoFeatures, Size),
+    Redo = sample_examples_significance(NoFeatures, Size, Sigma),
+    redo(Do, Redo).
+
+sample_examples(_NoFeatures, Size) when Size >= 1.0 ->
+    fun (_, _, _, _) ->
+            {Size, {invalid_subset, []}}
+    end;
+sample_examples(NoFeatures, Size) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            #rf_tree{
+               score = Score,
+               split = Split,
+               distribute = Distribute,
+               missing_values = Missing
+              } = Conf,
+            FeatureSubset = rr_example:random_features(Features, NoFeatures),
+            Subset = sample_sane_examples(Examples, Size, Size, Total),
+            #candidate{feature=F} =
+                rr_example:best_split(ExConf, FeatureSubset, Subset,
+                                      rr_example:count(Subset), Score, Split, Distribute, Missing),
+            ExSplit = rr_example:split_feature_value(ExConf, F, Examples, Distribute, Missing),
+            Best = #candidate{feature = F,
+                              split = ExSplit,
+                              score = Score(ExSplit, rr_example:count(Examples))},
+            {Size, {Best, []}}
+    end.
+
+sample_sane_examples(Examples, Size, _,  _) when Size >= 1 ->
+    Examples;
+sample_sane_examples(Examples, Size, Step, Total) ->
+    if Total * Size < 2 ->
+            Examples;
+       true ->
+            case rr_example:subset(Examples, Size) of
+                Subset when length(Subset) > 1 -> Subset;
+                _ ->
+                    sample_sane_examples(Examples, Size+Step, Step, Total)
+            end
+    end.
+
+sample_examples_significance(NoFeatures, Size, Sigma) ->
+    fun (#candidate{split=Split}, NewSize, Examples, Total) ->
+            S = rr_estimator:chisquare(Split, Examples, Total),
+            if S < Sigma ->
+                    Inc = NewSize + Size,
+                    {true, sample_examples(NoFeatures, Inc), sample_examples_significance(NoFeatures, Inc, Sigma)};
+               true ->
+                    false
+            end;
+        (invalid_subset, _, _, _) ->
+            no_information
+    end.
+
+%% @doc subset with a slight variance in number of sampled features
+random_subset(NoFeatures, Variance) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            random_subset(Features, Examples, Total, ExConf, Conf, NoFeatures, Variance)
+    end.
+
+random_subset(Features, Examples, Total, ExConf, Conf, NoFeatures, Variance) ->
+    #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
+    Random0 = random:uniform(),
+    Random1 = random:uniform(),
+
+    NewVariance = Random0 * Variance * if Random1 > 0.5 -> 1; true -> 1 end,
+    NewNoFeatures = case round(NoFeatures + NewVariance) of
+                        X when X > length(Features) -> length(Features);
+                        X when X < 1 -> 1;
+                        X -> X
+                    end,
+    NewFeatures = rr_example:random_features(Features, NewNoFeatures),
+    rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing).
+
+
+%% @doc
+%% resample a decreasing number of features each time an
+%% insignificant feature is found, until only one feature is inspected
+%% @end
+chisquare_decrease(Rate, Sigma) ->
+    Sample = redo_curry(subset()),
+    redo(Sample, chisquare_decrease_resample(Sample, Rate, Sigma)).
+
+chisquare_decrease_resample(_Sample, Rate, Sigma) ->
+    fun (#candidate{split=Split}, NoFeatures, Examples, Total) ->
+            Significance = rr_estimator:chisquare(Split, Examples, Total),
+            if Significance < Sigma ->
+                    NewNoFeatures = if NoFeatures > 1 ->
+                                            fun (_) -> round(NoFeatures * Rate) end;
+                                       true ->
+                                            fun (_) -> 1 end
+                                    end,
+                    NewSample = redo_curry(NewNoFeatures, subset()),
+                    {true, NewSample, chisquare_decrease_resample(NewSample, Rate, Sigma)};
+               true ->
+                    false
+            end
+    end.
+
+%% @doc randomly select either chisquare or subset
+random_chisquare(Sigma) ->
+    Chi = chisquare(Sigma),
+    Sub = subset(),
+    random(Chi, Sub, 0.5).
+
+%% @doc resample features if chi-square significance is lower than Sigma
+chisquare(Sigma) ->
+    Sample = redo_curry(subset()),
+    Resample = chisquare_resample(Sigma),
+    redo(Sample, Resample).
+
+chisquare_resample(Sigma) ->
+    fun (#candidate{split=Split}, _, Examples, Total) ->
+            Significance = rr_estimator:chisquare(Split, Examples, Total),
+            if Significance < Sigma ->
+                    {true, redo_curry(subset()), chisquare_resample(Sigma)};
+               true ->
+                    false
+            end
+    end.
+
+%% @doc rame as chisquare-resample, however the resampling are done randomly
+randomly_resquare(Factor, Sigma) ->
+    Sample = redo_curry(subset()),
+    Resample = randomly_resquare_redo(Factor, Sigma),
+    redo(Sample, Resample).
+
+randomly_resquare_redo(Factor, Sigma) ->
+    fun (#candidate{split=Split}, _, Examples, Total) ->
+            Significance = rr_estimator:chisquare(Split, Examples, Total),
+            Random = random:uniform(),
+            if Significance < Sigma, Random < Factor ->
+                    {true, redo_curry(subset()), randomly_resquare_redo(Factor, Sigma)};
+               true ->
+                    false
+            end
+    end.
+
+%% @doc resample n features m times if gain delta
+resample(NoResamples, Delta) ->
+    Sample = redo_curry(subset()),
+    Resample = simple_resample(Sample, NoResamples, Delta),
+    redo(Sample, Resample).
+
+simple_resample(_, 0, _) ->
+    fun (_, _, _, _) -> false end;
+simple_resample(Sample, NoResamples, Delta) ->
+    fun (#candidate{score = {Score, _, _}}, _, Examples, Total) ->
+            Gain = (Total * rr_estimator:entropy(Examples)) - Score,
+            if Gain =< Delta ->
+                    {true, Sample, simple_resample(Sample, NoResamples - 1, Delta)};
+               true ->
+                    false
+            end
+    end.
+
+hell() ->
+    Sample = redo_curry(subset()),
+    Resample = hell_resample(),
+    redo(Sample, Resample).
+
+hell_resample() ->
+    fun(#candidate{score = {Score, _, _}}, _, _, _) ->
+            if Score >= 1.0 ->
+                    NewSample = redo_curry(fun(_) -> 1 end, subset()),
+                    {true, NewSample, hell_resample()};
+               true ->
+                    false
+            end
+    end.
+
+
+%% @doc resample 1 feature if no informative features is found
+weka() ->
+    Sample = redo_curry(subset()),
+    Resample = weka_resample(),
+    redo(Sample, Resample).
+
+weka_resample() ->
+    fun (#candidate{score = {Score, _, _}}, _, Examples, Total) ->
+            Gain = (Total * rr_estimator:entropy(Examples)) - Score,
+            if Gain =< 0.0 ->
+                    NewSample = redo_curry(fun (_) -> 1 end, subset()),
+                    {true, NewSample, weka_resample()};
+               true ->
+                    false
+            end
+    end.
+
+%% @doc
+%% Generic function for performing resampling. The first argument - Sample - is used for sampling
+%% features and for finding a candidate. The function should return a tuple with the number of sampled
+%% features, and {BestCandidate, SampledFeatures}. The second argument - resample - should be used for
+%% determining if resampling is needed. This function returns {true, NewSample, NewResample} if
+%% no informative feature is found, o/w false.
+%% @end
+redo(Do, Redo) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            redo(Features, Examples, Total, ExConf, Conf,
+                 length(Features), #candidate{score = {inf}}, Do, Redo)
+    end.
+
+redo(_, _, _, _, _, 0, _, _, _) ->
+    no_information;
+redo(Features, Examples, Total, ExConf, Conf, TotalNoFeatures, _Prev, Do, Redo) ->
+    {F, {Best, NewFeatures}} = Do(Features, Examples, Total, ExConf, Conf),
+    NoFeatures = F(TotalNoFeatures),
+    case Redo(Best, NoFeatures, Examples, Total) of
+        {true, NewDo, NewRedo} ->
+            redo(ordsets:subtract(Features, ordsets:from_list(NewFeatures)),
+                 Examples, Total, ExConf, Conf,
+                 if is_integer(NoFeatures) ->
+                         TotalNoFeatures - NoFeatures;
+                    true ->
+                         TotalNoFeatures
+                 end, Best, NewDo, NewRedo);
+        false ->
+            {Best, NewFeatures};
+        no_information ->
+            no_information
+    end.
+
+%% @doc call either One or Two randomly according to T
+random(One, Two, T) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            R = random:uniform(),
+            if R =< T ->
+                    One(Features, Examples, Total, ExConf, Conf);
+               true ->
+                    Two(Features, Examples, Total, ExConf, Conf)
+            end
+    end.
+
+%% @doc apply n Feature selection algorithms and use Choose to pick one
+n([],_, Examples, Total, _ExConf, _Conf, Choose, Acc) ->
+    Choose(Acc, Examples, Total);
+n([Fun|Rest], Features, Examples, Total, ExConf, Conf, Choose, Acc) ->
+    n(Rest, Features, Examples, Total, ExConf, Conf, Choose,
+      [unpack(Fun(Features, Examples, Total, ExConf, Conf))|Acc]).
+
+%% @doc apply Funs then Choose one
+n(Funs, Choose) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            n(Funs, Features, Examples, Total, ExConf,Conf, Choose, [])
+    end.
+
+
+%% @doc wrap sample-fun Fun to return the number of sampled features
+redo_curry(NoFeatures, Fun) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            {NoFeatures, Fun(Features, Examples, Total,
+                             ExConf, Conf#rf_tree{no_features=NoFeatures})}
+    end.
+
+redo_curry(Fun) ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            {Conf#rf_tree.no_features, Fun(Features, Examples, Total,
+                                           ExConf, Conf)}
+    end.
+
+%% @doc unpack a candidate
+unpack({Candidate, _Features}) ->
+    Candidate;
+unpack(Candidate) ->
+    Candidate.
 
 %% @private
 laplace(C, N) ->
     (C+1)/(N+2). %% NOTE: no classes?
 
-%% @doc evaluate a subset of n random features
-subset(Features, Examples, Total, ExConf, Conf) ->
-    #rf_tree {
-       score = Score, 
-       split = Split, 
-       distribute = Distribute, 
-       missing_values = Missing,
-       no_features = NoFeatures
-      } = Conf,
-    NewFeatures = rr_example:random_features(Features, NoFeatures(length(Features))),
-    {best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing), NewFeatures}.
-
-%% @doc randomly split data set
-random_split(ExConf, Feature, Examples, Distribute, Missing) ->
-    split(ExConf, Feature, Examples, Distribute, Missing).
-
-%% @doc sample a split-value from examples with values for the feature
-value_split(ExConf, Feature, Examples, Distribute, Missing) ->
-    split(ExConf, Feature, Examples, Distribute, Missing,
-          fun (_, {numeric, _FeatureId}, _Ex) ->
-                  none; %% TODO: sample from those with value
-              (_, {categoric, _FeatureId}, _Ex) ->
-                  none; %% TODO: same..
-              (Me, Ff, Ex) ->
-                  sample_split_value(Me, Ff, Ex)
-          end).
-
-%% @doc make a determinisc split in the numeric data set
-deterministic_split(ExConf, Feature, Examples, Distribute, Missing) ->
-    split(ExConf, Feature, Examples, Distribute, Missing, 
-          fun (Me, {numeric, FeatureId}, Ex) ->
-                  find_numeric_split(Me, FeatureId, Ex, fun rr_estimator:info/2);
-              (Me, Ff, Ex) ->
-                  sample_split_value(Me, Ff, Ex)
-          end).
-
-%% @private format the left and right distribution
--spec format_left_right_split([examples()], [examples()]) -> split().
-format_left_right_split([], Right) ->
-    {right, Right};
-format_left_right_split(Left, []) ->
-    {left, Left};
-format_left_right_split(Left, Right) ->
-    {both, Left, Right}.
-
-%% @private distribute missing values either right or left depending on Distribute
-distribute_missing_values(_, _, _, _, _, [], [], [], Left, Right, _) ->
-    format_left_right_split(Left, Right);
-distribute_missing_values(Me, Feature, Examples, TotalNoLeft, TotalNoRight, [Left|LeftRest], [Right|RightRest], 
-                          [{_, _, Missing}|MissingRest], LeftAcc, RightAcc, Distribute) ->
-    case  distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, Missing, Left, Right, Distribute) of
-        {{_, 0, []}, NewRight} ->
-            distribute_missing_values(Me, Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest,
-                                      LeftAcc, [NewRight|RightAcc], Distribute);
-        {NewLeft, {_, 0, []}} ->
-            distribute_missing_values(Me, Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest, 
-                                      [NewLeft|LeftAcc], RightAcc, Distribute);
-        {NewLeft, NewRight} ->
-            distribute_missing_values(Me, Feature, Examples, TotalNoLeft, TotalNoRight, LeftRest, RightRest, MissingRest, 
-                                      [NewLeft|LeftAcc], [NewRight|RightAcc], Distribute)
-    end.
-            
-distribute_missing_values_for_class(_, _, _, _, _, [], Left, Right, _) ->
-    {Left, Right};
-distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, [MissingEx|RestMissing], 
-                                   {Class, NoLeft, Left} = LeftExamples, 
-                                   {Class, NoRight, Right} = RightExamples, Distribute) ->
-    case Distribute(build, Me, Feature, MissingEx, TotalNoLeft, TotalNoRight) of
-        {right, {_, NewCount}=NewEx} ->
-            distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, LeftExamples,
-                                                {Class, NoRight + NewCount, [NewEx|Right]}, Distribute);
-        {left, {_, NewCount}=NewEx} ->
-            distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
-                                                {Class, NoLeft + NewCount, [NewEx|Left]}, RightExamples, Distribute);
-        {both, {{_, NewLeftCount}=NewLeftEx, {_, NewRightCount} = NewRightEx}} ->
-            distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing,
-                                                {Class, NoLeft + NewLeftCount, [NewLeftEx|Left]},
-                                                {Class, NoRight + NewRightCount, [NewRightEx|Right]}, Distribute);
-        ignore ->
-            distribute_missing_values_for_class(Me, Feature, Examples, TotalNoLeft, TotalNoRight, RestMissing, 
-                                                LeftExamples, RightExamples, Distribute)
-    end.
-
-%% @doc unpack a split to a tuple containing {Left, Right}
--spec unpack_split(split()) -> {examples() | [], examples() | []}.
-unpack_split({both, Left, Right}) ->
-    {Left, Right};
-unpack_split({left, Left}) ->
-    {Left, []};
-unpack_split({right, Right}) ->
-    {[], Right}.
-
-split_feature_value(Me, FeatureValue, Examples, Distribute, DistributeMissing) ->
-    {Left, Right, Missing} = split_feature(Me, FeatureValue, Examples, Distribute, [], [], []),
-    distribute_missing_values(Me, FeatureValue, Examples, count(Left), count(Right), 
-                              Left, Right, Missing, [], [], DistributeMissing).    
-
-%% @doc Split Examples into two disjoint subsets according to Feature.
--spec split(#rr_example{}, feature(), examples(), distribute_fun(), missing_fun(), any()) -> {'$none' | atom(), split()}.
-split(Me, Feature, Examples, Distribute, DistributeMissing, Sample) ->
-    {Value, {Left, Right, Missing}} = split_with_value(Me, Feature, Examples, Distribute, Sample),
-    {Value, distribute_missing_values(Me, {Feature, Value}, Examples, count(Left), count(Right), 
-                                      Left, Right, Missing, [], [], DistributeMissing)}.
-
-%% @doc split examples into two subsets according to feature handle split randomly
--spec split(#rr_example{}, feature(), examples(), distribute_fun(), missing_fun()) -> {'$none' | atom(), split()}.
-split(Me, Feature, Examples, Distribute, DistributeMissing) ->
-    split(Me, Feature, Examples, Distribute, DistributeMissing, fun sample_split_value/3).
-    
-%% @private Split into three disjoint subsets, Left, Right and Missing
-split_with_value(Me, Feature, Examples, Distribute, Sample) ->
-    case Sample(Me, Feature, Examples) of
-        '$none' -> 
-            {'$none', split_feature(Me, Feature, Examples, Distribute, [], [], [])};
-        Value ->
-            {Value, split_feature(Me, {Feature, Value}, Examples, Distribute, [], [], [])}
-    end.
-
-%% @private split the class distribution (i.e. one example())
-split_class_distribution(_Me, _, [], _, _, Left, Right, Missing) ->
-    {Left, Right, Missing};
-split_class_distribution(Me, Feature, [ExampleId|Examples], Distribute, Class, 
-                         {Class, NoLeft, Left} = LeftExamples, 
-                         {Class, NoRight, Right} = RightExamples,
-                         {Class, NoMissing, Missing} = MissingExamples) ->
-    {NewLeftExamples, NewRightExamples, NewMissingExamples} = 
-        case Distribute(Me, Feature, ExampleId) of
-            {'?', Count} ->
-                {LeftExamples, 
-                 RightExamples, 
-                 {Class, NoMissing + Count, [ExampleId|Missing]}};
-            {left, Count} ->
-                {{Class, NoLeft + Count, [ExampleId|Left]}, 
-                 RightExamples, 
-                 MissingExamples};
-            {right, Count} ->
-                {LeftExamples, 
-                 {Class, NoRight + Count, [ExampleId|Right]}, 
-                 MissingExamples};
-            {left, {_, NewNo} = NewEx, {_, NewNoMissing} = NewMissingEx} ->
-                {{Class, NoLeft + NewNo, [NewEx|Left]}, 
-                 RightExamples, 
-                 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
-            {right, {_, NewNo} = NewEx, {_, NewNoMissing} = NewMissingEx} ->
-                {LeftExamples, {Class, NoLeft + NewNo, [NewEx|Right]}, 
-                 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
-            {all, 
-             {_, NewNoLeft} = NewLeftEx, 
-             {_, NewNoRight} = NewRightEx, 
-             {_, NewNoMissing} = NewMissingEx} ->
-                {{Class, NoLeft + NewNoLeft, [NewLeftEx|Left]}, 
-                 {Class, NoRight + NewNoRight, [NewRightEx|Right]},
-                 {Class, NoMissing + NewNoMissing, [NewMissingEx|Missing]}};
-            {both, {_, NewNoLeft} = NewLeftEx, {_, NewNoRight} = NewRightEx} ->
-                {{Class, NoLeft + NewNoLeft, [NewLeftEx|Left]},
-                 {Class, NoRight + NewNoRight, [NewRightEx|Right]},
-                 MissingExamples}
-        end,
-    split_class_distribution(Me, Feature, Examples, Distribute, Class, 
-                             NewLeftExamples, NewRightExamples, NewMissingExamples).
-
-%% @doc default function for distributing examples left or right
--spec distribute(#rr_example{}, Feature::feature(), exid()) -> distribute_example().
-distribute(Database, {{categoric, FeatureId}, SplitValue}, ExId) ->
-    {case dataset:value(Database, ExId, FeatureId) of
-        '?' -> '?';
-        Value when Value == SplitValue -> left;
-        _ -> right
-    end, example:count(ExId)};
-distribute(Database, {{numeric, FeatureId}, Threshold}, ExId) ->
-    {case dataset:value(Database, ExId, FeatureId) of
-        '?' -> '?';
-        Value when Value >= Threshold -> left;
-        _ -> right
-    end, example:count(ExId)};
-distribute(Database, {{combined, FeatureA, FeatureB}, 
-                {combined, SplitValueA, SplitValueB}}, ExId) ->
-    {A, _} = distribute(Database, {FeatureA, SplitValueA}, ExId),
-    {B, C} = distribute(Database, {FeatureB, SplitValueB}, ExId),
-    {case {A, B} of
-        {'?', B} ->
-            B;
-        {A, '?'} ->
-            A;
-         {'?', '?'} ->
-             '?';
-        {A, B} when A == B ->
-            A;
-        {A, B} when A =/= B ->
-            Rand = random:uniform(),
-            if Rand >= 0.5 ->
-                    A;
-               true ->
-                    B
-            end
-     end, C};
-distribute(Database, {rule, Rule, _Lenght}, ExId) ->
-    {rf_rule:evaluate_rule(Database, Rule, ExId), example:count(ExId)}.
-
-%% @private split data set using Feature
-split_feature(_Me, _Feature, [], _, Left, Right, Missing) ->
-    {Left, Right, Missing};
-split_feature(Me, Feature, [{Class, _, ExampleIds}|Examples], 
-              Distribute, Left, Right, Missing) ->
-    case split_class_distribution(Me, Feature, ExampleIds, Distribute, Class, 
-                                  {Class, 0, []}, {Class, 0, []}, {Class, 0, []}) of
-        {LeftSplit, RightSplit, MissingSplit} ->
-            split_feature(Me, Feature, Examples, Distribute, 
-                          [LeftSplit|Left], 
-                          [RightSplit|Right], 
-                          [MissingSplit|Missing])
-    end.
-
-%% @private find the best numeric split point
-find_numeric_split(Me, FeatureId, Examples, Gain) ->
-    case lists:keysort(1, lists:foldl(
-                            fun ({Class, _, ExIds}, NewIds) ->
-                                    lists:foldl(fun(ExId, Acc) ->
-                                                        case dataset:value(Me, ExId, FeatureId) of
-                                                            '?' -> Acc;
-                                                            Feature -> [{Feature, Class}|Acc]
-                                                        end
-                                                end, NewIds, ExIds)
-                            end, [], Examples)) of
-        [{Value, Class}|ClassIds] ->
-            Gt = lists:map(fun({C, Num, _}) -> {C, Num, []} end, Examples),
-            Lt = lists:map(fun({C, _, _}) -> {C, 0, []} end, Examples),
-            Dist = {both, Lt, Gt},
-            First = {Value, Class},
-            Total = rr_example:count(Examples),
-            find_numeric_split(ClassIds, First, FeatureId, Gain, Total, {Value/2, inf}, Dist);
-        [] ->
-            0.0 %% note: all values are missing
-    end.
-
-find_numeric_split([], _, _, _, _, {Threshold, _}, _) ->
-    Threshold;
-find_numeric_split([{Value, Class}|Rest], {OldValue, OldClass}, FeatureId, 
-                            Gain, Total, {OldThreshold, OldGain}, Dist) ->
-    {both, Left, Right} = Dist, 
-    Dist0 = case lists:keytake(Class, 1, Left) of
-                {value, {Class, Num, _}, ClassRest} ->
-                    {both, [{Class, Num + 1, []}|ClassRest], Right}
-            end,
-    {both, Left0, Right0} = Dist0,
-    NewDist = case lists:keytake(Class, 1, Right0) of
-        {value, {Class, Num0, _}, ClassRest0} ->
-            {both, Left0, [{Class, Num0 - 1, []}|ClassRest0]}
-    end,
-    case Class == OldClass of
-        true -> find_numeric_split(Rest, {Value, Class}, FeatureId,
-                                   Gain, Total, {OldThreshold, OldGain}, NewDist);
-        false ->
-            Threshold = (Value + OldValue) / 2,
-            {NewGain0, _, _} = Gain(NewDist, Total),
-            NewThreshold = case NewGain0 < OldGain of
-                               true -> {Threshold, NewGain0};
-                               false -> {OldThreshold, OldGain}
-                           end,
-            find_numeric_split(Rest, {Value, Class}, FeatureId,
-                                        Gain, Total, NewThreshold, NewDist)
-    end.
-
-%% @doc 
-%% sample a split point. this function is used in split() and can be overriden. 
-%% please use this as the default
-%% @end
-sample_split_value(Me, Feature, Examples) ->
-    case Feature of
-         {categoric, FeatureId} ->
-             resample_categoric_split(Me, FeatureId, Examples, 5);
-         {numeric, FeatureId} ->
-             sample_numeric_split(Me, FeatureId, Examples);
-         {combined, A, B} ->
-             sample_combined(Me, A, B, Examples);
-         _ ->
-            '$none'
-     end.
-
-sample_split_value(Me, Feature, Examples, Ex1, Ex2) ->
-    case Feature of
-        {categoric, FeatureId} ->
-            dataset:value(Me, Ex1, FeatureId);
-        {numeric, FeatureId} ->
-            case sample_numeric_split(Me, FeatureId, Ex1, Ex2) of
-                {'?', '?'} ->
-                    0;
-                X ->
-                    X
-            end;
-        {combined, A, B} ->
-            sample_combined(Me, A, B, Examples)
-    end.
-
-%% @private sample two features from the same example
-sample_combined(Me, FeatureA, FeatureB, Examples) ->
-    {Ex1, Ex2} = sample_example_pair(Examples),
-    {combined, 
-     sample_split_value(Me, FeatureA, Examples, Ex1, Ex2), 
-     sample_split_value(Me, FeatureB, Examples, Ex1, Ex2)}.
-
-%% @private sample a numeric split point
-sample_numeric_split(Me, FeatureId, Examples) ->
-    {Ex1, Ex2} = sample_example_pair(Examples),
-    case sample_numeric_split(Me, FeatureId, Ex1, Ex2) of
-        '?' ->
-           '?';
-        X ->
-            X
-    end.
-sample_numeric_split(Me, FeatureId, Ex1, Ex2) ->
-    Value1 = dataset:value(Me, Ex1, FeatureId),
-    Value2 = dataset:value(Me, Ex2, FeatureId),
-    case {Value1, Value2} of
-        {'?', Value2} ->
-            Value2;
-        {Value1, '?'} ->
-            Value1;
-        {Value1, Value2} ->
-            (Value1 + Value2) / 2;
-        {'?', '?'} ->
-            '?'
-    end.
-
-%% @private resample a random categoric split if a missing value is found
-resample_categoric_split(_, _, _, 0) ->
-    '?';
-resample_categoric_split(Me, FeatureId, Examples, N) ->
-    case sample_categoric_split(Me, FeatureId, Examples) of     
-        '?' ->
-            resample_categoric_split(Me, FeatureId, Examples, N - 1);
-        X ->  
-            X
-    end.
-
-%% @private sample a categoric split
-sample_categoric_split(Me, FeatureId, Examples) ->
-    ExId = sample_example(Examples),
-    dataset:value(Me, ExId, FeatureId).
-
-%% @doc find the best split from features
-best_split(_, [], _, _, _, _, _, _) ->
-    no_features;
-best_split(Me, [F|Features], Examples, Total, Score, Split, Distribute, Missing) ->
-    {T, ExSplit} = Split(Me, F, Examples, Distribute, Missing),
-    Cand = #candidate{feature={F, T}, score=Score(ExSplit, Total), split=ExSplit},
-    best_split(Me, Features, Examples, Total, Score, Split, Distribute, Missing, Cand).
-
-best_split(_, [], _, _, _, _, _, _, Acc) ->
-    Acc;
-best_split(Me, [F|Features], Examples, Total, Score, Split, Distribute, Missing, OldCand) ->
-    Cand = case Split(Me, F, Examples, Distribute, Missing) of
-               {Threshold, ExSplit} ->
-                   #candidate{feature = {F, Threshold}, 
-                                 score = Score(ExSplit, Total), 
-                                 split = ExSplit}                      
-           end,
-    best_split(Me, Features, Examples, Total, Score, Split, Distribute, Missing, 
-               case element(1, Cand#candidate.score) < element(1, OldCand#candidate.score) of
-                   true -> Cand;
-                   false -> OldCand
-               end).
-
-%% @doc sample one example from all examples
-sample_example([{_Class, _, ExIds}]) ->
-    lists:nth(random:uniform(length(ExIds)), ExIds);
-sample_example(Examples) ->
-    sample_example([lists:nth(random:uniform(length(Examples)), Examples)]).
-
-%% @doc sample two examples from different classes
-sample_example_pair([{_, _, ExId1}, {_, _, ExId2}]) ->
-    sample_example_pair(ExId1, ExId2);
-sample_example_pair(Examples) ->
-    sample_example_pair(sample_class_pair(Examples)).
-
-%% @private
-sample_example_pair(ExId1, ExId2) ->
-    {lists:nth(random:uniform(length(ExId1)), ExId1),
-     lists:nth(random:uniform(length(ExId2)), ExId2)}.
-
-%% @private
-sample_class_pair(Examples) ->
-    NoEx = length(Examples),
-    Random = random:uniform(NoEx),
-    sample_class_pair(Examples, Random, NoEx, [lists:nth(Random, Examples)]).
-
-%% @private
-sample_class_pair(Examples, Random, NoEx, Acc) ->
-    case random:uniform(NoEx) of
-        Random ->
-            sample_class_pair(Examples, Random, NoEx, Acc);
-        Other ->
-            [lists:nth(Other, Examples)|Acc]
-    end.
 -ifdef(TEST).
 
 new_tree_test() ->
     Tree = new([]),
     Dataset = classification_dataset:load(csv:binary_reader("../data/iris.txt")),
-    {M, I, _, _} = build(Tree, Dataset),
-    ?debugFmt("~p ~n ~p ~n", [M, dict:to_list(I)]).
-
+    {NewTree, _, _, _} = classifier:build(Tree, Dataset),
+    Predictions = classifier:evaluate(NewTree, Dataset),
+    ?assertEqual(true, is_list(dict:to_list(Predictions))),
+    ?assertEqual(true, is_record(NewTree, random_tree)).
 
 -endif.

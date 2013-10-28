@@ -7,13 +7,13 @@
 -module(rf).
 -export([
          %% rr_command behaviour
-         parse_args/1,   
-         help/0, 
+         parse_args/1,
+         help/0,
          args/2,
          args/1,
 
          %% rr_classifier behaviour
-         new/1,  
+         new/1,
          build/2,
          evaluate/2,
          serialize/1,
@@ -30,6 +30,8 @@
 
 %% @headerfile "rf.hrl"
 -include("rf.hrl").
+
+-record(rf, {model, ensemble}).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -53,10 +55,10 @@
           "Defines the maximum allowed depth for a single decision tree."},
          {<<"min_examples">>,    undefined,    "min-examples",{integer, 1},
           "Min number of examples allowed for splitting a node"},
-         
+
          {<<"feature_sampling">>, undefined,    "feature-sampling", {string, <<"subset">>},
           "Select a method for feature sampling. Available options include: 'subset', 'rule', 'random-rule', 'resample', 'weka', and 'combination'."},
-         
+
          {<<"missing">>,        $m,           "missing",     {string, <<"weighted">>},
           "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
 
@@ -74,16 +76,16 @@
           "Number of re-samples."},
          {<<"min_gain">>,       undefined,    "min-gain",    {float, 0},
           "Minimum allowed gain for not re-sampling (if the 'resample'-argument is specified)."},
-         
+
          {<<"no_features">>,    undefined,    "no-features", {string, <<"default">>},
           "Number of features to inspect at each split. If set to log log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
          {<<"no_rules">>,       undefined,    "no-rules",    {string, <<"ss">>},
           "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used otherwise n is used."}
 
-%        {<<"output_predictions">>, $y,       "output-predictions", {boolean, false},
-%         "Write the predictions to standard out."},
-%        {<<"variable_importance">>, $v, "variable-importance",     {integer, 0},
-%         "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
+                                                %        {<<"output_predictions">>, $y,       "output-predictions", {boolean, false},
+                                                %         "Write the predictions to standard out."},
+                                                %        {<<"variable_importance">>, $v, "variable-importance",     {integer, 0},
+                                                %         "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
 
         ]).
 -define(NAME, "rf").
@@ -105,8 +107,12 @@ variable_importance(Model, Rf) ->
     rr_ensemble:variable_importance(Model, Rf).
 
 %% @todo return tagged value
-build(Rf, Database) ->
-    rr_ensemble:generate_model(Rf, Database).
+build(Rf, Dataset) ->
+    Ensemble = Rf#rf.ensemble,
+    rr_ensemble:generate_model(Ensemble,
+                               dataset:features(Dataset),
+                               dataset:examples(Dataset),
+                               dataset:database(Dataset)).
 
 %% @doc predict the class label of Example using Model and Rf
 predict(Rf, Example, Database) ->
@@ -114,29 +120,30 @@ predict(Rf, Example, Database) ->
 
 %% @private evaluate Model using som well knonw evaluation metrics
 evaluate(Rf, Test) ->
-    Dataset = Test#dataset.module,
-    NoTestExamples = Dataset:count(Test),
-    ClassesInTest = lists:map(fun ({Class, _, _}) -> Class end, Test#dataset.examples),
+    Ensemble = Rf#rf.ensemble,
+    Examples = dataset:examples(Test),
+    NoTestExamples = dataset:no_examples(Test),
+    ClassesInTest = lists:map(fun ({Class, _, _}) -> Class end, Examples),
 
-    Dict = rr_ensemble:evaluate_model(Rf, Dataset),
+    Dict = rr_ensemble:evaluate_model(Ensemble, Examples),
     Matrix = rr_eval:confusion_matrix(Dict),
 
-    OOBAccuracy = rr_ensemble:oob_accuracy(Rf),
-    {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Rf, Dataset),
-    
+    OOBAccuracy = rr_ensemble:oob_accuracy(Ensemble),
+    {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Ensemble, Examples),
+
     Strength = rr_eval:strength(Dict, NoTestExamples),
     Variance = rr_eval:variance(Dict, NoTestExamples),
-    Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, 
-                                      Rf#rr_ensemble.no_classifiers),
-    NoRules = rr_ensemble:no_rules(Rf),
+    Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr,
+                                      Ensemble#rr_ensemble.no_classifiers),
+    NoRules = rr_ensemble:no_rules(Ensemble),
     Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
- 
+
     Precision = rr_eval:precision(ClassesInTest, Matrix),
     Recall = rr_eval:recall(ClassesInTest, Matrix),
     Brier = rr_eval:brier(Dict, NoTestExamples),
     [{accuracy, Accuracy},
-     {auc, Auc}, 
+     {auc, Auc},
      {no_rules, NoRules},
      {strength, Strength},
      {correlation, Correlation},
@@ -148,9 +155,9 @@ evaluate(Rf, Test) ->
      {base_accuracy, BaseAccuracy},
      {brier, Brier}].
 
-%% @doc 
-%% serialize configuration Rf togheter with Model 
-%% (i.e. remember both the model and the conf that built it) 
+%% @doc
+%% serialize configuration Rf togheter with Model
+%% (i.e. remember both the model and the conf that built it)
 %% @end
 serialize(Rf) ->
     Dump = rr_ensemble:get_model(Rf),
@@ -162,20 +169,21 @@ unserialize(Model) ->
 
 %% @doc create a new rf-model
 new(Props) ->
-    Cores = proplists:get_value(no_cores, Props, 
+    Cores = proplists:get_value(no_cores, Props,
                                 erlang:system_info(schedulers)),
     Progress = proplists:get_value(progress, Props, fun (_, _) -> ok end),
     NoTrees = proplists:get_value(no_trees, Props, 100),
     ExampleSampling = proplists:get_value(example_sampling, Props,
                                           fun rr_sampling:bootstrap_replicate/1),
-    BaseLearner = proplists:get_value(base_learner, Props, rf_tree), % todo: use for BaseLearner:new(....)
-    {?MODULE, #rr_ensemble { % todo: handle!
-                 progress = Progress,
-                 bagging = ExampleSampling,
-                 no_classifiers = NoTrees,
-                 base_learner = BaseLearner:new(Props),
-                 cores = Cores
-                }}.
+    BaseLearner = proplists:get_value(base_learner, Props, random_tree), % todo: use for BaseLearner:new(....)
+    #rf {
+       ensemble = #rr_ensemble { % todo: handle!
+                     progress = Progress,
+                     bagging = ExampleSampling,
+                     no_classifiers = NoTrees,
+                     base_learner = BaseLearner:new(Props),
+                     cores = Cores
+                    }}.
 
 %% @doc parse args for this classifier
 parse_args(Args) ->
@@ -184,7 +192,7 @@ parse_args(Args) ->
 %% @doc default args function throws error if argument is not found
 args(Args) ->
     args(Args, fun (Value, Reason) -> throw({bad_arg, "rf", Value, Reason}) end).
-                       
+
 %% @doc get all important args
 args(Rest, Error) ->
     NoFeatures = args(<<"no_features">>, Rest, Error),
@@ -251,10 +259,10 @@ example_sampling(Value, Error, Options) ->
         <<"nothing">> ->
             fun (Examples) -> {Examples, []} end;
         Other ->
-            Error("example-sampling", Other)            
+            Error("example-sampling", Other)
     end.
 
-distribute(Value, Error) ->     
+distribute(Value, Error) ->
     case rr_util:safe_iolist_to_binary(Value) of
         <<"default">> -> fun rr_example:distribute/3;
         <<"rulew">> -> fun rr_rule:distribute_weighted/3;
@@ -280,16 +288,16 @@ progress(Value, Error) ->
         <<"dots">> -> fun
                           (done, done) -> io:format(standard_error, "~n", []);
                           (_, _) -> io:format(standard_error, "..", [])
-                      end;
-        <<"numeric">> -> fun
-                             (done, done) -> 
-                                 io:format(standard_error, "~n", []);
-                             (Id, T) -> 
-                                 io:format(standard_error, "~p/~p.. ", [Id, T])
-                         end;
-        <<"none">> -> fun(_, _) -> ok end;
-        Other -> Error("progress", Other)
-    end.
+                   end;
+<<"numeric">> -> fun
+                     (done, done) ->
+                      io:format(standard_error, "~n", []);
+                     (Id, T) ->
+                      io:format(standard_error, "~p/~p.. ", [Id, T])
+              end;
+<<"none">> -> fun(_, _) -> ok end;
+Other -> Error("progress", Other)
+end.
 
 score(Value, Error, Options) ->
     WeightFactor = proplists:get_value(weight_factor, Options, 0.5),
@@ -301,7 +309,7 @@ score(Value, Error, Options) ->
         <<"squared-chord">> -> fun rr_estimator:squared_chord/2;
         <<"jensen-difference">> -> fun rr_estimator:jensen_difference/2;
         <<"bhattacharyya">> -> fun rr_estimator:bhattacharyya/2;
-        Other -> Error("score", Other)          
+        Other -> Error("score", Other)
     end.
 
 no_features(Value, Error) ->
@@ -333,7 +341,7 @@ feature_sampling(Value, Error, Options) ->
         <<"rule">> ->
             NoRules = args(<<"no_rules">>, Options, Error),
             RuleScore = args(<<"rule_score">>, Options, Error),
-            rf_branch:rule(NoRules, RuleScore); 
+            rf_branch:rule(NoRules, RuleScore);
         <<"random-rule">> ->
             Factor = proplists:get_value(weight_factor, Options),
             NoRules = args(<<"no_rules">>, Options, Error),
@@ -343,7 +351,7 @@ feature_sampling(Value, Error, Options) ->
             NoRules = args(<<"no_rules">>, Options, Error),
             RuleScore = args(<<"rule_score">>, Options, Error),
             rf_branch:choose_rule(NoRules, RuleScore);
-        <<"subset">> -> 
+        <<"subset">> ->
             rf_branch:subset();
         <<"random-chisquare">> ->
             Weight = proplists:get_value(<<"weight_factor">>, Options),
@@ -378,69 +386,61 @@ no_rules(Value, Error) ->
         <<"dh">> -> {NoFeatures * 2, NoFeatures div 2};
         <<"hh">> -> {NoFeatures div 2, NoFeatures div 2};
         <<"hs">> -> {NoFeatures div 2, NoFeatures};
-        <<"hd">> -> {NoFeatures div 2, NoFeatures * 2}; 
+        <<"hd">> -> {NoFeatures div 2, NoFeatures * 2};
         Other -> Error("no-rules", Other)
     end.
-    
+
 rule_score(Value, Error) ->
     case rr_util:safe_iolist_to_binary(Value) of
         <<"laplace">> -> fun rf_rule:laplace/2;
         <<"m">> -> fun rf_rule:m_estimate/2;
         <<"purity">> -> fun rf_rule:purity/2;
-        Other -> Error("rule-score", Other)                                       
+        Other -> Error("rule-score", Other)
     end.
 
 -ifdef(TEST).
-variable_importance_test() ->
-    random:seed({10, 10, 10}),
-    File = csv:binary_reader("../data/iris.txt"),
-    ExSet = rr_example:load(File, 4),
-    NoFeatures = fun (NoFeatures) -> trunc(math:log(NoFeatures)/math:log(2)) end,
-    Rf = rf:new([{no_features, NoFeatures}, {no_trees, 500}, {score, fun rr_estimator:info_gain/2}]),
-    Model = rf:build(Rf, ExSet),
-    Vi = rf:variable_importance(Model, Rf),
-    {MaxFeature, MaxScore} = rr_util:max(fun ({K, V}) -> V end, dict:to_list(Vi)),
-    ?assertEqual(true,  MaxFeature == 3 orelse MaxFeature == 4).
+%% variable_importance_test() ->
+%%     random:seed({10, 10, 10}),
+%%     File = csv:binary_reader("../data/iris.txt"),
+%%     ExSet = rr_example:load(File, 4),
+%%     NoFeatures = fun (NoFeatures) -> trunc(math:log(NoFeatures)/math:log(2)) end,
+%%     Rf = rf:new([{no_features, NoFeatures}, {no_trees, 500}, {score, fun rr_estimator:info_gain/2}]),
+%%     Model = rf:build(Rf, ExSet),
+%%     Vi = rf:variable_importance(Model, Rf),
+%%     {MaxFeature, MaxScore} = rr_util:max(fun ({K, V}) -> V end, dict:to_list(Vi)),
+%%     ?assertEqual(true,  MaxFeature == 3 orelse MaxFeature == 4).
 
--ifdef(PROFILE).
 profile_test_() ->
     profile_tests().
 
-profile_tests() -> 
+profile_tests() ->
     [
-     {"Profile car dataset", 
-      {timeout, 60, profile("../data/car.txt", "PROFILE_CAR.txt")}},
-     {"Profile iris dataset", 
-      {timeout, 60, profile("../data/iris.txt", "PROFILE_IRIS.txt")}},
-     {"Profile spambase dataset", 
-      {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE.txt")}},
-     {"Profile spambase dataset hellinger", 
-      {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE_HELL.txt", 
-                            [{score, fun rr_estimator:hellinger/2}])}}
+     %{"Profile car dataset",
+     % {timeout, 60, profile("../data/car.txt", "PROFILE_CAR.txt")}},
+     {"Profile iris dataset",
+      {timeout, 60, profile("../data/iris.txt", "PROFILE_IRIS.txt")}}
+     %{"Profile spambase dataset",
+     % {timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE.txt")}},
+     %{"Profile spambase dataset hellinger",
+      %{timeout, 60, profile("../data/spambase.txt", "PROFILE_SPAMBASE_HELL.txt",
+       %                     [{score, fun rr_estimator:hellinger/2}])}}
     ].
 profile(In, Out) ->
     profile(In, Out, []).
 
 profile(In, Out, Props) ->
     fun() ->
-            File = csv:binary_reader(In),
-            #rr_exset {
-               features=Features, 
-               examples=Examples, 
-               exconf=Dataset
-              } = rr_example:load(File, 4),
-            NoFeatures = fun (NoFeatures) -> trunc(math:log(NoFeatures)/math:log(2)) end,
+            Dataset = classification_dataset:load(csv:binary_reader(In)),
+            NoFeatures = fun (NoFeatures) -> trunc(math:log(dataset:no_features(Dataset))/math:log(2)) end,
             Rf = rf:new([{no_features, NoFeatures}] ++ Props),
-            Build = rf:partial_build(Rf),
             eprof:start(),
             eprof:log(Out),
             eprof:profile(
               fun() ->
-                      Build(Features, Examples, Dataset)
+                      classifier:build(Rf, Dataset)
               end),
             eprof:analyze(total),
             eprof:stop()
     end.
 
--endif.
 -endif.
