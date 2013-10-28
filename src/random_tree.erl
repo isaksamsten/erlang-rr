@@ -148,6 +148,11 @@ predict_all(Actual, [Example|Rest], Model, Dataset, Config, Dict) ->
                                             [{Prediction, 0}|Predictions]
                                     end, [{Prediction, 0}], Dict)). %% note: no other prob (fix?)
 
+predict(#random_tree{model = Model} = Conf, Example, Database) ->
+    predict(Model, Database
+    
+
+
 %% @doc predict an example according to a decision tree
 predict(_, #rf_leaf{id=NodeNr, class=Class, score=Score}, _ExConf, _Conf, Acc) ->
     {{Class, Score, []}, [NodeNr|Acc]};

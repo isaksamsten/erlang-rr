@@ -32,7 +32,9 @@
          no_features/1,
      
          merge/1,
-         split/2
+         split/2,
+
+         update_examples/2
         ]).
 
 
@@ -222,6 +224,9 @@ vector(#dataset{database = Database}, Example) ->
 value(#dataset{database = Database}, Example, Feature) ->
     Target = element(1, Database),
     Target:value(Database, Example, Feature).
+
+update_examples(#dataset{module = Target} = Dataset, Examples) ->
+    Target:update_examples(Dataset, Examples).
 
 %% @doc get the examples in the dataset
 examples(#dataset{examples = Examples}) -> Examples.

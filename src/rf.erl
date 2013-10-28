@@ -109,10 +109,7 @@ variable_importance(Model, Rf) ->
 %% @todo return tagged value
 build(Rf, Dataset) ->
     Ensemble = Rf#rf.ensemble,
-    rr_ensemble:generate_model(Ensemble,
-                               dataset:features(Dataset),
-                               dataset:examples(Dataset),
-                               dataset:database(Dataset)).
+    rr_ensemble:generate_model(Ensemble, Dataset).
 
 %% @doc predict the class label of Example using Model and Rf
 predict(Rf, Example, Database) ->

@@ -61,9 +61,9 @@ load_evaluation_coordinator(Models, Cores, Conf) ->
     Coordinator.
 
 %% @doc generate an ensamble of models from of #rr_conf.base_learners
-generate_model(Features, Examples, ExConf, Conf) ->
+generate_model(Conf, Dataset) ->
     #rr_ensemble{cores = Cores, no_classifiers = Classifiers} = Conf,
-    Model = spawn_base_classifiers(Classifiers, Cores, Features, Examples, ExConf, Conf),
+    Model = spawn_base_classifiers(Classifiers, Cores, Dataset, Conf),
     receive
         {done, Model} ->
             Model
@@ -168,8 +168,8 @@ predict_all(Actual, [Example|Rest], Model, ExConf, Conf, Dict) ->
 %% @doc predict the class for Example
 -spec predict_majority(pid(), exid(), #rr_example{}, #rr_ensemble{}) -> 
                               {Predition::tuple(), Rest::[]}.
-predict_majority(Model, Example, ExConf, #rr_ensemble{no_classifiers=N}) ->
-    Model ! {evaluate, self(), Example, ExConf},
+predict_majority(Model, Example, Dataset, #rr_ensemble{no_classifiers=N}) ->
+    Model ! {evaluate, self(), Example, Dataset},
     receive
         {prediction, Model, Predictions} ->
             Probs = get_prediction_probabilities(Predictions, N),
@@ -198,14 +198,14 @@ vote_list(Predictions, Class) ->
               end, Predictions).
 
 %% @doc Spaws classification and evaluator process
-spawn_base_classifiers(Sets, Cores, Features, Examples, ExConf, Conf) ->
+spawn_base_classifiers(Sets, Cores, Dataset, Conf) ->
     Self = self(),
     Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores, Conf) end),
     lists:foreach(
       fun(_) ->
               spawn_link(
                 fun() ->
-                        base_build_process(Coordinator, Features, Examples, ExConf, Conf)
+                        base_build_process(Coordinator, Dataset, Conf)
                 end)
       end, lists:seq(1, Cores)),
     Coordinator.
@@ -294,24 +294,26 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Conf) ->
     end.
 
 %% @doc transision into 'base_evaluator_process', at {completed, Coordinator}
-base_build_process(Coordinator, Features, Examples, ExConf, Conf) ->
+base_build_process(Coordinator, Dataset, Conf) ->
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A, B, C}),
 %    random:seed({round(random:uniform()*1000),round(random:uniform()*1000),round(random:uniform()*1000)}),
-    base_build_process(Coordinator, Features, Examples, ExConf, Conf, dict:new(), []).
+    base_build_process(Coordinator, Dataset, Conf, dict:new(), []).
 
-base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImportance, Models) ->
-    #rr_ensemble{no_classifiers = T, base_learner={Base, BaseConf}, progress=Progress, bagging=Bagger} = Conf,
+base_build_process(Coordinator, Dataset, Conf, VariableImportance, Models) ->
+    #rr_ensemble{no_classifiers = T, base_learner=Base, progress=Progress, bagging=Bagger} = Conf,
     Coordinator ! {build, Coordinator, self()},
     receive
         {build, Id} ->
+            Examples = dataset:examples(Dataset),
             {Bag, OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
-            {Model, TreeVariableImportance, ImportanceSum, NoRules} = Base:generate_model(Features, Bag, ExConf, BaseConf),
+            InBag = dataset:update_examples(Dataset, Bag),
+            {Model, TreeVariableImportance, ImportanceSum, NoRules} = classifier:build(Base, InBag),
             
             NewVariableImportance = update_variable_importance(TreeVariableImportance, VariableImportance, ImportanceSum),
             OOBAccuracy = case OutBag of
                               [] -> 0.0;
-                              _-> rr_eval:accuracy(Base:evaluate_model(Model, OutBag, ExConf, BaseConf))
+                              _-> 0.0 %%rr_eval:accuracy(Base:evaluate_model(Model, OutBag, ExConf, BaseConf))
                           end,
             Rem = if T > 10 -> round(T/10); true -> 1 end, %% todo: refactor (let progress decide)
             case Id rem Rem of 0 -> Progress(Id, T); _ -> ok end,
@@ -320,18 +322,16 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
                            model = Model, 
                            accuracy = OOBAccuracy, 
                            no_rules = NoRules},
-            base_build_process(Coordinator, Features, Examples, ExConf, 
-                               Conf, NewVariableImportance, [BaseModel|Models]);
+            base_build_process(Coordinator, Dataset, Conf, NewVariableImportance, [BaseModel|Models]);
         {completed, Coordinator} ->
             base_evaluator_process(Coordinator, self(), Conf, VariableImportance, Models)
     end.
 
 %% @doc enable inspection of generated models
 base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models)->
-    #rr_ensemble{base_learner={Base, BaseConf}} = Conf,
     receive
-        {evaluate, Coordinator, Self, ExId, ExConf} -> 
-            Coordinator ! {prediction, Coordinator, Self, make_prediction(Models, Base, ExId, ExConf, BaseConf)},
+        {evaluate, Coordinator, Self, ExId, Database} -> 
+            Coordinator ! {prediction, Coordinator, Self, make_prediction(Models, ExId, Database)},
             base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models);
         {importance, Coordinator, Self} ->
             Coordinator ! {importance, Coordinator, Self, dict:to_list(VariableImportance)},
@@ -344,14 +344,14 @@ base_evaluator_process(Coordinator, Self, Conf, VariableImportance, Models)->
     end.
 
 %% @private use models built using "Base" to predict the class of "ExId"
-make_prediction(Models, Base, ExId, ExConf, Conf) ->
-    make_prediction(Models, Base, ExId, ExConf, Conf, []).
+make_prediction(Models, ExId, Dataset) ->
+    make_prediction(Models, ExId, Dataset, []).
 
-make_prediction([], _Base, _ExId, _ExConf, _Conf, Acc) ->
+make_prediction([],  _ExId, _ExConf, Acc) ->
     Acc;
-make_prediction([#rr_base{id=ModelNr, model=Model}|Models], Base, ExId, ExConf, Conf, Acc) ->
-    {Prediction, NodeNr} = Base:predict(ExId, Model, ExConf, Conf, []),
-    make_prediction(Models, Base, ExId, ExConf, Conf, [{Prediction, [ModelNr|NodeNr]}|Acc]).
+make_prediction([#rr_base{id=ModelNr, model=Model}|Models], ExId, Dataset, Acc) ->
+    {Prediction, NodeNr} = classifier:predict(Model, ExId, Dataset),
+    make_prediction(Models, ExId, Dataset, [{Prediction, [ModelNr|NodeNr]}|Acc]).
 
 % @private update the variable mportance
 update_variable_importance([], Acc, _) ->

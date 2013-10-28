@@ -13,6 +13,8 @@
          load/1,
          load/2,
 
+         update_examples/2,
+
          split/2,
          merge/1
         ]).

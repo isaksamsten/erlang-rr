@@ -27,6 +27,7 @@
 
          kill/1,
          build/2,
+         predict/3,
          evaluate/2,
          serialize/1,
          unserialize/1
@@ -82,9 +83,14 @@ kill(Classifier) ->
     Target:kill(Classifier).
 
 %% @doc
-build(Classifier, Dataset) ->
+build(Classifier, Example, Dataset) ->
     Target = target(Classifier),
     Target:build(Classifier, Dataset).
+
+%% @doc
+predict(Classifier, Example, Dataset) ->
+    Target = target(Classifier),
+    Target:predict(Classifier, Example, Dataset).
 
 %% @doc
 evaluate(Classifier, Dataset) ->
