@@ -36,12 +36,13 @@
 	  "Evaluation settings."},
 	 {<<"classifier">>, $c, "classifier", string,
 	  "Classifier settings."}]).	  
+-define(NAME, "experiment").
 
 help() ->
     rr:show_help(options, ?CMD_SPEC, "experiment").
 
 parse_args(Args) ->
-    rr:parse(Args, ?CMD_SPEC).
+    rr:parse(?NAME, Args, ?CMD_SPEC).
 
 args(Args, Error) ->
     Iterations = args(<<"iterations">>, Args, Error),
@@ -56,9 +57,9 @@ args(Arg, Args, Error) ->
     Value = proplists:get_value(Arg, Args),
     case Arg of
 	<<"evaluator">> ->
-	    rr:get_evaluator(Value, Error);
+	    rr_evaluator:find(Value);
 	<<"classifier">> ->
-	    rr:get_classifier(Value, Error);
+	    rr_classifier:find(Value);
 	_ ->
 	    Value
     end.

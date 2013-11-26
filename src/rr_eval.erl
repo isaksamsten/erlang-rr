@@ -15,6 +15,7 @@
 	 strength/2,
 	 variance/2,
 	 correlation/4,
+	 mse/2,
 
 	 confusion_matrix/1
 	]).
@@ -130,6 +131,35 @@ calculate_tree_correlation([], Acc) ->
     Acc;
 calculate_tree_correlation([{A, B}|Rest], Acc) ->
     calculate_tree_correlation(Rest, Acc + math:sqrt(A + B + math:pow(A - B, 2))).
+
+mse(Predictions, NoExamples) ->
+	Mean = calculate_value_for_classes(Predictions, fun calculate_mean/3, 0) / NoExamples,
+	Variance = calculate_value_for_classes(Predictions, calculate_variance2(Mean), 0),
+	1/NoExamples * Variance.
+
+calculate_variance2(Acc) ->
+	fun (A, B, C) ->
+		calculate_variance2(A, B, C, Acc)
+	end.
+
+calculate_mean([], _, S) ->
+	S;
+calculate_mean([{_, Probs}|Rest], Actual, S) ->
+	{_, B, _} = hd(Probs),
+	calculate_mean(Rest, Actual, S + B).
+
+calculate_variance2([], _, Score, _) ->
+    Score;
+calculate_variance2([{_, Probs}|Rest], Actual, Score, Acc) ->
+    calculate_variance(Rest, Actual, 
+		       case lists:keyfind(Actual, 1, Probs) of
+			   {_, Best, _Votes} ->
+			       Score + math:pow(Best - Acc, 2);
+			   false ->
+			       Score + math:pow(0 - Acc, 2)
+		       end). 
+
+
 
 variance(Predictions, NoExamples) ->
     Strength = strength(Predictions, NoExamples),

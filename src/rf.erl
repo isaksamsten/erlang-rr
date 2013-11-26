@@ -131,13 +131,12 @@ evaluate(Conf, Model, Test, ExConf) ->
 
     OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),
     {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Model, Test, ExConf, Conf),
-    
+    Accuracy = rr_eval:accuracy(Dict),
     Strength = rr_eval:strength(Dict, NoTestExamples),
-    Variance = rr_eval:variance(Dict, NoTestExamples),
+    Variance = rr_eval:mse(Dict, NoTestExamples),
     Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, 
 				      Conf#rr_ensemble.no_classifiers),
     NoRules = rr_ensemble:no_rules(Model, Conf),
-    Accuracy = rr_eval:accuracy(Dict),
     Auc = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
  
     Precision = rr_eval:precision(ClassesInTest, Matrix),
@@ -285,7 +284,7 @@ example_sampling(Value, Error, Options) ->
 	    rr_sampling:triangle_variance_sample(Threshold, A, B, C);
 	<<"uniform-variance">> ->
 	    Option = args(<<"variance_options">>, Options, Error),
-	    [Threshold, Min, Max] = rr:parse__option_string(Option),
+	    [Threshold, Min, Max] = rr:parse_option_string(Option),
 	    rr_sampling:uniform_variance_sample(Threshold, Min, Max);
 	<<"random">> ->
 	    fun rr_sampling:random/1;
