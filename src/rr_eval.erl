@@ -15,7 +15,7 @@
 	 strength/2,
 	 variance/2,
 	 correlation/4,
-	 mse/2,
+	 mse/3,
 
 	 confusion_matrix/1
 	]).
@@ -132,34 +132,49 @@ calculate_tree_correlation([], Acc) ->
 calculate_tree_correlation([{A, B}|Rest], Acc) ->
     calculate_tree_correlation(Rest, Acc + math:sqrt(A + B + math:pow(A - B, 2))).
 
-mse(Predictions, NoExamples) ->
-	Mean = calculate_value_for_classes(Predictions, fun calculate_mean/3, 0) / NoExamples,
-	Variance = calculate_value_for_classes(Predictions, calculate_variance2(Mean), 0),
+mse(Predictions, Classes, NoExamples) ->
+	Mean = calculate_value_for_classes(Predictions, calculate_mean(Classes, NoExamples), 0),
+	Variance = calculate_value_for_classes(Predictions, calculate_variance2(dict:to_list(Mean)), 0),
 	1/NoExamples * Variance.
 
-calculate_variance2(Acc) ->
+calculate_variance2(Mean) ->
 	fun (A, B, C) ->
-		calculate_variance2(A, B, C, Acc)
+		calculate_variance2(A, B, C, Mean)
 	end.
 
-calculate_mean([], _, S) ->
+calculate_mean(Classes, NoExamples) ->
+	fun (Probs, Actual, _S) ->
+		calculate_mean(Probs, Actual, Classes, NoExamples, dict:new())
+	end.
+
+calculate_mean([], _, _, _, S) ->
 	S;
-calculate_mean([{_, Probs}|Rest], Actual, S) ->
-	{_, B, _} = hd(Probs),
-	calculate_mean(Rest, Actual, S + B).
+calculate_mean([{_, Probs}|Rest], Actual, Classes, NoExamples, Acc) ->
+	NewAcc = lists:foldl(
+		fun(Class, Dict) ->
+			case lists:keyfind(Class, 1, Probs) of
+				{_, Best, _} -> 
+					dict:update_counter(Class, Best/NoExamples, Dict);
+				false ->
+					dict:update_counter(Class, 0, Dict)
+				end
+		end, Acc, Classes),
+	calculate_mean(Rest, Actual, Classes, NoExamples, NewAcc).
 
 calculate_variance2([], _, Score, _) ->
     Score;
-calculate_variance2([{_, Probs}|Rest], Actual, Score, Acc) ->
-    calculate_variance(Rest, Actual, 
-		       case lists:keyfind(Actual, 1, Probs) of
-			   {_, Best, _Votes} ->
-			       Score + math:pow(Best - Acc, 2);
-			   false ->
-			       Score + math:pow(0 - Acc, 2)
-		       end). 
-
-
+calculate_variance2([{_, Probs}|Rest], Actual, Score, MeanVector) ->
+    calculate_variance(Rest, Actual, lists:foldl(fun ({Class, Mean}, Acc) ->
+    		Prob = case lists:keyfind(Class, 1, Probs) of
+    				{_, Best, _} -> Best;
+    				false -> 0
+    			end,
+    		if Class == Actual ->
+					Acc + (math:pow(Mean - 1, 2) - math:pow(Mean - Prob, 2));
+		   		true ->
+		   			Acc + (math:pow(Mean, 2) - math:pow(Mean - Prob, 2))
+			end
+		end, Score, MeanVector)).
 
 variance(Predictions, NoExamples) ->
     Strength = strength(Predictions, NoExamples),

@@ -133,7 +133,7 @@ evaluate(Conf, Model, Test, ExConf) ->
     {BaseAccuracy, Corr} = rr_ensemble:base_accuracy(Model, Test, ExConf, Conf),
     Accuracy = rr_eval:accuracy(Dict),
     Strength = rr_eval:strength(Dict, NoTestExamples),
-    Variance = rr_eval:mse(Dict, NoTestExamples),
+    Variance = rr_eval:mse(Dict, ClassesInTest, NoTestExamples),
     Correlation = rr_eval:correlation(Dict, NoTestExamples, Corr, 
 				      Conf#rr_ensemble.no_classifiers),
     NoRules = rr_ensemble:no_rules(Model, Conf),
