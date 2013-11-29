@@ -7,18 +7,18 @@
 -module(rr_eval).
 
 -export([
-	 accuracy/1,
-	 auc/3,
-	 brier/2,
-	 precision/2,
-	 recall/2,
-	 strength/2,
-	 variance/2,
-	 correlation/4,
-	 mse/3,
+         accuracy/1,
+         auc/3,
+         brier/2,
+         precision/2,
+         recall/2,
+         strength/2,
+         variance/2,
+         correlation/4,
+         mse/3,
 
-	 confusion_matrix/1
-	]).
+         confusion_matrix/1
+        ]).
 
 %% @headerfile "rr.hrl"
 -include("rr.hrl").
@@ -31,7 +31,7 @@
 %% -spec split_validation(example_set(), any()) -> result_set().
 %% split_validation(ExampleSet, Props) ->
 %%     split_validation:evaluate(ExampleSet, Props).
-    
+
 %% @doc 
 %% Calculate the accuracy (i.e. the percentage of correctly
 %% classified examples) 
@@ -44,13 +44,13 @@ accuracy(Predictions) ->
 %% @private containing number of {Correct, Incorrect} predictions
 correct(Predictions) ->
     dict:fold(fun (Actual, Values, Acc) ->
-		      lists:foldl(fun({{Predict, _, _Votes}, _Probs},  {C, I}) ->
-					  case Actual == Predict of
-					      true -> {C+1, I};
-					      false -> {C, I+1}
-					  end
-				  end, Acc, Values)
-	      end, {0, 0}, Predictions).
+                      lists:foldl(fun({{Predict, _, _Votes}, _Probs},  {C, I}) ->
+                                          case Actual == Predict of
+                                              true -> {C+1, I};
+                                              false -> {C, I+1}
+                                          end
+                                  end, Acc, Values)
+              end, {0, 0}, Predictions).
 
 %% @doc
 %% Calculate the area under ROC for predictions (i.e. the ability of
@@ -60,37 +60,37 @@ correct(Predictions) ->
 auc(Classes, Predictions, NoExamples) ->
     Auc = calculate_auc_for_classes(Classes, Predictions, NoExamples, []),
     AvgAuc = lists:foldl(fun
-			     ({_, {_, 'n/a'}}, Sum) -> 
-				 Sum;
-			     ({_, {No, A}}, Sum) -> 
-				 Sum + No/NoExamples*A
-			 end, 0, Auc),
+                             ({_, {_, 'n/a'}}, Sum) -> 
+                                Sum;
+                             ({_, {No, A}}, Sum) -> 
+                                Sum + No/NoExamples*A
+                        end, 0, Auc),
     {auc, Auc, AvgAuc}.
 
 calculate_auc_for_classes([], _, _, Acc) ->
     Acc;
 calculate_auc_for_classes([Pos|Rest], Predictions, NoExamples, Auc) ->
     case dict:find(Pos, Predictions) of
-	{ok, PosEx} -> 
-	    Sorted = sorted_predictions(
-		       lists:map(fun ({_, P}) -> {pos, find_prob(Pos, P)} end, PosEx), 
-		       dict:fold(fun(Class, Values, Acc) ->
-					 if Class /= Pos ->
-						 lists:foldl(fun({_, P}, Acc0) ->
-								     [{neg, find_prob(Pos, P)}|Acc0] 
-							     end, Acc, Values);
-					    true ->
-						 Acc
-					 end
-				 end, [], Predictions)),
-	    NoPosEx = length(PosEx),
-	    true = NoPosEx > 0,
-	    calculate_auc_for_classes(Rest, Predictions, NoExamples, 
-				      [{Pos, {NoPosEx, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
-								     NoPosEx, NoExamples - NoPosEx, 0)}}|Auc]);
-	error -> 
-	    calculate_auc_for_classes(Rest, Predictions, NoExamples,
-				      [{Pos, {0, 'n/a'}}|Auc])
+        {ok, PosEx} -> 
+            Sorted = sorted_predictions(
+                       lists:map(fun ({_, P}) -> {pos, find_prob(Pos, P)} end, PosEx), 
+                       dict:fold(fun(Class, Values, Acc) ->
+                                         if Class /= Pos ->
+                                                 lists:foldl(fun({_, P}, Acc0) ->
+                                                                     [{neg, find_prob(Pos, P)}|Acc0] 
+                                                             end, Acc, Values);
+                                            true ->
+                                                 Acc
+                                         end
+                                 end, [], Predictions)),
+            NoPosEx = length(PosEx),
+            true = NoPosEx > 0,
+            calculate_auc_for_classes(Rest, Predictions, NoExamples, 
+                                      [{Pos, {NoPosEx, calculate_auc(Sorted, 0, 0, 0, 0, -1, 
+                                                                     NoPosEx, NoExamples - NoPosEx, 0)}}|Auc]);
+        error -> 
+            calculate_auc_for_classes(Rest, Predictions, NoExamples,
+                                      [{Pos, {0, 'n/a'}}|Auc])
     end.
 
 %% @private calculate auc
@@ -98,27 +98,27 @@ calculate_auc([], _Tp, _Fp, Tp_prev, Fp_prev, _Prob_prev, NoPos, NoNeg, Auc) ->
     (Auc + abs(NoNeg - Fp_prev) * (NoPos + Tp_prev)/2)/(NoPos * NoNeg);
 calculate_auc([{Class, Prob}|Rest], Tp, Fp, Tp_prev, Fp_prev, OldProb, NoPos, NoNeg, Auc) ->
     {NewAuc, NewProb, NewFp_p, NewTp_p} = if Prob /= OldProb ->
-					      {Auc + abs(Fp - Fp_prev) * (Tp + Tp_prev) / 2, Prob, Fp, Tp};
-					 true ->
-					      {Auc, OldProb, Fp_prev, Tp_prev}
-				      end,
+                                                  {Auc + abs(Fp - Fp_prev) * (Tp + Tp_prev) / 2, Prob, Fp, Tp};
+                                             true ->
+                                                  {Auc, OldProb, Fp_prev, Tp_prev}
+                                          end,
     {NewTp, NewFp} = if Class == pos ->
-			     {Tp + 1, Fp};
-			true ->
-			     {Tp, Fp + 1}
-		     end,
+                             {Tp + 1, Fp};
+                        true ->
+                             {Tp, Fp + 1}
+                     end,
     calculate_auc(Rest, NewTp, NewFp, NewTp_p, NewFp_p, NewProb, NoPos, NoNeg, NewAuc).
-					      
+
 sorted_predictions(Pos, Neg) ->
     lists:sort(fun({_, A}, {_, B}) -> A > B end, Pos ++ Neg).
 
 %% @private Find probability for predicting "Class" in range [0, 1]
 find_prob(Class, Probs) ->
     case lists:keyfind(Class, 1, Probs) of
-	{Class, Prob, _Votes} ->
-	    Prob;
-	false ->
-	    0
+        {Class, Prob, _Votes} ->
+            Prob;
+        false ->
+            0
     end.
 
 %% @doc correlation, calculated as variance()/(1/K)P(h(x)=y)+P(h(x)=j) + (P(h_k(x)=y)-P(h_k(x)=j)) where y /= j
@@ -132,49 +132,69 @@ calculate_tree_correlation([], Acc) ->
 calculate_tree_correlation([{A, B}|Rest], Acc) ->
     calculate_tree_correlation(Rest, Acc + math:sqrt(A + B + math:pow(A - B, 2))).
 
+%% @doc return {Variance, Bias} where mse is given by Variance+Bias
 mse(Predictions, Classes, NoExamples) ->
-	Mean = calculate_value_for_classes(Predictions, calculate_mean(Classes, NoExamples), 0),
-	Variance = calculate_value_for_classes(Predictions, calculate_variance2(dict:to_list(Mean)), 0),
-	1/NoExamples * Variance.
+    Mean = calculate_value_for_classes(Predictions, calculate_mean(Classes, NoExamples), 0),
+    RealVariance = calculate_value_for_classes(Predictions, calculate_real_variance(dict:to_list(Mean)), 0),
+    PredVariance = calculate_value_for_classes(Predictions, calculate_pred_variance(dict:to_list(Mean)), 0),
+    Bias = brier(Predictions, NoExamples),
+    {Bias, 1/NoExamples * (RealVariance - PredVariance)}.
 
-calculate_variance2(Mean) ->
-	fun (A, B, C) ->
-		calculate_variance2(A, B, C, Mean)
-	end.
+calculate_real_variance(Mean) ->
+    fun (A, B, C) ->
+            calculate_real_variance(A, B, C, Mean)
+    end.
+
+calculate_pred_variance(Mean) ->
+    fun (A, B, C) ->
+            calculate_pred_variance(A, B, C, Mean)
+    end.
 
 calculate_mean(Classes, NoExamples) ->
-	fun (Probs, Actual, _S) ->
-		calculate_mean(Probs, Actual, Classes, NoExamples, dict:new())
-	end.
+    fun (Probs, Actual, _S) ->
+            calculate_mean(Probs, Actual, Classes, NoExamples, dict:new())
+    end.
 
 calculate_mean([], _, _, _, S) ->
-	S;
+    S;
 calculate_mean([{_, Probs}|Rest], Actual, Classes, NoExamples, Acc) ->
-	NewAcc = lists:foldl(
-		fun(Class, Dict) ->
-			case lists:keyfind(Class, 1, Probs) of
-				{_, Best, _} -> 
-					dict:update_counter(Class, Best/NoExamples, Dict);
-				false ->
-					dict:update_counter(Class, 0, Dict)
-				end
-		end, Acc, Classes),
-	calculate_mean(Rest, Actual, Classes, NoExamples, NewAcc).
+    NewAcc = lists:foldl(
+               fun(Class, Dict) ->
+                       case lists:keyfind(Class, 1, Probs) of
+                           {_, Best, _} -> 
+                               dict:update_counter(Class, Best/NoExamples, Dict);
+                           false ->
+                               dict:update_counter(Class, 0, Dict)
+                       end
+               end, Acc, Classes),
+    calculate_mean(Rest, Actual, Classes, NoExamples, NewAcc).
 
-calculate_variance2([], _, Score, _) ->
+calculate_real_variance([], _, Score, _) ->
     Score;
-calculate_variance2([{_, Probs}|Rest], Actual, Score, MeanVector) ->
-    calculate_variance(Rest, Actual, lists:foldl(fun ({Class, Mean}, Acc) ->
-    		Prob = case lists:keyfind(Class, 1, Probs) of
-    				{_, Best, _} -> Best;
-    				false -> 0
-    			end,
-    		if Class == Actual ->
-					Acc + (math:pow(Mean - 1, 2) - math:pow(Mean - Prob, 2));
-		   		true ->
-		   			Acc + (math:pow(Mean, 2) - math:pow(Mean - Prob, 2))
-			end
-		end, Score, MeanVector)).
+calculate_real_variance([{_, _Probs}|Rest], Actual, Score, MeanVector) ->
+    calculate_real_variance(Rest, Actual, lists:foldl(fun ({Class, Mean}, Acc) ->
+                                                              if Class == Actual ->
+                                                                      Acc + math:pow(Mean - 1, 2);
+                                                                 true ->
+                                                                      Acc + math:pow(Mean, 2)
+                                                              end
+                                                      end, Score, MeanVector), MeanVector).
+
+calculate_pred_variance([], _, Score, _) ->
+    Score;
+calculate_pred_variance([{_, Probs}|Rest], Actual, Score, MeanVector) ->
+    calculate_pred_variance(Rest, Actual, lists:foldl(fun ({Class, Mean}, Acc) ->
+                                                              Prob = case lists:keyfind(Class, 1, Probs) of
+                                                                         {_, Best, _} -> Best;
+                                                                         false -> 0
+                                                                     end,
+                                                              if Class == Actual ->
+                                                                      Acc + math:pow(Mean - Prob, 2);
+                                                                 true ->
+                                                                      Acc + math:pow(Mean - Prob, 2)
+                                                              end
+                                                      end, Score, MeanVector), MeanVector).
+
 
 variance(Predictions, NoExamples) ->
     Strength = strength(Predictions, NoExamples),
@@ -186,12 +206,12 @@ calculate_variance([], _, Score) ->
 calculate_variance([{_, Probs}|Rest], Actual, Score) ->
     NextBest = get_2nd_best_prob(Actual, Probs),
     calculate_variance(Rest, Actual, 
-		       case lists:keyfind(Actual, 1, Probs) of
-			   {_, Best, _Votes} ->
-			       Score + math:pow(Best - NextBest, 2);
-			   false ->
-			       Score + math:pow(0 - NextBest, 2)
-		       end).  
+                       case lists:keyfind(Actual, 1, Probs) of
+                           {_, Best, _Votes} ->
+                               Score + math:pow(Best - NextBest, 2);
+                           false ->
+                               Score + math:pow(0 - NextBest, 2)
+                       end).  
 
 
 %% @doc the strength of RF, calculated as: (1/N)(P(h(x) = Y) - P(h(x) = j) where j /= Y)
@@ -203,18 +223,18 @@ calculate_strength([], _, Score) ->
 calculate_strength([{_, Probs}|Rest], Actual, Score) ->
     NextBest = get_2nd_best_prob(Actual, Probs),
     calculate_strength(Rest, Actual, 
-		       case lists:keyfind(Actual, 1, Probs) of
-			   {_, Best, _Votes} ->
-			       Score + Best - NextBest;
-			   false ->
-			       Score + 0 - NextBest
-		       end).    
+                       case lists:keyfind(Actual, 1, Probs) of
+                           {_, Best, _Votes} ->
+                               Score + Best - NextBest;
+                           false ->
+                               Score + 0 - NextBest
+                       end).    
 
 get_2nd_best_prob(Actual, Probs) ->
     case lists:keydelete(Actual, 1, Probs) of
-	[] -> 0;
-	[{_, NextBest0, _Votes}|_] ->
-	    NextBest0
+        [] -> 0;
+        [{_, NextBest0, _Votes}|_] ->
+            NextBest0
     end.
 
 %% @doc
@@ -224,19 +244,19 @@ get_2nd_best_prob(Actual, Probs) ->
 %% @end
 -spec brier(dict(), integer()) -> Brier::float().
 brier(Predictions, NoExamples) ->
-   calculate_value_for_classes(Predictions, fun calculate_brier_score/3, 0) / NoExamples.
+    calculate_value_for_classes(Predictions, fun calculate_brier_score/3, 0) / NoExamples.
 
 %% @private
 calculate_brier_score([], _, Score) ->
     Score;
 calculate_brier_score([{_, Probs}|Rest], Actual, Score) ->
     calculate_brier_score(Rest, Actual, lists:foldl(fun ({Class, Prob, _Votes}, Acc) ->
-							    if Class == Actual ->
-								    Acc + math:pow(1 - Prob, 2);
-							       true ->
-								    Acc + math:pow(Prob, 2)
-							    end
-						    end, Score, Probs)).
+                                                            if Class == Actual ->
+                                                                    Acc + math:pow(1 - Prob, 2);
+                                                               true ->
+                                                                    Acc + math:pow(Prob, 2)
+                                                            end
+                                                    end, Score, Probs)).
 
 
 calculate_value_for_classes(Predictions, Fun, Score) ->
@@ -247,7 +267,7 @@ calculate_value_for_classes([], _, _, Score) ->
     Score;
 calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
     calculate_value_for_classes(Rest, Predictions, Fun,
-				Fun(dict:fetch(Actual, Predictions), Actual, Score)).
+                                Fun(dict:fetch(Actual, Predictions), Actual, Score)).
 
 
 
@@ -256,88 +276,86 @@ calculate_value_for_classes([Actual|Rest], Predictions, Fun, Score) ->
 precision(Classes, Matrix) ->
     NoClasses = length(Classes),
     Precision = lists:foldl(fun (Class, Acc) ->
-				    [{Class, {0, precision_for_class(Class, Matrix)}}|Acc]
-			    end, [], Classes),
+                                    [{Class, {0, precision_for_class(Class, Matrix)}}|Acc]
+                            end, [], Classes),
     AvgPrecision = lists:foldl(fun ({_Class, {_, 'n/a'}}, Acc) ->
-				       Acc;
-				   ({_Class, {_, Value}}, Acc) ->
-				       Acc + Value * 1/NoClasses
-			       end, 0, Precision),
+                                       Acc;
+                                   ({_Class, {_, Value}}, Acc) ->
+                                       Acc + Value * 1/NoClasses
+                               end, 0, Precision),
     {precision, Precision, AvgPrecision}.
 
-    
+
 precision_for_class(Class, Matrix) ->
     case dict:find(Class, Matrix) of
-		    error -> 'n/a';
-		    {ok, Row} ->
-			Tp = dict:fetch(Class, Row),
-			Rest = dict:fold(fun (_K, Value, Acc) -> Value + Acc end, 0, Row),
-			Tp / Rest
-		end.
+        error -> 'n/a';
+        {ok, Row} ->
+            Tp = dict:fetch(Class, Row),
+            Rest = dict:fold(fun (_K, Value, Acc) -> Value + Acc end, 0, Row),
+            Tp / Rest
+    end.
 
 recall(Classes, Matrix) ->
     NoClasses = length(Classes),
     Recall = lists:foldl(fun (Class, Acc) ->
-				 [{Class, {0, recall_for_class(Class, Matrix)}}|Acc]
-			 end, [], Classes),
+                                 [{Class, {0, recall_for_class(Class, Matrix)}}|Acc]
+                         end, [], Classes),
     AvgRecall = lists:foldl(fun ({_Class, {_, 'n/a'}}, Acc) ->
-				    Acc;
-				({_Class, {_, Value}}, Acc) ->
-				    Acc + Value * 1/NoClasses
-			    end, 0, Recall),
+                                    Acc;
+                                ({_Class, {_, Value}}, Acc) ->
+                                    Acc + Value * 1/NoClasses
+                            end, 0, Recall),
     {recall, Recall, AvgRecall}.
 
 recall_for_class(Class, Matrix) ->
     case dict:find(Class, Matrix) of
-	error -> 'n/a';
-	{ok, Column} ->
-	    case dict:find(Class, Column) of
-		error -> 'n/a';
-		{ok, Value} ->
-		    case dict:fold(fun (_, Dict, ValueX) ->
-						   ValueB = dict:fetch(Class, Dict),
-					   ValueX + ValueB
-				   end, 0, Matrix) of
-			0 -> 'n/a';
-			ValueB ->
-			    Value / ValueB
-		    end				
-	    end
+        error -> 'n/a';
+        {ok, Column} ->
+            case dict:find(Class, Column) of
+                error -> 'n/a';
+                {ok, Value} ->
+                    case dict:fold(fun (_, Dict, ValueX) ->
+                                           ValueB = dict:fetch(Class, Dict),
+                                           ValueX + ValueB
+                                   end, 0, Matrix) of
+                        0 -> 'n/a';
+                        ValueB ->
+                            Value / ValueB
+                    end                         
+            end
     end.
-			     
-
 
 confusion_matrix(Predictions) ->
     Classes = dict:fetch_keys(Predictions),
     Dict = lists:foldl(
-	     fun (ClassA, Dict) ->
-		     lists:foldl(
-		       fun (ClassB, Dict2) ->
-			       dict:update(ClassA,
-					   fun (Dict3) ->
-						   dict:store(ClassB, 0, Dict3)
-					   end, dict:store(ClassB, 0, dict:new()), Dict2)
-		       end, Dict, Classes)
-	     end, dict:new(), Classes),
+             fun (ClassA, Dict) ->
+                     lists:foldl(
+                       fun (ClassB, Dict2) ->
+                               dict:update(ClassA,
+                                           fun (Dict3) ->
+                                                   dict:store(ClassB, 0, Dict3)
+                                           end, dict:store(ClassB, 0, dict:new()), Dict2)
+                       end, Dict, Classes)
+             end, dict:new(), Classes),
     confusion_matrix(Classes, Predictions, Dict).
 
 confusion_matrix(Classes, Predictions, Acc) ->
     lists:foldl(
       fun (_, Acc0) ->
-	      lists:foldl(
-		fun (Search, Acc1) ->
-			lists:foldl(
-			  fun ({{Pred, _Prob, _Votes}, _}, Acc2) ->
-				  dict:update(Search,
-					      fun (SearchDict) ->
-						      dict:update_counter(Pred, 1, SearchDict)
-					      end, Acc2)			      
-			  end, Acc1, dict:fetch(Search, Predictions))
-		end, Acc0, Classes)
+              lists:foldl(
+                fun (Search, Acc1) ->
+                        lists:foldl(
+                          fun ({{Pred, _Prob, _Votes}, _}, Acc2) ->
+                                  dict:update(Search,
+                                              fun (SearchDict) ->
+                                                      dict:update_counter(Pred, 1, SearchDict)
+                                              end, Acc2)                              
+                          end, Acc1, dict:fetch(Search, Predictions))
+                end, Acc0, Classes)
       end, Acc, Classes).
-			
-    
-    
+
+
+
 
 %% for true in classes:
 %%   for pred in classes:

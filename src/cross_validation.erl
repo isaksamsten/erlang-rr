@@ -7,18 +7,18 @@
 -module(cross_validation).
 
 -export([
-	 %% rr_evaluator behaviour
-	 evaluate/2,
+         %% rr_evaluator behaviour
+         evaluate/2,
 
-	 %% public api
-	 cross_validation/3,
-	 average_cross_validation/3,
+         %% public api
+         cross_validation/3,
+         average_cross_validation/3,
 
-	 %% rr_command behaviour
-	 help/0,
-	 args/1,
-	 parse_args/1
-	]).
+         %% rr_command behaviour
+         help/0,
+         args/1,
+         parse_args/1
+        ]).
 
 -behaviour(rr_command).
 -behaviour(rr_evaluator).
@@ -31,11 +31,11 @@
 -endif.
 
 -define(CMD_SPEC, 
-	[{<<"folds">>, $f, "folds", {integer, 10},
-	  "Number of cross validation folds"},
-	 {<<"progress">>, $p, "progress", {string, "default"},
-	  "Progress bar when running cross validation"}
-	]).
+        [{<<"folds">>, $f, "folds", {integer, 10},
+          "Number of cross validation folds"},
+         {<<"progress">>, $p, "progress", {string, "default"},
+          "Progress bar when running cross validation"}
+        ]).
 -define(NAME, "cv").
 
 help() ->
@@ -56,17 +56,17 @@ args(Args, Error) ->
 args(Key, Args, Error) ->
     Value = proplists:get_value(Key, Args),
     case Key of
-	<<"folds">> ->
-	    Value;
-	<<"progress">> ->
-	    progress(Value, Error);
-	_ ->
-	    Error("cv", Key) 
+        <<"folds">> ->
+            Value;
+        <<"progress">> ->
+            progress(Value, Error);
+        _ ->
+            Error("cv", Key) 
     end.
 
 progress(_Value, _Error) ->
     fun (Fold) -> 
-	    io:format(standard_error, "fold ~p ", [Fold])
+            io:format(standard_error, "fold ~p ", [Fold])
     end.
 
 %% @doc
@@ -75,13 +75,13 @@ progress(_Value, _Error) ->
 -spec evaluate(example_set(), any()) -> result_set().
 evaluate(ExSet, Props) ->
     Build = case proplists:get_value(build, Props) of
-		undefined -> throw({badarg, build});
-		Build0 -> Build0
-	    end,
+                undefined -> throw({badarg, build});
+                Build0 -> Build0
+            end,
     Evaluate = case proplists:get_value(evaluate, Props) of
-		   undefined -> throw({badarg, evaluate});
-		   Evaluate0 -> Evaluate0
-	       end,
+                   undefined -> throw({badarg, evaluate});
+                   Evaluate0 -> Evaluate0
+               end,
 
     NoFolds = proplists:get_value(folds, Props, 10),
     Average = proplists:get_value(average, Props, fun average_cross_validation/2),
@@ -92,12 +92,12 @@ evaluate(ExSet, Props) ->
        exconf = ExConf
       } = ExSet,
     Total0 = cross_validation(
-	       fun (Train, Test, Fold) ->
-		       Progress(Fold),
-		       Model = Build(Features, Train, ExConf),
-		       Result = Evaluate(Model, Test, ExConf),
-		       {{{fold, Fold}, Result}, Model}
-	       end, NoFolds, Examples),
+               fun (Train, Test, Fold) ->
+                       Progress(Fold),
+                       Model = Build(Features, Train, ExConf),
+                       Result = Evaluate(Model, Test, ExConf),
+                       {{{fold, Fold}, Result}, Model}
+               end, NoFolds, Examples),
     {Total, Models} = lists:unzip(Total0),
     Avg = Average(Total, NoFolds),
     {{cv, NoFolds, Total ++ [Avg]}, Models}.
@@ -126,7 +126,7 @@ generate_folds([], _, _, Acc) ->
     Acc;
 generate_folds([{Class, _, ExIds}|Rest], Folds, CurrentFold, Acc) ->
     {ClassFolds, NewCurrentFold} = generate_folds_for_class(Class, ExIds, Folds, CurrentFold, 
-							    make_default_folds(Folds, Class, dict:new())),
+                                                            make_default_folds(Folds, Class, dict:new())),
     NewAcc = dict:merge(fun (_, A, B) -> A ++ B end, ClassFolds, Acc),
     generate_folds(Rest, Folds, NewCurrentFold, NewAcc).
 
@@ -142,9 +142,9 @@ generate_folds_for_class(_, [], _, Current, Acc ) ->
 generate_folds_for_class(Class, [Id|ExIds], Folds, CurrentFold, Acc) ->
     Current = if Folds < CurrentFold -> 1; true -> CurrentFold end,
     generate_folds_for_class(Class, ExIds, Folds, Current + 1,
-			     dict:update(Current, fun ([{C, N, Ids}]) ->
-							  [{C, N+1, [Id|Ids]}]
-						  end, Acc)).
+                             dict:update(Current, fun ([{C, N, Ids}]) ->
+                                                          [{C, N+1, [Id|Ids]}]
+                                                  end, Acc)).
 %% @private
 init_folds(Folds, Init, Test) ->
     Init0 = dict:fetch(Init, Folds),
@@ -156,22 +156,22 @@ init_folds(Folds, Init, Test) ->
 -spec merge_folds(dict(), integer()) -> {Test::examples(), Train::examples()}.
 merge_folds(Folds, Test) ->
     {Init, TestSet, Rest} = case Test of
-				1 -> 
-				    init_folds(Folds, 2, Test);
-				_Other ->
-				    init_folds(Folds, 1, Test)
-			    end,
+                                1 -> 
+                                    init_folds(Folds, 2, Test);
+                                _Other ->
+                                    init_folds(Folds, 1, Test)
+                            end,
     Train = dict:fold(fun (_, Fold, Acc) ->
-			      lists:zipwith(fun ({Class, Ca, Ia}, {Class, Cb, Ib}) ->
-						    {Class, Ca+Cb, Ia++Ib}
-					    end, Fold, Acc)
-		      end, Init, Rest),
+                              lists:zipwith(fun ({Class, Ca, Ia}, {Class, Cb, Ib}) ->
+                                                    {Class, Ca+Cb, Ia++Ib}
+                                            end, Fold, Acc)
+                      end, Init, Rest),
     {TestSet, Train}.
 
 %% @private default method for averaging the results of cross-validation
 average_cross_validation(Result, Folds) ->
     average_cross_validation(Result, Folds, [accuracy, auc, strength, correlation, c_s2, precision, recall,
-					     variance, oob_base_accuracy, base_accuracy, brier, no_rules]).
+                                             margin_variance, oob_base_accuracy, base_accuracy, brier, variance, mse,  no_rules]).
 
 %% @doc average the cross-validation (for the results specified in Inputs)
 average_cross_validation(Result, Folds, Inputs) ->
@@ -182,62 +182,62 @@ average_cross_validation(_, _, [], Acc) ->
     {{fold, average}, lists:reverse(Acc)};
 average_cross_validation(Avg, Folds, [H|Rest], Acc) ->
     A = lists:foldl(fun ({_, Measures}, Sum) ->
-			    case lists:keyfind(H, 1, Measures) of
-				{H, {Tag, List, Auc}} ->
-				    case Sum of
-					0 ->
-					    {Tag, average_list_item(List, Folds, 0), Sum + Auc/Folds};
-					{Tag, ListSum, AvgSum} ->
-					    {Tag, average_list_item(List, Folds, ListSum), AvgSum + Auc/Folds}
-				    end;
-				{H, List} when is_list(List) ->
-				    average_list_item(List, Folds, Sum);
-				{H, O} ->
-				    Sum + O/Folds;
-				false ->
-				    Sum 
-			    end
-		    end, 0, Avg),
+                            case lists:keyfind(H, 1, Measures) of
+                                {H, {Tag, List, Auc}} ->
+                                    case Sum of
+                                        0 ->
+                                            {Tag, average_list_item(List, Folds, 0), Sum + Auc/Folds};
+                                        {Tag, ListSum, AvgSum} ->
+                                            {Tag, average_list_item(List, Folds, ListSum), AvgSum + Auc/Folds}
+                                    end;
+                                {H, List} when is_list(List) ->
+                                    average_list_item(List, Folds, Sum);
+                                {H, O} ->
+                                    Sum + O/Folds;
+                                false ->
+                                    Sum 
+                            end
+                    end, 0, Avg),
     average_cross_validation(Avg, Folds, Rest, [{H, A}|Acc]).
 
 %% @doc average a list of items
 average_list_item(List, Folds, 0) ->
     average_list_item(List, Folds, lists:map(
-				     fun ({Class, {_, _}}) -> {Class, {0, 0}};
-					 ({Class, _}) -> {Class, 0}
-				     end, List));
+                                     fun ({Class, {_, _}}) -> {Class, {0, 0}};
+                                         ({Class, _}) -> {Class, 0}
+                                     end, List));
 average_list_item([], _, Acc) -> Acc;
 average_list_item([Item|Rest], Folds, Acc) ->
     NewAcc = case Item of
-		 {Key, {_, 'n/a'}} -> % note: don't count when we got no value
-		     case lists:keytake(Key, 1, Acc) of
-			 {value, {Key, {_, B}}, AccRest} ->
-			     [{Key, {0, B + 0 / Folds}}|AccRest];
-			 false ->
-			     [{Key, {0,  1/Folds}}|Acc]
-		     end;
-		 {Key, {_, A}} ->
-		     case lists:keytake(Key, 1, Acc) of
-			 {value, {Key, {_, B}}, AccRest} ->
-			     [{Key, {0, B + A / Folds}}|AccRest];
-			 false ->
-			     [{Key, {0,  A/Folds}}|Acc]
-		     end;
-		 {Key, 'n/a'} ->
-		     case lists:keytake(Key, 1, Acc) of
-			 {value, {Key, B}, AccRest} ->
-			     [{Key, B + 0 / Folds}|AccRest];
-			 false ->
-			     [{Key, 1/Folds}|Acc]
-		     end;
-		 {Key, A} ->
-		     case lists:keytake(Key, 1, Acc) of
-			 {value, {Key, B}, AccRest} ->
-			     [{Key, B + A / Folds}|AccRest];
-			 false ->
-			     [{Key, A/Folds}|Acc]
-		     end
-	     end,
+                 {Key, {_, 'n/a'}} -> % note: don't count when we got no value
+                     case lists:keytake(Key, 1, Acc) of
+                         {value, {Key, {_, B}}, AccRest} ->
+                             [{Key, {0, B + 0 / Folds}}|AccRest];
+                         false ->
+                             [{Key, {0,  1/Folds}}|Acc]
+                     end;
+                 {Key, {_, A}} ->
+                     case lists:keytake(Key, 1, Acc) of
+                         {value, {Key, {_, B}}, AccRest} ->
+                             [{Key, {0, B + A / Folds}}|AccRest];
+                         false ->
+                             [{Key, {0,  A/Folds}}|Acc]
+                     end;
+                 {Key, 'n/a'} ->
+                     case lists:keytake(Key, 1, Acc) of
+                         {value, {Key, B}, AccRest} ->
+                             [{Key, B + 0 / Folds}|AccRest];
+                         false ->
+                             [{Key, 1/Folds}|Acc]
+                     end;
+                 {Key, A} ->
+                     case lists:keytake(Key, 1, Acc) of
+                         {value, {Key, B}, AccRest} ->
+                             [{Key, B + A / Folds}|AccRest];
+                         false ->
+                             [{Key, A/Folds}|Acc]
+                     end
+             end,
     average_list_item(Rest, Folds, NewAcc).
 
 
