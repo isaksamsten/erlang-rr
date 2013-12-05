@@ -1,5 +1,5 @@
 function test(X, Xval, y, yval, ...
-			  si = 0.99, ub = 0, nl=0, opts = "-n 100 --progress none", ttl = 'Random Forest, E_{in}=%f, E_{out}=%f')
+			  si = 0.99, ub = 0, nl=0, opts = "-n 100 --progress none", ttl = 'Random Forest, E_{in}=%g, E_{out}=%g, F1_{out}=%g')
 	% y = sintarget(X, si, ub);
 	% yval = sintarget(Xval, si, ub);
 
@@ -13,12 +13,14 @@ function test(X, Xval, y, yval, ...
 	p = rfpredict(Xval, model);
 	Eout = 1-mean(double(yval == p));
 
+	[c, nu, prec, recall, F] = getcm(yval, p, [-1, 1]);
+
 	clf;
 	plotData(X, y);
 	visualizeBoundaryRf(X, y, model);
 	plotTarget(X, si, ub);
 	hold on;
-	title(sprintf(ttl, Ein, Eout));
+	title(sprintf(ttl, Ein, Eout, (F(1)+F(2))/2));
 	xlabel('x_1'); ylabel('x_2');
 	legend('target function');
 	legend

@@ -359,7 +359,6 @@ no_features(Value, Error) ->
         <<"sqrt">> -> fun (TotalNoFeatures) -> trunc(math:sqrt(TotalNoFeatures)) end;
         <<"all">> -> fun (TotalNoFeatures) -> TotalNoFeatures end;
         X ->
-            io:format("~p~n",[X]),
             case rr_example:format_number(X) of
                 {true, Number} when Number > 0 -> fun (_) -> Number end;
                 _ -> Error("no-features", X)
