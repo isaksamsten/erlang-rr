@@ -1,6 +1,4 @@
 function visualizeBoundaryRf(X, y, model)
-	plotData(X, y);
-
 	x1plot = linspace(min(X(:,1)), max(X(:,1)), 100)';
 	x2plot = linspace(min(X(:,2)), max(X(:,2)), 100)';
 	[X1, X2] = meshgrid(x1plot, x2plot);
