@@ -26,6 +26,7 @@
          
          variable_importance/2,
          predict/4,
+         predict_all/4,
          get/1,
          kill/1
         ]).
@@ -121,12 +122,15 @@ build(Rf, ExSet) ->
 predict(Rf, Model, Example, ExConf) ->
     rr_ensemble:predict_majority(Model, Example, ExConf, Rf).
 
+predict_all(Rf, Model, Examples, ExConf) ->
+    rr_ensemble:evaluate_model(Model, Examples, ExConf, Rf).
+
 %% @private evaluate Model using som well knonw evaluation metrics
 evaluate(Conf, Model, Test, ExConf) ->
     NoTestExamples = rr_example:count(Test),
     ClassesInTest = lists:map(fun ({Class, _, _}) -> Class end, Test),
 
-    Dict = rr_ensemble:evaluate_model(Model, Test, ExConf, Conf),
+    Dict = predict_all(Conf, Model, Test, ExConf),
     Matrix = rr_eval:confusion_matrix(Dict),
 
     OOBAccuracy = rr_ensemble:oob_accuracy(Model, Conf),

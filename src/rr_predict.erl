@@ -4,7 +4,7 @@
 %%%
 %%% @end
 %%% Created : 15 Oct 2013 by Isak Karlsson <isak-kar@dsv.su.se>
--module(rr_employ).
+-module(rr_predict).
 -behaviour(rr_command).
 -behaviour(rr_module).
 
@@ -25,8 +25,8 @@
         ]).
 
 -define(CMD_SPEC, 
-        [{<<"dataset">>, $i, "input", string,
-          "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
+        [{<<"example">>, $e, "example", string,
+          "Specify an example as a comma separated string (only work for numerics)"},
          {<<"model">>, $m, "model", string,
             "Name of the deployed model to employ."}]).
 
@@ -44,23 +44,33 @@ args(_) ->
     [].
 
 main(Args) ->
-    Dataset = proplists:get_value(<<"dataset">>, Args),
+    ExConf = format_example(proplists:get_value(<<"example">>, Args)),
     ModelFile = proplists:get_value(<<"model">>, Args),
     {Module, Dump} = load(ModelFile),
     {Model, Conf} = Module:unserialize(Dump),
-    Cores = erlang:system_info(schedulers),
-    rr_log:info("loading '~s' on ~p core(s)", [Dataset, Cores]),
-    Csv = csv:binary_reader(Dataset),
-    ExSet = rr_example:load(Csv, Cores),
-    Res = Module:evaluate(Conf, Model, ExSet#rr_exset.examples, ExSet#rr_exset.exconf),
-    Output = rr_result:default(),
-    Output({split, {{ratio, 0.0}, Res}}),
+
+    {{Pred, _, _}, _}  = Module:predict(Conf, Model, 1, ExConf),
+    io:format("~p", [list_to_integer(atom_to_list(Pred))]),
     ok.
-    
+
 load(File) ->
     case file:read_file(File) of
         {ok, Binary} ->
             rr_system:unserialize_model(Binary);
         {error, Reason} ->
             {error, Reason}
-    end.                
+    end.      
+    
+format_example(String) ->
+    ExConf = rr_example:new(),
+    Items = lists:map(
+              fun (Str) -> 
+                      {_, Num} = rr_example:format_number(string:strip(Str)),
+                      Num
+              end, string:tokens(String, ",")),
+    ExTable = ExConf#rr_example.examples,
+    ets:insert(ExTable, list_to_tuple([1|Items])),
+    ExConf.
+    
+    
+    

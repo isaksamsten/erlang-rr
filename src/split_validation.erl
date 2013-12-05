@@ -10,21 +10,21 @@
 -behaviour(rr_evaluator).
 
 -export([
-	 evaluate/2,
+         evaluate/2,
 
-	 help/0,
-	 parse_args/1,
-	 args/1
-	]).
+         help/0,
+         parse_args/1,
+         args/1
+        ]).
 
 %% @headerfile "rr.hrl"
 -include("rr.hrl").
 
 -define(NAME, "sv").
 -define(CMD_SPEC, 
-	[{<<"ratio">>, $f, "ratio", {float, 0.66},
-	  "Split dataset into two parts - one for building the model and one for testing it."}
-	]).
+        [{<<"ratio">>, $f, "ratio", {float, 0.66},
+          "Split dataset into two parts - one for building the model and one for testing it."}
+        ]).
 
 help() ->
     rr:show_help(options, ?CMD_SPEC, "sv").
@@ -42,10 +42,10 @@ args(Args, Error) ->
 args(Key, Args, Error) ->
     Value = proplists:get_value(Key, Args),
     case Key of
-	<<"ratio">> ->
-	    Value;
-	_ ->
-	    Error("sv", Key)
+        <<"ratio">> ->
+            Value;
+        _ ->
+            Error("sv", Key)
     end.
 
 
@@ -53,13 +53,13 @@ args(Key, Args, Error) ->
 -spec evaluate(example_set(), any()) -> result_set().
 evaluate(ExSet, Props) ->
     Build = case proplists:get_value(build, Props) of
-		undefined -> throw({badarg, build});
-		Build0 -> Build0
-	    end,
+                undefined -> throw({badarg, build});
+                Build0 -> Build0
+            end,
     Evaluate = case proplists:get_value(evaluate, Props) of
-		   undefined -> throw({badarg, evaluate});
-		   Evaluate0 -> Evaluate0
-	       end,
+                   undefined -> throw({badarg, evaluate});
+                   Evaluate0 -> Evaluate0
+               end,
     #rr_exset {
        features = Features,
        examples = Examples,

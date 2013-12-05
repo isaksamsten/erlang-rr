@@ -4,7 +4,7 @@
 %%%
 %%% @end
 %%% Created : 15 Oct 2013 by Isak Karlsson <isak-kar@dsv.su.se>
--module(rr_employ).
+-module(rr_predict_all).
 -behaviour(rr_command).
 -behaviour(rr_module).
 
@@ -30,7 +30,7 @@
          {<<"model">>, $m, "model", string,
             "Name of the deployed model to employ."}]).
 
--define(NAME, "employ").
+-define(NAME, "predict-all").
 
 %% @doc parse the arguments
 parse_args(Args) ->
@@ -38,7 +38,7 @@ parse_args(Args) ->
 
 %% @doc show help
 help() ->
-    rr:show_help(options, ?CMD_SPEC, "employ").
+    rr:show_help(options, ?CMD_SPEC, "predict-all").
 
 args(_) ->
     [].
@@ -51,10 +51,11 @@ main(Args) ->
     Cores = erlang:system_info(schedulers),
     rr_log:info("loading '~s' on ~p core(s)", [Dataset, Cores]),
     Csv = csv:binary_reader(Dataset),
-    ExSet = rr_example:load(Csv, Cores),
-    Res = Module:evaluate(Conf, Model, ExSet#rr_exset.examples, ExSet#rr_exset.exconf),
-    Output = rr_result:default(),
-    Output({split, {{ratio, 0.0}, Res}}),
+    #rr_exset{
+       examples = Examples,
+       exconf = ExConf} = Exset = rr_example:load(Csv, 1),
+    _Res = Module:predict_all(Conf, Model, Examples, ExConf),
+    rr_result:print([], Exset, [{dataset, fun rr_result:boundry/1}]),    
     ok.
     
 load(File) ->

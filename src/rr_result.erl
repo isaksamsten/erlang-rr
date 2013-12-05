@@ -10,8 +10,14 @@
 -export([
          csv/0,
          csv/1,
-         default/0
+         default/0,
+         predictions/1,
+         boundry/1,
+         print/2,
+         print/3
 ]).
+
+-include("rr.hrl").
 
 -define(DEFAULT_CSV_HEADERS, [
                               {"fold", fold},
@@ -53,11 +59,24 @@
                           {"no-rules", no_rules}
                          ]).
 
--type result() :: vi | predictions | evaluation | method | start | 'end'.
--type result_fun() :: fun((result(), any()) -> ok).
+%-type result() :: vi | predictions | evaluation | method | start | 'end'.
+%-type result_fun() :: fun((result(), any()) -> ok).
+
+
+print(Results, Dataset, Options) ->
+    lists:foreach(
+      fun ({result, Output}) ->
+              Output(Results);
+          ({dataset, Output}) ->
+              Output(Dataset)
+      end, Options).
+
+print(Results, Dataset) ->
+    print(Results, Dataset, [{result, default()}]).
+
 
 %% @doc return a csv result generator
--spec csv() -> result_fun().
+%-spec csv() -> result_fun().
 csv(Source) ->
     fun(Data) ->
             Header = rr_config:get_value('csv.headers', ?DEFAULT_CSV_HEADERS),
@@ -82,6 +101,7 @@ csv_output({cv, _, Folds}, Output, Header) ->
     csv_output_cv(Folds, Output, Header);
 csv_output({split, Split}, Output, Header) ->
     csv_output_split(Split, Output, Header).
+
 
 csv_output_cv([], _, _) ->
     done;
@@ -115,7 +135,7 @@ csv_output_measures(Measures, Output, Header) ->
     end.
 
 %% @doc return a default result generator (human-readable)
--spec default() -> result_fun().
+%-spec default() -> result_fun().
 default() ->
     fun(Data) ->
             Header = rr_config:get_value('default.headers', ?DEFAULT_HEADERS),
@@ -126,7 +146,10 @@ default_output({cv, _, Data}, Header) ->
     OutputFolds = rr_config:get_value('output.cv.folds', false),
     default_output_cv(Data, OutputFolds, Header);
 default_output({split, {{ratio, Fraction}, Data}}, Header) ->
-    default_output_measures(io_lib:format("test set (~.2f%)", [100*(1-Fraction)]), Data, Header).
+    default_output_measures(io_lib:format("test set (~.2f%)", [100*(1-Fraction)]), Data, Header);
+default_output({in_sample, Data}, Header) ->
+    default_output_measures("in sample", Data, Header).
+
 
 
 default_output_cv([], _, _) -> 
@@ -166,6 +189,8 @@ default_output_measures(Fold, Measures, Header) ->
                           io:format("   --------- ~n")
                   end, Header).
 
+
+
 %% output_variable_importance([], _, _) ->
 %%     ok;
 %% output_variable_importance([{FeatureId, Score}|Rest], N, No) ->
@@ -176,17 +201,46 @@ default_output_measures(Fold, Measures, Header) ->
 %%          output_variable_importance(Rest, N + 1, No)
 %%     end.
 
-%% output_predictions([]) ->
-%%     ok;
-%% output_predictions([{Class, _, ExIds}|Examples]) ->
-%%     output_predictions_for_class(Class, ExIds),
-%%     output_predictions(Examples).
+predictions(Exset) ->
+    ExConf = Exset#rr_exset.exconf,
+    Examples = Exset#rr_exset.examples,
+    Predictions = rr_example:predictions(ExConf, Examples),
+    io:format(" **** Predictions **** ~n"),
+    output_predictions(lists:keysort(1, Predictions)).
 
-%% output_predictions_for_class(_, []) ->
+output_predictions(Predictions) ->
+    lists:foreach(
+      fun ({Id, Real, [{Predicted, Prob, _Votes}|_]}) ->
+              io:format("~p,~p,~p,~p~n", [Id, Real, Predicted, Prob])
+      end, Predictions).
+
+boundry(Exset) ->
+     ExConf = Exset#rr_exset.exconf,
+    Examples = Exset#rr_exset.examples,
+    Predictions = rr_example:predictions(ExConf, Examples),
+    output_boundry(lists:keysort(1, Predictions)).
+
+output_boundry(Predictions) ->
+    lists:foreach(
+      fun ({_Id, _Real, [{Predicted, _Prob, _Votes}|_]}) ->
+              {true, Num} = rr_example:format_number(atom_to_list(Predicted)),
+              io:format("~p~n", [Num])
+      end, Predictions).
+    
+
+    
+
+%% output_predictions([], _) ->
 %%     ok;
-%% output_predictions_for_class(Class, [ExId|Rest]) ->
-%%     io:format("~p \t ~p \t", [ExId, Class]),
-%%     Predictions = ets:lookup_element(predictions, ExId, 2),
-%%     {Pred, Prob} = hd(Predictions),
+%% output_predictions([{Class, _, ExIds}|Examples], Predictions) ->
+%%     output_predictions_for_class(Class, ExIds, Predictions),
+%%     output_predictions(Examples, Predictions).
+
+%% output_predictions_for_class(_, [], _) ->
+%%     ok;
+%% output_predictions_for_class(Class, [ExId|Rest], Predictions) ->
+%%     io:format("~p \t ~p \t", [ExId, Class]),cro
+%%     Predictions = ets:lookup_element(Predictions, ExId, 2),
+%%     {Pred, Prob, _Votes} = hd(Predictions),
 %%     io:format("~p (~p) ~n", [Pred, Prob]),
-%%     output_predictions_for_class(Class, Rest).
+%%     output_predictions_for_class(Class, Rest, Predictions).

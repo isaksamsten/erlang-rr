@@ -14,25 +14,25 @@
 -endif.
 
 -export([
-	 parse_args/1,
-	 args/1
-	]).
+         parse_args/1,
+         args/1
+        ]).
 
 -export([
-	 main/1,
-	 help/0
-	]).
+         main/1,
+         help/0
+        ]).
 
 -define(CMD_SPEC, 
-	[{<<"evaluator">>, $e, "evaluation", {string, "cv --folds 10"},
-	 "Choose the evalaution method"},
-	 {<<"classifier">>, $c, "classifier", {string, "rf -n 10"},
-	  "Choose the classification method"},
-	 {<<"dataset">>, $i, "input", string,
-	  "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
-	 {<<"output">>,         $o,           "output",      {atom, default},
-	  "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"}
-	]).
+        [{<<"evaluator">>, $e, "evaluation", {string, "cv --folds 10"},
+         "Choose the evalaution method"},
+         {<<"classifier">>, $c, "classifier", {string, "rf -n 10"},
+          "Choose the classification method"},
+         {<<"dataset">>, $i, "input", string,
+          "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
+         {<<"output">>,         $o,           "output",      {string, "default"},
+          "Output format. Available options include: 'default' and 'csv'. If 'csv' is selected output is formated as a csv-file (see Example 5)"}
+        ]).
 -define(NAME, "test").
 
 parse_args(Args) ->
@@ -56,7 +56,8 @@ main(Args) ->
     rr_log:debug("loading took ~p second(s)", [rr:seconds(LoadingTime)]),
     ExperimentTime = now(),
     {Res, _Model} = Evaluator(Exset, Classifier),
-    Output(Res),
+
+    rr_result:print(Res, Exset, Output),
     rr_log:info("experiment took ~p second(s)", [rr:seconds(ExperimentTime)]),
     csv:kill(Csv),
     rr_example:kill(Exset),
@@ -78,30 +79,37 @@ args(Args, Error) ->
 args(Key, Opts, Error) ->
     Value = proplists:get_value(Key, Opts),
     case Key of
-	<<"classifier">> ->
-	    rr_classifier:find(Value);
-	<<"evaluator">> ->
-	    rr_evaluator:find(Value);
-	<<"output">> ->
-	    output(Value, Error);
-	<<"dataset">> ->
-	    Value
+        <<"classifier">> ->
+            rr_classifier:find(Value);
+        <<"evaluator">> ->
+            rr_evaluator:find(Value);
+        <<"output">> ->
+            output(Value, Error);
+        <<"dataset">> ->
+            Value
     end.
 
-output(Value, Error) ->
-    case Value of
-	default -> rr_result:default();
-	csv -> rr_result:csv();
-	Other -> Error("output", Other)
-    end.
+output(Values, Error) ->
+    Outputs = string:tokens(Values, ","),
+    lists:foldr(
+      fun (Value, Acc) ->
+              [case string:strip(Value) of
+                   "default" -> {result, rr_result:default()};
+                   "csv" -> {result, rr_result:csv()};
+                   "vi" -> {result, ok};
+                   "predictions" -> {dataset, fun rr_result:predictions/1};
+                   "boundry" -> {dataset, fun rr_result:boundry/1};
+                   Other -> Error("output", Other)
+              end|Acc]
+      end, [], Outputs).
 
 -ifdef(TEST).
 
 setup() ->
     rr_config:init([
-		    {'rr.classifiers', [{"rf", rf, "he"}]},
-		    {'rr.evaluators', [{"cv", cross_validation, "he"}]}
-		   ]).
+                    {'rr.classifiers', [{"rf", rf, "he"}]},
+                    {'rr.evaluators', [{"cv", cross_validation, "he"}]}
+                   ]).
 
 tear(_) ->
     rr_config:stop().
