@@ -55,7 +55,7 @@ main(Args) ->
        examples = Examples,
        exconf = ExConf} = Exset = rr_example:load(Csv, 1),
     _Res = Module:predict_all(Conf, Model, Examples, ExConf),
-    rr_result:print([], Exset, [{dataset, fun rr_result:boundry/1}]),    
+    rr_result:print([], Exset, [{dataset, fun output_prediction/1}]),    
     ok.
     
 load(File) ->
@@ -65,3 +65,16 @@ load(File) ->
         {error, Reason} ->
             {error, Reason}
     end.                
+
+output_prediction(Exset) ->
+     ExConf = Exset#rr_exset.exconf,
+    Examples = Exset#rr_exset.examples,
+    Predictions = rr_example:predictions(ExConf, Examples),
+    output_boundry(lists:keysort(1, Predictions)).
+
+output_boundry(Predictions) ->
+    lists:foreach(
+      fun ({_Id, _Real, [{Predicted, _Prob, _Votes}|_]}) ->
+              %{true, Num} = rr_example:format_number(atom_to_list(Predicted)),
+              io:format("~s~n", [atom_to_list(Predicted)])
+      end, Predictions).

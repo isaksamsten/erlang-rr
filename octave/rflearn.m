@@ -1,9 +1,10 @@
-function model = rflearn(X, y, opts = '-n 100 --progress none')
+function model = rflearn(X, y, opts = '-n 100 --progress none', quiet = 1)
 % 
-% -- Function File:  rflearn(X, y, OPTIONS) 
+% -- Function File:  rflearn(X, y, OPTIONS, quiet = 1) 
 % 
 %    Learn a random forest model from the examples in X with the targets in y
-%    multiple targets are allowed (i.e. |y| >= 2)
+%    multiple targets are allowed (i.e. |y| >= 2). Set quiet to FALSE to ignore
+%    output to standard error
 %  
 %    OPTIONS:
 %    -c, --cores         Number of cores used by the algorightm for 
@@ -78,10 +79,36 @@ function model = rflearn(X, y, opts = '-n 100 --progress none')
 %                        'no-features' is used otherwise n is used. [default: 
 %                        ss] 
 %
-%    Isak Karlsson <isak-kar@dsv.su.se> (December 2013)
+%    Isak Karlsson <isak-kar@dsv.su.se> (last edit: dec 2013)
 %    
 %    See also: rfpredict
 	tmpfile = rfdataset(X, y);
-	model = tmpnam('./tmp/', 'model');
-	system(sprintf('./rr deploy -i %s -c "rf %s" -o %s', tmpfile, opts, model));
+	model.tmpnam = tmpnam('./tmp/', 'model');
+
+	if quiet
+		q = ' 2> /dev/null';
+	else
+		q = '';
+	end
+	[status, ~]	= system(sprintf('./rr deploy -i %s -c "rf %s" -o %s %s', tmpfile, opts, model.tmpnam, q));
+	model.nfeatures = size(X,2);
+	model.nexamples = size(X,1);
+	model.opts = opts;
+	model.vi = variable_importance(model.tmpnam, q, model.nfeatures);
+	model.oob_error = 0;
 end
+
+function vi = variable_importance(tmpnam, q, nfeatures)
+	[status, vari] = system(sprintf('./rr vi -m %s %s', tmpnam, q));
+	list = strread(vari, '%s', 'delimiter', sprintf('\n'));
+	vi = zeros(nfeatures, 1);
+	for i=1:length(list)
+		[s, e, te, m, t] = regexp(list(i), '(.+):(.+)');
+		idx = str2double(t{1}{1}{1,1});
+		val = str2double(t{1}{1}{1,2});
+		vi(idx) = val;
+	end
+end
+
+
+

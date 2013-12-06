@@ -1,4 +1,13 @@
 function tmpfile = rfdataset(X, y)
+%
+% -- Function File: rfdataset(X, y) 
+%
+%    write a matrix X and a vector y to a tmpfile which can be used by 
+%    rflearn and rfpredict
+%
+%    Isak Karlsson <isak-kar@dsv.su.se> (last edit: dec 2013)
+%
+%    See also: rfpredict, rflearn
 	header = repeat('numeric,', size(X,2));
 	tmpfile = tmpnam('./tmp');
 	fid = fopen(tmpfile, 'w');

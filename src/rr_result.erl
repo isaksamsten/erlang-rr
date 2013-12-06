@@ -12,10 +12,10 @@
          csv/1,
          default/0,
          predictions/1,
-         boundry/1,
+         
          print/2,
          print/3
-]).
+        ]).
 
 -include("rr.hrl").
 
@@ -56,11 +56,12 @@
                           {"variance", variance},
                           {"mse", mse},
                           sep,
-                          {"no-rules", no_rules}
+                          {"no-rules", no_rules},
+                          {"variable-importance", variable_importance}
                          ]).
 
-%-type result() :: vi | predictions | evaluation | method | start | 'end'.
-%-type result_fun() :: fun((result(), any()) -> ok).
+                                                %-type result() :: vi | predictions | evaluation | method | start | 'end'.
+                                                %-type result_fun() :: fun((result(), any()) -> ok).
 
 
 print(Results, Dataset, Options) ->
@@ -76,7 +77,7 @@ print(Results, Dataset) ->
 
 
 %% @doc return a csv result generator
-%-spec csv() -> result_fun().
+                                                %-spec csv() -> result_fun().
 csv(Source) ->
     fun(Data) ->
             Header = rr_config:get_value('csv.headers', ?DEFAULT_CSV_HEADERS),
@@ -135,7 +136,7 @@ csv_output_measures(Measures, Output, Header) ->
     end.
 
 %% @doc return a default result generator (human-readable)
-%-spec default() -> result_fun().
+                                                %-spec default() -> result_fun().
 default() ->
     fun(Data) ->
             Header = rr_config:get_value('default.headers', ?DEFAULT_HEADERS),
@@ -167,19 +168,25 @@ default_output_cv([{{_, Fold}, Measures}|Rest], OutputFolds, Header) ->
                     default_output_cv(Rest, OutputFolds, Header)
             end
     end.
-                    
+
 default_output_measures(Fold, Measures, Header) ->
     io:format(" *** ~s *** ~n", [Fold]),
     lists:foreach(fun ({Name, Key}) ->
                           case lists:keyfind(Key, 1, Measures) of                             
-                              {Key, {Type, Value, Auc}} when Type == recall; 
-                                                             Type == precision;
-                                                             Type == auc -> 
+                              {Key, {Type, Value, Average}} when Type == recall; 
+                                                                 Type == precision;
+                                                                 Type == auc -> 
                                   io:format("~s:~n", [Name]),
                                   lists:foreach(fun({Class, {_, P}}) ->
-                                                io:format(" - ~s: ~p ~n", [Class, P])
-                                        end, Value),
-                                  io:format(" average: ~p~n", [Auc]);                         
+                                                        io:format(" - ~s: ~p ~n", [Class, P])
+                                                end, Value),
+                                  io:format(" average: ~p~n", [Average]);
+                              {Key, Value} when is_list(Value) ->
+                                  Length = length(Value),
+                                  io:format("~s: (~p features)~n", [Name, Length]),
+                                  lists:foreach(fun ({K, V}) ->
+                                                        io:format(" - ~s: ~p ~n", [K, V])
+                                                end, lists:reverse(Value));
                               {Key, Value} ->
                                   io:format("~s: ~p~n", [Name, Value]);
                               _ ->
@@ -188,8 +195,6 @@ default_output_measures(Fold, Measures, Header) ->
                       (sep) ->
                           io:format("   --------- ~n")
                   end, Header).
-
-
 
 %% output_variable_importance([], _, _) ->
 %%     ok;
@@ -213,34 +218,3 @@ output_predictions(Predictions) ->
       fun ({Id, Real, [{Predicted, Prob, _Votes}|_]}) ->
               io:format("~p,~p,~p,~p~n", [Id, Real, Predicted, Prob])
       end, Predictions).
-
-boundry(Exset) ->
-     ExConf = Exset#rr_exset.exconf,
-    Examples = Exset#rr_exset.examples,
-    Predictions = rr_example:predictions(ExConf, Examples),
-    output_boundry(lists:keysort(1, Predictions)).
-
-output_boundry(Predictions) ->
-    lists:foreach(
-      fun ({_Id, _Real, [{Predicted, _Prob, _Votes}|_]}) ->
-              {true, Num} = rr_example:format_number(atom_to_list(Predicted)),
-              io:format("~p~n", [Num])
-      end, Predictions).
-    
-
-    
-
-%% output_predictions([], _) ->
-%%     ok;
-%% output_predictions([{Class, _, ExIds}|Examples], Predictions) ->
-%%     output_predictions_for_class(Class, ExIds, Predictions),
-%%     output_predictions(Examples, Predictions).
-
-%% output_predictions_for_class(_, [], _) ->
-%%     ok;
-%% output_predictions_for_class(Class, [ExId|Rest], Predictions) ->
-%%     io:format("~p \t ~p \t", [ExId, Class]),cro
-%%     Predictions = ets:lookup_element(Predictions, ExId, 2),
-%%     {Pred, Prob, _Votes} = hd(Predictions),
-%%     io:format("~p (~p) ~n", [Pred, Prob]),
-%%     output_predictions_for_class(Class, Rest, Predictions).

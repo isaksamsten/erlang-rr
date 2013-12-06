@@ -1,4 +1,4 @@
-function y = rfpredict(X, model)
+function y = rfpredict(X, model, quiet = 1)
 % 
 % -- Function File:  rfpredict(X, model) 
 % 
@@ -9,9 +9,14 @@ function y = rfpredict(X, model)
 %    Isak Karlsson <isak-kar@dsv.su.se> (December 2013)
 %    
 %    See also: rflearn
+	if quiet
+		q = ' 2> /dev/null';
+	else
+		q = '';
+	end
 	m = size(X,1);
 	tmpfile = rfdataset(X, zeros(m,1));
-	[status, yval] = system(sprintf('./rr predict-all -i %s -m "%s"', tmpfile, model), 1);
+	[status, yval] = system(sprintf('./rr predict-all -i %s -m "%s" %s', tmpfile, model.tmpnam, q), 1);
 	yval = strread(yval, '%s', 'delimiter', sprintf('\n'));
 	y = zeros(m,1);
 	for i=1:m

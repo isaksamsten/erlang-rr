@@ -147,6 +147,7 @@ evaluate(Conf, Model, Test, ExConf) ->
     Precision = rr_eval:precision(ClassesInTest, Matrix),
     Recall = rr_eval:recall(ClassesInTest, Matrix),
     
+    VI = variable_importance(Model, Conf),
     [{accuracy, Accuracy},
      {auc, Auc}, 
      {no_rules, NoRules},
@@ -157,6 +158,12 @@ evaluate(Conf, Model, Test, ExConf) ->
      {c_s2, if Strength =/= 0.0 -> Correlation/math:pow(Strength, 2); true -> 0.0 end},
      {precision, Precision},
      {recall, Recall},
+     {variable_importance, lists:reverse(
+                             lists:keysort(2, lists:map(
+                                              fun ({FeatureId, Importance}) ->
+                                                      {rr_example:feature_name(ExConf, FeatureId), 
+                                                       Importance}
+                                              end, dict:to_list(VI))))},
      {oob_base_accuracy, OOBAccuracy},
      {base_accuracy, BaseAccuracy},
      {mse, Bias + Variance},
@@ -167,7 +174,8 @@ evaluate(Conf, Model, Test, ExConf) ->
 %% (i.e. remember both the model and the conf that built it) 
 %% @end
 serialize(Rf, Model) ->
-    Dump = rr_ensemble:get_model(Model, Rf),
+    NewRf = Rf#rr_ensemble{vi = dict:to_list(variable_importance(Model, Rf))},
+    Dump = rr_ensemble:get_model(Model, NewRf),
     rr_system:serialize_model(?MODULE, Dump).
 
 %% @doc unserialize a model into a Model

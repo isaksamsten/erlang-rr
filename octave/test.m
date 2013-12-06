@@ -17,7 +17,7 @@ function test(X, Xval, y, yval, ...
 
 	clf;
 	plotData(X, y);
-	visualizeBoundaryRf(X, y, model);
+	visualizeBoundaryRf(X, y, @(x) rfpredict(x, model));
 	plotTarget(X, si, ub);
 	hold on;
 	title(sprintf(ttl, Ein, Eout, (F(1)+F(2))/2));
