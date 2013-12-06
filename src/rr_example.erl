@@ -755,7 +755,8 @@ feature_name(Conf, {IdA, IdB}) ->
     {feature_name(Conf, IdA),
      feature_name(Conf, IdB)};
 feature_name(Conf, Rules) when is_list(Rules) ->
-    [feature_name(Conf, Rule) || Rule <- Rules];
+    Str = [feature_name(Conf, Rule) || Rule <- Rules],
+    string:join(Str, " & ");
 feature_name(#rr_example{features=FeatureTable}, Id) ->
     ets:lookup_element(FeatureTable, Id, 2).
 

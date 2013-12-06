@@ -186,7 +186,8 @@ default_output_measures(Fold, Measures, Header) ->
                                   io:format("~s: (~p features)~n", [Name, Length]),
                                   lists:foreach(fun ({K, V}) ->
                                                         io:format(" - ~s: ~p ~n", [K, V])
-                                                end, lists:reverse(Value));
+                                                end, lists:sublist(lists:reverse(
+                                                       lists:keysort(2, Value)), 10));
                               {Key, Value} ->
                                   io:format("~s: ~p~n", [Name, Value]);
                               _ ->

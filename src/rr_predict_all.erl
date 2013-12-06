@@ -74,7 +74,6 @@ output_prediction(Exset) ->
 
 output_boundry(Predictions) ->
     lists:foreach(
-      fun ({_Id, _Real, [{Predicted, _Prob, _Votes}|_]}) ->
-              %{true, Num} = rr_example:format_number(atom_to_list(Predicted)),
-              io:format("~s~n", [atom_to_list(Predicted)])
+      fun ({_Id, _Real, [{Predicted, Prob, _Votes}|_]}) ->
+              io:format("~s:~p~n", [atom_to_list(Predicted), Prob])
       end, Predictions).
