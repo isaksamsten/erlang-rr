@@ -82,7 +82,7 @@ predict(ExId, Node, ExConf, Conf, Acc) ->
                 {right, _} ->
                     predict(ExId, Right, ExConf, Conf, NewAcc);
                 ignore ->
-                    {{Majority, laplace(Count, LeftExamples+RightExamples)}, NewAcc}
+                    {{Majority, laplace(Count, LeftExamples+RightExamples), []}, NewAcc}
             end;
         {left, _} ->
             predict(ExId, Left, ExConf, Conf, NewAcc);
@@ -93,24 +93,24 @@ predict(ExId, Node, ExConf, Conf, Acc) ->
 %% @private induce a decision tree
 -spec build_decision_node(Features::features(), Examples::examples(), Importance::dict(), Total::number(), 
                           Error::number(), #rr_example{}, #rf_tree{}, [], number()) -> {tree(), dict(), number(), number()}.
-build_decision_node([], [], Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
-    {make_leaf(Id, [], error), Importance, Total, NoNodes};
-build_decision_node([], Examples, Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
-    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, NoNodes};
-build_decision_node(_, [{Class, Count, _ExampleIds}] = Examples, Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) ->
-    {make_leaf(Id, Examples, {Class, Count}), Importance, Total, NoNodes};
-build_decision_node(Features, Examples, Importance, Total, Error, ExConf, Conf, Id, NoNodes) ->
+build_decision_node([], [], Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) -> %% no examples
+    {make_leaf(Id, []), Importance, Total, NoNodes};
+build_decision_node([], Examples, Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) -> % no features
+    {make_leaf(Id, Examples), Importance, Total, NoNodes};
+build_decision_node(_, Examples, Importance, Total, _Error, _ExConf, _Conf, Id, NoNodes) when length(Examples) == 1 -> % only 1 class
+    {make_leaf(Id, Examples), Importance, Total, NoNodes};
+build_decision_node(Features, Examples, Importance, Total, Error, ExConf, Conf, Id, NoNodes) -> % otherwise
     #rf_tree{prune=Prune, pre_prune = _PrePrune, branch=Branch, depth=Depth} = Conf,
     NoExamples = rr_example:count(Examples),
     case Prune(NoExamples, Depth) of
         true ->
-            {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, NoNodes};
+            {make_leaf(Id, Examples), Importance, Total, NoNodes}; %% prune
         false ->
             case rf_branch:unpack(Branch(Features, Examples, NoExamples, ExConf, Conf)) of
                 no_information ->
-                    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, NoNodes};
+                    {make_leaf(Id, Examples), Importance, Total, NoNodes};
                 #rr_candidate{split={_, _}} ->
-                    {make_leaf(Id, Examples, rr_example:majority(Examples)), Importance, Total, NoNodes};
+                    {make_leaf(Id, Examples), Importance, Total, NoNodes};
                 #rr_candidate{feature=Feature, 
                               score={Score, LeftError, RightError}, 
                               split={both, LeftExamples, RightExamples}}  -> 
@@ -135,12 +135,14 @@ make_node(Id, Feature, Dist, Score, Left, Right) ->
     #rf_node{id = Id, score=Score, feature=Feature, distribution=Dist, left=Left, right=Right}.
 
 %% @private create a leaf
--spec make_leaf([number(),...], examples(), atom()) -> #rf_leaf{}.
-make_leaf(Id, [], Class) ->
-    #rf_leaf{id=Id, score=0, distribution={0, 0}, class=Class};
-make_leaf(Id, Covered, {Class, C}) ->
-    N = rr_example:count(Covered),
-    #rf_leaf{id=Id, score=laplace(C, N), distribution={C, N-C}, class=Class}.
+-spec make_leaf([number(),...], examples()) -> #rf_leaf{}.
+make_leaf(Id, []) ->
+    #rf_leaf{id=Id, score=0, distribution={0, 0}, class='$error'};
+make_leaf(Id, Covered) ->
+    C = lists:foldl(fun ({C, _, X}, Acc) -> [{C, length(X)}|Acc] end, [], Covered), %rr_example:count(Covered),
+    N = lists:foldl(fun ({_, X}, Acc) -> X + Acc end, 0, C),
+    {Class, Cc} =  rr_util:max(fun ({_, X}) -> X end, C), %rr_example:majority(Covered),
+    #rf_leaf{id=Id, score=laplace(Cc, N), distribution={Cc, N-Cc}, class=Class}.
 
 %% @private
 laplace(C, N) ->

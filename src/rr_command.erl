@@ -10,9 +10,23 @@
 
 behaviour_info(callbacks) ->
     [
-     {parse_args, 1}, %% use rr:parse/2 to parse args
-     {args, 1}, %% get all args which are used with this command (throws {bad_arg, ModuleName, ArgName, Value})
-     {help, 0} %% print usage information to standard error
+     %%
+     %% Parse args
+     %% 
+     %% @return [{<<"key">>, value},....]
+     {parse_args, 1},
+
+     %%
+     %% get all args which are used with this command (throws
+     %% {bad_arg, ModuleName, ArgName, Value})
+     %%
+     %% @return [{key, Value}, ....] from parse_args/1
+     {args, 1}, 
+
+     %%
+     %% print usage information
+     %% 
+     {help, 0}
     ];
 behaviour_info(_) ->
     undefined.

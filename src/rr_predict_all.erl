@@ -5,6 +5,7 @@
 %%% @end
 %%% Created : 15 Oct 2013 by Isak Karlsson <isak-kar@dsv.su.se>
 -module(rr_predict_all).
+
 -behaviour(rr_command).
 -behaviour(rr_module).
 
@@ -26,7 +27,10 @@
 
 -define(CMD_SPEC, 
         [{<<"dataset">>, $i, "input", string,
-          "Specifies the input dataset in csv-format with rows of equal length. The first row must describe the type of attributes as 'numeric' or 'categoric' and exactly one 'class'. The second row name each attribute including the class. Finally, every row below the first two describe exactly one example."},
+          "Specifies the input dataset in csv-format with rows of equal length." ++
+              " The first row must describe the type of attributes as 'numeric' or 'categoric' " ++
+              "and exactly one 'class'. The second row name each attribute including the class. " ++ 
+              "Finally, every row below the first two describe exactly one example."},
          {<<"model">>, $m, "model", string,
             "Name of the deployed model to employ."}]).
 

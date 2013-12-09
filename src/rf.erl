@@ -42,17 +42,25 @@
 -endif.
 
 -define(CMD_SPEC,
-        [{<<"cores">>,          $c,           "cores",        {integer, erlang:system_info(schedulers)},
+        [{<<"cores">>, $c, "cores", {integer, erlang:system_info(schedulers)},
           "Number of cores used by the algorightm for constructing the model."},
-         {<<"progress">>,       undefined,    "progress",    {string, <<"dots">>},
-          "Show a progress bar while building a model. Available options include: 'dots', 'numeric' and 'none'. "},
 
-         {<<"score">>,          undefined,    "score",       {string, <<"info">>},
-          "Defines the measure, which should be minimized, for evaluating the goodness of split points in each branch. Available options include: 'info', 'gini' and 'gini-info', where 'info' denotes information entropy and 'gini' the gini-impurity."},
+         {<<"progress">>, undefined, "progress", {string, <<"dots">>},
+          "Show a progress bar while building a model. Available options" ++
+              " include: 'dots', 'numeric' and 'none'. "},
 
-         {<<"rule_score">>,     undefined,    "rule-score",  {string, <<"laplace">>},
-          "Defines the measure, which should be minimized, for evaluating the goodness of a specific rule. Available otpions include: 'm', 'laplace' and 'purity', where 'm' denotes the m-estimate"},
-         {<<"no_trees">>,    $n,           "no-trees",    {integer, 10},
+         {<<"score">>,  undefined, "score", {string, <<"info">>},
+          "Defines the measure, which should be minimized, for evaluating " ++
+              "the goodness of split points in each branch. Available options " ++ 
+              "include: 'info', 'gini' and 'gini-info', where 'info' denotes " ++ 
+              "information entropy and 'gini' the gini-impurity."},
+
+         {<<"rule_score">>, undefined, "rule-score", {string, <<"laplace">>},
+          "Defines the measure, which should be minimized, for evaluating the " ++ 
+              "goodness of a specific rule. Available otpions include: 'm', " ++
+              "'laplace' and 'purity', where 'm' denotes the m-estimate"},
+         
+         {<<"no_trees">>, $n, "no-trees", {integer, 10},
           "Defines the number of classifiers (trees) to build."},
 
          {<<"max_depth">>,      undefined,    "max-depth",   {integer, 1000},
@@ -61,36 +69,52 @@
           "Min number of examples allowed for splitting a node"},
          
          {<<"feature_sampling">>, undefined,    "feature-sampling", {string, <<"subset">>},
-          "Select a method for feature sampling. Available options include: 'subset', 'rule', 'random-rule', 'resample', 'weka', and 'combination'."},
+          "Select a method for feature sampling. Available options include: " ++
+              "'subset', 'rule', 'random-rule', 'resample', 'weka', and 'combination'."},
          
          {<<"missing">>,        $m,           "missing",     {string, <<"weighted">>},
-          "Distributing missing values according to different strategies. Available options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', 'left', 'right' and 'ignore'. If 'random' is used, each example with missing values have an equal probability of be distributed over the left and right branch. If 'randomw' is selected, examples are randomly distributed over the left and right branch, but weighted towards the majority branch. If 'partition' is selected, each example is distributed equally over each branch. If 'partitionw' is selected, the example are distributed over each branch but weighted towards the majority branch. If 'weighted' is selected, each example is distributed over the majority branch. If 'left', 'right' or 'ignore' is selected, examples are distributed either to the left, right or is ignored, respectively."},
+          "Distributing missing values according to different strategies. Available" ++
+              " options include: 'random', 'randomw', 'partitionw', 'partition', 'weighted', " ++
+              "'left', 'right' and 'ignore'. If 'random' is used, each example with missing " ++
+              "values have an equal probability of be distributed over the left and right branch." ++
+              " If 'randomw' is selected, examples are randomly distributed over the left and right" ++
+              " branch, but weighted towards the majority branch. If 'partition' is selected, each" ++
+              " example is distributed equally over each branch. If 'partitionw' is selected, the" ++ 
+              " example are distributed over each branch but weighted towards the majority branch." ++ 
+              " If 'weighted' is selected, each example is distributed over the majority branch. If " ++ 
+              "'left', 'right' or 'ignore' is selected, examples are distributed either to the left, " ++ 
+              "right or is ignored, respectively."},
 
          {<<"distribute">>,     $d,           "distribute",  {string, <<"default">>},
-          "Distribute examples at each split according to different strategies. Available option include: 'default' or 'rulew'. If 'default' is selected, examples are distributed to either left or right. If 'rulew' is selected, fractions of each example are distributed according to how many antecedents each rule-node classifies the example."},
+          "Distribute examples at each split according to different strategies. Available option " ++ 
+              "include: 'default' or 'rulew'. If 'default' is selected, examples are distributed " ++
+              "to either left or right. If 'rulew' is selected, fractions of each example are" ++
+              " distributed according to how many antecedents each rule-node classifies the example."},
 
          {<<"example_sampling">>, undefined,  "example-sampling", {string, <<"bagging">>},
           "Select the method for feature sampling. Available options include: 'bagging' and 'subagging'."},
+
          {<<"variance_options">>, undefined, "variance-options", {string, "0.3,1,100,10"},
           "Options for the triangle variance sampling method. Format: 'Threshold A B C'"},
 
          {<<"weight_factor">>,  undefined,    "weight-factor", {float, 0.5},
           "Used for controlling the randomness of the 'combination' and 'weighted'-arguments."},
+
          {<<"no_resamples">>,   undefined,    "no-resample", {integer, 6},
           "Number of re-samples."},
+
          {<<"min_gain">>,       undefined,    "min-gain",    {float, 0},
           "Minimum allowed gain for not re-sampling (if the 'resample'-argument is specified)."},
          
          {<<"no_features">>,    undefined,    "no-features", {string, <<"default">>},
-          "Number of features to inspect at each split. If set to log log(F)+1, where F denotes the total number of features, are inspected. The default value is usually a good compromise between diversity and performance."},
+          "Number of features to inspect at each split. If set to log log(F)+1, where F denotes " ++
+              "the total number of features, are inspected. The default value is usually a " ++
+              "good compromise between diversity and performance."},
+
          {<<"no_rules">>,       undefined,    "no-rules",    {string, <<"ss">>},
-          "Number of rules to generate (from n features, determined by 'no-features'). Options include: 'default', then 'no-features' div 2, 'same', then 'no-features' is used otherwise n is used."}
-
-%        {<<"output_predictions">>, $y,       "output-predictions", {boolean, false},
-%         "Write the predictions to standard out."},
-%        {<<"variable_importance">>, $v, "variable-importance",     {integer, 0},
-%         "Output the n most important variables calculated using the reduction in information averaged over all trees for each feature."},
-
+          "Number of rules to generate (from n features, determined by 'no-features'). " ++ 
+              "Options include: 'default', then 'no-features' div 2, 'same', then " ++ 
+              "'no-features' is used otherwise n is used."}
         ]).
 -define(NAME, "rf").
 

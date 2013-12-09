@@ -74,7 +74,8 @@
 -type example() :: {Class::atom(), Count::number(), Examples::[exid(),...]}.
 -type examples() :: [example()].
 
--type prediction() :: {{Class::atom(), Score::number()}, NodeId::[number(),...]}.
+%% any() should be a "vote-list"
+-type prediction() :: {{Class::atom(), Score::number(), Any::any()}, NodeId::[number(),...]}.
 
 -type split() ::  {left | right, examples()} | {both, examples(), examples()}.
 -type missing_example() :: {left, exid()} | {right, exid()} | {both, exid(), exid()}.
