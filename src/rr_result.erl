@@ -85,7 +85,7 @@ print(Results, Dataset) ->
 csv(Source) ->
     fun(Data) ->
             Header = rr_config:get_value('csv.headers', ?DEFAULT_CSV_HEADERS),
-            case rr_config:get_value('output.csv.header', true) of
+            case rr_config:get_value('output.csv.header', false) of
                 true ->
                     io:format("~s~n", [string:join(lists:map(fun ({H, _}) -> H end, Header), ",")]);
                 false ->
