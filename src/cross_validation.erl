@@ -170,7 +170,7 @@ merge_folds(Folds, Test) ->
 
 %% @private default method for averaging the results of cross-validation
 average_cross_validation(Result, Folds) ->
-    average_cross_validation(Result, Folds, [accuracy, auc, strength, correlation, c_s2, precision, recall,
+    average_cross_validation(Result, Folds, [accuracy, auc, strength, correlation, c_s2, precision, recall, f_measure, avg_auc,
                                              margin_variance, oob_base_accuracy, base_accuracy, brier, variance, mse, 
                                              no_rules, variable_importance]).
 

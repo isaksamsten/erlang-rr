@@ -166,14 +166,33 @@ evaluate(Conf, Model, Test, ExConf) ->
                                       Conf#rr_ensemble.no_classifiers),
     Variance2 = rr_eval:variance(Dict, NoTestExamples),
     NoRules = rr_ensemble:no_rules(Model, Conf),
-    Auc = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
+    {Auc, AvgAuc} = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
  
     Precision = rr_eval:precision(ClassesInTest, Matrix),
     Recall = rr_eval:recall(ClassesInTest, Matrix),
-    
+    %% FMeasure0 = lists:foldl(
+    %%             fun (Class, Acc) ->
+    %%                     Val = case lists:keyfind(Class, 1, element(2, Precision)) of
+    %%                               {_, {_,'n/a'}} ->                                                    
+    %%                                   0;
+    %%                               {_, {_,P}}  ->
+    %%                                   case lists:keyfind(Class, 1, element(2, Recall)) of
+    %%                                       {_, {_,'n/a'}} ->                                                    
+    %%                                           0;
+    %%                                       {_, {_,R}} ->                                                    
+    %%                                           (2*P*R)/(P+R)
+    %%                                   end
+    %%                           end,
+    %%                     [{Class, {0, Val}}|Acc]
+    %%             end, [], ClassesInTest),
+    %%FMeasure = {f_measure, FMeasure0, lists:foldl(fun ({_,{_, C}}, Acc) -> C + Acc end, 0, FMeasure0)/length(ClassesInTest)},
+    P = element(3, Precision),
+    R = element(3, Recall),
+    FMeasure = (2*P*R)/(P+R),
     VI = variable_importance(Model, Conf),
     [{accuracy, Accuracy},
      {auc, Auc}, 
+     {avg_auc, AvgAuc},
      {no_rules, NoRules},
      {strength, Strength},
      {correlation, Correlation},
@@ -182,6 +201,7 @@ evaluate(Conf, Model, Test, ExConf) ->
      {c_s2, if Strength =/= 0.0 -> Correlation/math:pow(Strength, 2); true -> 0.0 end},
      {precision, Precision},
      {recall, Recall},
+     {f_measure, FMeasure},
      {variable_importance, lists:reverse(
                              lists:keysort(2, lists:map(
                                               fun ({FeatureId, Importance}) ->

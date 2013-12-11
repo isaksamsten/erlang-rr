@@ -16,7 +16,8 @@
          variance/2,
          correlation/4,
          mse/3,
-
+         tpr/2,
+         tnr/2,
          confusion_matrix/1
         ]).
 
@@ -52,6 +53,11 @@ correct(Predictions) ->
                                   end, Acc, Values)
               end, {0, 0}, Predictions).
 
+tpr(Classes, Matrix) ->
+    recall(Classes, Matrix).
+
+
+
 %% @doc
 %% Calculate the area under ROC for predictions (i.e. the ability of
 %% the model to rank true positives ahead of false positives)
@@ -59,13 +65,18 @@ correct(Predictions) ->
 -spec auc(any(), dict(), integer()) -> [{Class::atom(), NoExamples::integer(), Auc::float()}].
 auc(Classes, Predictions, NoExamples) ->
     Auc = calculate_auc_for_classes(Classes, Predictions, NoExamples, []),
-    AvgAuc = lists:foldl(fun
+    WAvgAuc = lists:foldl(fun
                              ({_, {_, 'n/a'}}, Sum) -> 
                                 Sum;
                              ({_, {No, A}}, Sum) -> 
                                 Sum + No/NoExamples*A
                         end, 0, Auc),
-    {auc, Auc, AvgAuc}.
+    AvgAuc = lists:foldl(fun ({_, {_, 'n/a'}}, Sum) -> 
+                                Sum;
+                             ({_, {_No, A}}, Sum) -> 
+                                Sum + A
+                        end, 0, Auc),
+    {{auc, Auc, WAvgAuc}, AvgAuc/length(Classes)}.
 
 calculate_auc_for_classes([], _, _, Acc) ->
     Acc;

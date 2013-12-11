@@ -22,7 +22,8 @@
 -define(DEFAULT_CSV_HEADERS, [
                               {"fold", fold},
                               {"accuracy", accuracy}, 
-                              {"auc", auc}, 
+                              {"weighted auc", auc}, 
+                              {"average auc", avg_auc},
                               {"oob-base-accuracy", oob_base_accuracy},
                               {"base-accuracy", base_accuracy},
                               {"strength", strength}, 
@@ -31,6 +32,7 @@
                               {"c/s^2", c_s2},
                               {"precision", precision},
                               {"recall", recall},
+                              {"f-measure", f_measure},
                               {"no-rules", no_rules},
                               {"brier", brier},
                               {"variance", variance},
@@ -40,7 +42,8 @@
 
 -define(DEFAULT_HEADERS, [
                           {"accuracy", accuracy}, 
-                          {"area under ROC", auc}, 
+                          {"area under ROC", auc},
+                          {"average AUC", avg_auc},
                           {"oob-base-accuracy", oob_base_accuracy},
                           {"base-accuracy", base_accuracy},
                           sep,
@@ -51,6 +54,7 @@
                           sep,
                           {"precision", precision},
                           {"recall", recall},
+                          {"f-measure", f_measure},
                           sep,
                           {"brier", brier},
                           {"variance", variance},
@@ -175,12 +179,13 @@ default_output_measures(Fold, Measures, Header) ->
                           case lists:keyfind(Key, 1, Measures) of                             
                               {Key, {Type, Value, Average}} when Type == recall; 
                                                                  Type == precision;
+                                                                 Type == f_measure;
                                                                  Type == auc -> 
                                   io:format("~s:~n", [Name]),
                                   lists:foreach(fun({Class, {_, P}}) ->
                                                         io:format(" - ~s: ~p ~n", [Class, P])
                                                 end, Value),
-                                  io:format(" average: ~p~n", [Average]);
+                                  io:format(" weighted average: ~p~n", [Average]);
                               {Key, Value} when is_list(Value) ->
                                   Length = length(Value),
                                   io:format("~s: (~p features)~n", [Name, Length]),
