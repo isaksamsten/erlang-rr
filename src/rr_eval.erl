@@ -17,7 +17,6 @@
          correlation/4,
          mse/3,
          tpr/2,
-         tnr/2,
          confusion_matrix/1
         ]).
 
@@ -56,7 +55,8 @@ correct(Predictions) ->
 tpr(Classes, Matrix) ->
     recall(Classes, Matrix).
 
-
+tnr(Classes, Matrix) ->
+    
 
 %% @doc
 %% Calculate the area under ROC for predictions (i.e. the ability of
