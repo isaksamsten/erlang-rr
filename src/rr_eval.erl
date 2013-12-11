@@ -55,9 +55,6 @@ correct(Predictions) ->
 tpr(Classes, Matrix) ->
     recall(Classes, Matrix).
 
-tnr(Classes, Matrix) ->
-    
-
 %% @doc
 %% Calculate the area under ROC for predictions (i.e. the ability of
 %% the model to rank true positives ahead of false positives)
