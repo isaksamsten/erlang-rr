@@ -139,9 +139,10 @@ make_node(Id, Feature, Dist, Score, Left, Right) ->
 make_leaf(Id, []) ->
     #rf_leaf{id=Id, score=0, distribution={0, 0}, class='$error'};
 make_leaf(Id, Covered) ->
-    C = lists:foldl(fun ({C, _, X}, Acc) -> [{C, length(X)}|Acc] end, [], Covered), %rr_example:count(Covered),
-    N = lists:foldl(fun ({_, X}, Acc) -> X + Acc end, 0, C),
-    {Class, Cc} =  rr_util:max(fun ({_, X}) -> X end, C), %rr_example:majority(Covered),
+    %C = lists:foldl(fun ({C, _, X}, Acc) -> [{C, length(X)}|Acc] end, [], Covered), %
+    %N = lists:foldl(fun ({_, X}, Acc) -> X + Acc end, 0, C),
+    {Class, Cc} =  rr_example:majority(Covered), %rr_util:max(fun ({_, X}) -> X end, C), 
+    N = rr_example:count(Covered),
     #rf_leaf{id=Id, score=laplace(Cc, N), distribution={Cc, N-Cc}, class=Class}.
 
 %% @private
