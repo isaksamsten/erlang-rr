@@ -7,27 +7,27 @@
 
 -module(rr_estimator).
 -export([
-	 %% decision tree
-	 gini/2,
-	 info_gain/2,
-	 entropy/1,
-	 info/2,
-	 hellinger/2, 
-	 bhattacharyya/2,
+         %% decision tree
+         gini/2,
+         info_gain/2,
+         entropy/1,
+         info/2,
+         hellinger/2, 
+         bhattacharyya/2,
 
-	 squared_chord/2,
-	 jensen_difference/2,
+         squared_chord/2,
+         jensen_difference/2,
 
-	 gini_info/1,
+         gini_info/1,
 
-	 %% rule learner
-	 purity/2,
-	 laplace/2,
-	 m_estimate/2,
+         %% rule learner
+         purity/2,
+         laplace/2,
+         m_estimate/2,
 
-	 %% statistical test
-	 chisquare/3
-	 ]).
+         %% statistical test
+         chisquare/3
+         ]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -52,31 +52,31 @@ gini_content(Examples, _Total) ->
     Counts = [C || {_, C, _} <- Examples],
     Total = lists:sum(Counts),
     lists:foldl(fun (0.0, Count) ->
-			Count;
-		    (0, Count) ->
-			Count;
-		    (Class, Count) ->
-			Count + math:pow(Class/Total, 2)
-		end, 0.0, Counts).
+                        Count;
+                    (0, Count) ->
+                        Count;
+                    (Class, Count) ->
+                        Count + math:pow(Class/Total, 2)
+                end, 0.0, Counts).
 
 %% @doc hellinger distance between left and right branch
 hellinger(Examples, _Total) ->
     distance(Examples, fun hellinger/1, 
-	     fun (Value) -> 
-		     1/math:sqrt(2) * math:sqrt(Value) 
-	     end).
+             fun (Value) -> 
+                     1/math:sqrt(2) * math:sqrt(Value) 
+             end).
 
 %% @doc squared-chord difference between left and right branch
 squared_chord(Examples, _Total) ->
     distance(Examples, fun squared_chord/1,
-	     fun (Value) ->
-		     1/2 * Value
-	     end).
+             fun (Value) ->
+                     1/2 * Value
+             end).
 
 %% @doc jensen difference between left and right branch
 jensen_difference(Examples, _Total) ->
     distance(Examples, fun jensen_difference/1,
-	     fun (Value) -> Value end).						
+             fun (Value) -> Value end).                                         
 
 %% @doc generic function for calculating probability distances
 distance({both, Left, Right}, FunA, FunB) ->
@@ -89,11 +89,11 @@ distance({_, _}, _, _) ->
 %% @todo integrate into distance framework
 bhattacharyya({both, Left, Right}, _Total) ->
     case probability_content(Left, Right, [], fun bhattacharyya/1) of
-	0.0 ->
-	    {1000,0.0,0.0};
-	Value ->
-	    V = 1-(-1*math:log(Value)),
-	    {V, V, V}
+        0.0 ->
+            {1000,0.0,0.0};
+        Value ->
+            V = 1-(-1*math:log(Value)),
+            {V, V, V}
     end;
 bhattacharyya(_, _) ->
     {1000, 0.0, 0.0}.
@@ -103,13 +103,13 @@ bhattacharyya({P, Q}) ->
 
 totals(Examples) ->
     lists:foldl(fun ({Class, Count, _}, {Classes, Acc}) ->
-			{[Class|Classes], dict:update_counter(Class, Count, Acc)}
-		end, {[], dict:new()}, Examples).
+                        {[Class|Classes], dict:update_counter(Class, Count, Acc)}
+                end, {[], dict:new()}, Examples).
 
 scale(Examples, Totals) ->
     lists:foldl(fun ({Class, Count, _}, Acc) ->
-			dict:store(Class, Count/dict:fetch(Class, Totals), Acc)
-		end, dict:new(), Examples).
+                        dict:store(Class, Count/dict:fetch(Class, Totals), Acc)
+                end, dict:new(), Examples).
 
 probability_content(Left, Right, {Classes, Totals} , Fun) ->
     LeftScale = scale(Left, Totals),
@@ -117,10 +117,10 @@ probability_content(Left, Right, {Classes, Totals} , Fun) ->
     LeftTotal = dict:fold(fun (_, V, Acc)  -> V + Acc end, 0, LeftScale),
     RightTotal= dict:fold(fun (_, V, Acc)  -> V + Acc end, 0, RightScale),
     lists:foldl(fun (Class, Count) ->
-			P = case dict:find(Class, LeftScale) of {ok, V} -> V/LeftTotal; error -> 0 end,
-			Q = case dict:find(Class, RightScale) of {ok, Vq} -> Vq/RightTotal; error -> 0 end,
-			Count + Fun({P, Q})
-	      end, 0, ordsets:from_list(Classes)).
+                        P = case dict:find(Class, LeftScale) of {ok, V} -> V/LeftTotal; error -> 0 end,
+                        Q = case dict:find(Class, RightScale) of {ok, Vq} -> Vq/RightTotal; error -> 0 end,
+                        Count + Fun({P, Q})
+              end, 0, ordsets:from_list(Classes)).
 
 hellinger({P, Q}) ->
     math:pow(math:sqrt(P) - math:sqrt(Q), 2).
@@ -151,9 +151,9 @@ info_gain({right, Right}, Total) ->
 info_content(Side, Total) ->
     NoSide = rr_example:count(Side),
     if NoSide > 0 ->
-	    Total * (NoSide / Total) * entropy(Side);
+            Total * (NoSide / Total) * entropy(Side);
        true ->
-	    0.0
+            0.0
     end.
 
 %% @doc calculate the information (weighted by the total)
@@ -166,12 +166,12 @@ gini_info(Fraction) ->
     Gini = fun gini/2,
     Info = fun info/2,
     fun (Split, Total) ->
-	    Random = random:uniform(),
-	    if Random =< Fraction ->
-		    Gini(Split, Total);
-	       true ->
-		    Info(Split, Total)
-	    end
+            Random = random:uniform(),
+            if Random =< Fraction ->
+                    Gini(Split, Total);
+               true ->
+                    Info(Split, Total)
+            end
     end.
 
 %% @doc calculate the entropy
@@ -182,13 +182,13 @@ entropy(Examples) ->
 
 entropy(Counts, Total) ->
     -1 * lists:foldl(fun (0.0, Count) ->
-			     Count;
-			 (0, Count) ->
-			     Count;
-			 (Class, Count) ->
-			     Fraction = Class / Total,
-			     Count + Fraction * math:log(Fraction)%/math:log(2)
-		     end, 0.0, Counts).
+                             Count;
+                         (0, Count) ->
+                             Count;
+                         (Class, Count) ->
+                             Fraction = Class / Total,
+                             Count + Fraction * math:log(Fraction)%/math:log(2)
+                     end, 0.0, Counts).
 
 m_estimate(Examples, P) ->
     error(Examples, fun m_estimate2/2, P).
@@ -220,10 +220,10 @@ error({both, LeftEx, RightEx}, Fun, Payload) ->
     Left = 1 - Fun(LeftEx, Payload),
     Right = 1 - Fun(RightEx, Payload),
     Smallest = if Left < Right ->
-		       Left;
-		  true ->
-		       Right
-	       end,
+                       Left;
+                  true ->
+                       Right
+               end,
     {Smallest, Left, Right};
 error({left, Side}, Fun, Payload) ->
     Left = 1 - Fun(Side, Payload),
@@ -243,32 +243,32 @@ chisquare(Split, Examples, Total) ->
 
 chisquare_sum(Ns, Nprim) ->
     lists:foldl(fun ({Class, N, _}, Acc) ->
-		     case lists:keyfind(Class, 1, Nprim) of
-			 false ->
-			     Acc + N;
-			 {Class, NP} ->
-			     Acc + math:pow(N-NP, 2)/NP
-		     end
-		end, 0.0, Ns).
+                     case lists:keyfind(Class, 1, Nprim) of
+                         false ->
+                             Acc + N;
+                         {Class, NP} ->
+                             Acc + math:pow(N-NP, 2)/NP
+                     end
+                end, 0.0, Ns).
 
 chisquare_weight(Examples, P) ->
     lists:foldl(fun ({Class, N, _}, Acc) ->
-			[{Class, N*P}|Acc]
-		end, [], Examples).
+                        [{Class, N*P}|Acc]
+                end, [], Examples).
 
 -ifdef(TEST).
 
 chi_square_test() ->
     ?assertEqual(chisquare(rr_example:mock_split([{green, 4}, {red, 1}],
-						 [{green, 3}, {red, 1}]),
-			    rr_example:mock_examples([{green, 7}, {red, 2}]), 
-			    9), 
-		 0.03214285714285711),
+                                                 [{green, 3}, {red, 1}]),
+                            rr_example:mock_examples([{green, 7}, {red, 2}]), 
+                            9), 
+                 0.03214285714285711),
     ?assertEqual(chisquare(rr_example:mock_split([{green, 0}, {red, 8}],
-						 [{green, 7}, {red, 2}]),
-			    rr_example:mock_examples([{green, 7}, {red, 10}]), 
-			    17), 
-		 10.577777777777778).
+                                                 [{green, 7}, {red, 2}]),
+                            rr_example:mock_examples([{green, 7}, {red, 10}]), 
+                            17), 
+                 10.577777777777778).
 
 mock_splits() ->
     {rr_example:mock_split([{a, 2}, {b, 100001}], [{a, 1}, {b, 99999}]),
@@ -355,29 +355,29 @@ unbalance_test() ->
 %% class_total(Examples, Init) ->
 %%     lists:foldl(
 %%       fun ({Class, Count, _}, {Classes, Counts}) ->
-%% 	      {[Class|Classes], Count + Counts}
+%%            {[Class|Classes], Count + Counts}
 %%       end, Init, Examples).
 
 %% maximize(Fun, Examples, {Classes, Total}) ->
 %%     case ordsets:from_list(lists:map(
-%% 	   fun ({X, Y}) ->
-%% 		   if X > Y -> {X, Y}; true -> {Y, X} end
-%% 	   end,		   
-%% 	   [{ClassA, ClassB} || ClassA <- Classes, ClassB <- Classes, ClassA =/= ClassB])) of
-%% 	[] ->
-%% 	    0.0;
-%% 	Pairs ->
-%% 	    {Pos0, Neg0} = hd(Pairs),
-%% 	    PosFrac0 = rr_example:count(Pos0, Examples)/dict:fetch(Pos0, Total),
-%% 	    NegFrac0 = rr_example:count(Neg0, Examples)/dict:fetch(Neg0, Total),
-%% 	    lists:foldl(fun ({Pos, Neg}, Max) ->
-%% 				PosFrac = rr_example:count(Pos, Examples)/dict:fetch(Pos, Total),
-%% 				NegFrac = rr_example:count(Neg, Examples)/dict:fetch(Neg, Total),
-%% 				Value = Fun({PosFrac, NegFrac}),
-%% 				if Value > Max ->
-%% 					Value;
-%% 				   true ->
-%% 					Max
-%% 				end
-%% 			end, Fun({PosFrac0, NegFrac0}), tl(Pairs))
+%%         fun ({X, Y}) ->
+%%                 if X > Y -> {X, Y}; true -> {Y, X} end
+%%         end,            
+%%         [{ClassA, ClassB} || ClassA <- Classes, ClassB <- Classes, ClassA =/= ClassB])) of
+%%      [] ->
+%%          0.0;
+%%      Pairs ->
+%%          {Pos0, Neg0} = hd(Pairs),
+%%          PosFrac0 = rr_example:count(Pos0, Examples)/dict:fetch(Pos0, Total),
+%%          NegFrac0 = rr_example:count(Neg0, Examples)/dict:fetch(Neg0, Total),
+%%          lists:foldl(fun ({Pos, Neg}, Max) ->
+%%                              PosFrac = rr_example:count(Pos, Examples)/dict:fetch(Pos, Total),
+%%                              NegFrac = rr_example:count(Neg, Examples)/dict:fetch(Neg, Total),
+%%                              Value = Fun({PosFrac, NegFrac}),
+%%                              if Value > Max ->
+%%                                      Value;
+%%                                 true ->
+%%                                      Max
+%%                              end
+%%                      end, Fun({PosFrac0, NegFrac0}), tl(Pairs))
 %%     end.
