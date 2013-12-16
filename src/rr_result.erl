@@ -22,8 +22,8 @@
 -define(DEFAULT_CSV_HEADERS, [
                               {"fold", fold},
                               {"accuracy", accuracy}, 
-                              {"weighted auc", auc}, 
-                              {"average auc", avg_auc},
+                              {"weighted auc", roc}, 
+                              {"average auc", avg_roc},
                               {"oob-base-accuracy", oob_base_accuracy},
                               {"base-accuracy", base_accuracy},
                               {"strength", strength}, 
