@@ -153,7 +153,7 @@ predict_all(Rf, Model, Examples, ExConf) ->
 evaluate(Conf, Model, Test, ExConf) ->
     NoTestExamples = rr_example:count(Test),
     ClassesInTest = lists:map(fun ({Class, _, _}) -> Class end, Test),
-
+    ClassesWithCount = lists:map(fun ({Class, Count, _}) -> {Class, Count} end, Test),
     Dict = predict_all(Conf, Model, Test, ExConf),
     Matrix = rr_eval:confusion_matrix(Dict),
 
@@ -166,10 +166,12 @@ evaluate(Conf, Model, Test, ExConf) ->
                                       Conf#rr_ensemble.no_classifiers),
     Variance2 = rr_eval:variance(Dict, NoTestExamples),
     NoRules = rr_ensemble:no_rules(Model, Conf),
-    {Auc, AvgAuc} = rr_eval:auc(ClassesInTest, Dict, NoTestExamples),
+    {Auc, AvgAuc} = rr_eval:roc(ClassesInTest, Dict, NoTestExamples),
  
     Precision = rr_eval:precision(ClassesInTest, Matrix),
     Recall = rr_eval:recall(ClassesInTest, Matrix),
+    Prc = rr_eval:precision_recall_curve(ClassesWithCount, Dict),
+
     %% FMeasure0 = lists:foldl(
     %%             fun (Class, Acc) ->
     %%                     Val = case lists:keyfind(Class, 1, element(2, Precision)) of
@@ -191,8 +193,9 @@ evaluate(Conf, Model, Test, ExConf) ->
     FMeasure = (2*P*R)/(P+R),
     VI = variable_importance(Model, Conf),
     [{accuracy, Accuracy},
-     {auc, Auc}, 
-     {avg_auc, AvgAuc},
+     {roc, Auc},
+     {prc, Prc},
+     {avg_roc, AvgAuc},
      {no_rules, NoRules},
      {strength, Strength},
      {correlation, Correlation},

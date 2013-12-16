@@ -8,22 +8,31 @@
 -module(rr_util).
 
 -export([
-	 weighted_random/1,
-	 weighted_random/2,
-	 weighted_random/3,
+         weighted_random/1,
+         weighted_random/2,
+         weighted_random/3,
 
-	 partition/2,
+         partition/2,
+         trapz/2,
 
-	 min/2,
-	 max/2,
-	 shuffle/1,
-	 safe_iolist_to_binary/1
-	]).
+         min/2,
+         max/2,
+         shuffle/1,
+         safe_iolist_to_binary/1
+        ]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+
+trapz([P|Prest], [N|Nrest]) ->
+    trapz([P|Prest], [N|Nrest], 0, 0, 0).
+
+trapz([], [], _, _, Sum) ->
+    Sum * 1/2;
+trapz([P|Prest], [N|Nrest], P_prev, N_prev, Sum) ->
+    trapz(Prest, Nrest, P, N, Sum + (P-P_prev) * (N + N_prev)).
 
 %% @doc List should be sorted with the highest Weight first and the weights should sum to 1
 -spec weighted_random([{Weight::float(), Item::any()},...]) -> Item::any().
@@ -53,32 +62,32 @@ safe_iolist_to_binary(Value) ->
 %% @doc parttion elements from List evenly over each list in Parts
 -spec partition(List::[], Parts::[[]]) -> [[]].
 partition([], Parts) ->
-    Parts;				     
+    Parts;                                   
 partition([Model|Models], [Part|Parts]) ->
     partition(Models, Parts ++ [[Model|Part]]).
 
 min(Fun, List) ->
     {_, Min} = lists:foldl(
-		 fun (Value, {OldMin, OldValue}) ->
-			 U = Fun(Value),
-			 if U < OldMin ->
-				 {U, Value};
-			    true ->
-				 {OldMin, OldValue}
-			 end
-		 end, {Fun(hd(List)), hd(List)}, tl(List)),
+                 fun (Value, {OldMin, OldValue}) ->
+                         U = Fun(Value),
+                         if U < OldMin ->
+                                 {U, Value};
+                            true ->
+                                 {OldMin, OldValue}
+                         end
+                 end, {Fun(hd(List)), hd(List)}, tl(List)),
     Min.
 
 
 max(Fun, List) ->
     {_, Max} = lists:foldl(fun (Value, {OldMax, OldValue}) ->
-				   U = Fun(Value),
-				   if U > OldMax ->
-					   {U, Value};
-				      true ->
-					   {OldMax, OldValue}
-			end
-			   end, {Fun(hd(List)), hd(List)}, tl(List)),
+                                   U = Fun(Value),
+                                   if U > OldMax ->
+                                           {U, Value};
+                                      true ->
+                                           {OldMax, OldValue}
+                        end
+                           end, {Fun(hd(List)), hd(List)}, tl(List)),
     Max.
 
 %% @doc randomly permute a list (public)
@@ -97,9 +106,9 @@ weighted_list() ->
 
 test_distribution(List, Total) ->    
     Dict = lists:foldl(fun (_I, Dict) ->
-			       R = weighted_random(List),
-			       dict:update_counter(R, 1, Dict)
-		       end, dict:new(), lists:seq(1, Total)),
+                               R = weighted_random(List),
+                               dict:update_counter(R, 1, Dict)
+                       end, dict:new(), lists:seq(1, Total)),
     lists:map(fun ({A, X}) -> {round(X/Total * 100)/100, A} end, dict:to_list(Dict)).
 
 distribution_test() ->
@@ -107,6 +116,13 @@ distribution_test() ->
     List = weighted_list(),
     D = test_distribution(List, 100000),
     ?assertEqual(D, List).
+
+
+trapz_test() ->
+    P = [5/5, 1/1, 2/2, 3/3, 3/4, 3/5, 4/5, 4/5],
+    R = [0/5, 1/5, 2/5, 3/5, 3/5, 3/5, 4/5, 5/5],
+    Auc = trapz(R, P),
+    ?assertEqual(0.9, round(Auc*100000)/100000). %rounding issue
 
 -endif.
 

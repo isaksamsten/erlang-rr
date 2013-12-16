@@ -8,7 +8,7 @@
 
 -export([
          accuracy/1,
-         auc/3,
+         roc/3,
          brier/2,
          precision/2,
          recall/2,
@@ -17,7 +17,8 @@
          correlation/4,
          mse/3,
          tpr/2,
-         confusion_matrix/1
+         precision_recall_curve/2,
+         confusion_matrix/1       
         ]).
 
 %% @headerfile "rr.hrl"
@@ -55,25 +56,70 @@ correct(Predictions) ->
 tpr(Classes, Matrix) ->
     recall(Classes, Matrix).
 
+precision_recall_curve(Classes, Predictions) ->
+    PrcAuc = calculate_prc_for_classes(Classes, Predictions, []),
+    AvgAuc = lists:foldl(fun ({_, {_, 'n/a'}}, Sum) -> 
+                                 Sum;
+                             ({_, {_No, A}}, Sum) -> 
+                                 Sum + A
+                         end, 0, PrcAuc),
+    {prc, PrcAuc, AvgAuc/length(Classes)}.
+    
+calculate_prc_for_classes([], _, Acc) ->
+    Acc;
+calculate_prc_for_classes([{Pos, PosCount}|Rest], Predictions, Acc) ->
+    case dict:find(Pos, Predictions) of
+        {ok, PosEx0} ->
+            PosEx = lists:map(fun ({_, P}) -> {pos, find_prob(Pos, P)} end, PosEx0),
+            {Precision, Recall} = calculate_prc_threshold(PosEx, rest_examples(Pos, Predictions), PosCount),
+            Auc = rr_util:trapz(Recall, Precision),
+            calculate_prc_for_classes(Rest, Predictions, [{Pos, {length(PosEx), Auc}}|Acc]);
+        error ->
+            calculate_prc_for_classes(Rest, Predictions, [{Pos, {0, 'n/a'}}|Acc])
+    end.
+
+rest_examples(Pos, Predictions) ->
+    dict:fold(fun(Class, Values, Acc) ->
+                      if Class /= Pos ->
+                              lists:foldl(fun({_, P}, Acc0) ->
+                                                  [{neg, find_prob(Pos, P)}|Acc0] 
+                                          end, Acc, Values);
+                         true ->
+                              Acc
+                      end
+              end, [], Predictions).
+
+
+calculate_prc_threshold(Pos, Neg, NoPos) ->
+    Sorted = sorted_predictions(Pos, Neg),
+    calculate_prc_threshold(Sorted, NoPos, 0, 0, [1], [0]).
+
+calculate_prc_threshold([], _, _, _, Precision, Recall) ->
+    {lists:reverse(Precision), lists:reverse(Recall)};
+calculate_prc_threshold([{Class, _Prob}|Rest], NoPos, Tp, Seen, Precision, Recall) ->
+    NewSeen = Seen + 1,
+    NewTp = if Class == pos -> Tp + 1; true -> Tp end,
+    calculate_prc_threshold(Rest, NoPos, NewTp, NewSeen, [NewTp/NewSeen|Precision], [NewTp/NoPos|Recall]).
+
 %% @doc
 %% Calculate the area under ROC for predictions (i.e. the ability of
 %% the model to rank true positives ahead of false positives)
 %% @end
--spec auc(any(), dict(), integer()) -> [{Class::atom(), NoExamples::integer(), Auc::float()}].
-auc(Classes, Predictions, NoExamples) ->
+-spec roc(any(), dict(), integer()) -> [{Class::atom(), NoExamples::integer(), Auc::float()}].
+roc(Classes, Predictions, NoExamples) ->
     Auc = calculate_auc_for_classes(Classes, Predictions, NoExamples, []),
     WAvgAuc = lists:foldl(fun
-                             ({_, {_, 'n/a'}}, Sum) -> 
-                                Sum;
-                             ({_, {No, A}}, Sum) -> 
-                                Sum + No/NoExamples*A
-                        end, 0, Auc),
+                              ({_, {_, 'n/a'}}, Sum) -> 
+                                 Sum;
+                              ({_, {No, A}}, Sum) -> 
+                                 Sum + No/NoExamples*A
+                         end, 0, Auc),
     AvgAuc = lists:foldl(fun ({_, {_, 'n/a'}}, Sum) -> 
-                                Sum;
+                                 Sum;
                              ({_, {_No, A}}, Sum) -> 
-                                Sum + A
-                        end, 0, Auc),
-    {{auc, Auc, WAvgAuc}, AvgAuc/length(Classes)}.
+                                 Sum + A
+                         end, 0, Auc),
+    {{roc, Auc, WAvgAuc}, AvgAuc/length(Classes)}.
 
 calculate_auc_for_classes([], _, _, Acc) ->
     Acc;
