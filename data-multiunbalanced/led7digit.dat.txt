@@ -1,4 +1,4 @@
-numeric,numeric,numeric,numeric,numeric,numeric,numeric,class
+categoric,categoric,categoric,categoric,categoric,categoric,categoric,class
 Led1,Led2,Led3,Led4,Led5,Led6,Led7,Number
 0.000000, 1.000000, 1.000000, 0.000000, 1.000000, 1.000000, 1.000000, 0
 1.000000, 1.000000, 1.000000, 0.000000, 0.000000, 1.000000, 1.000000, 0
