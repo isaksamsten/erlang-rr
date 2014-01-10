@@ -142,7 +142,7 @@ csv_output_measures(Measures, Output, Header) ->
     end.
 
 %% @doc return a default result generator (human-readable)
-                                                %-spec default() -> result_fun().
+%%-spec default() -> result_fun().
 default() ->
     fun(Data) ->
             Header = rr_config:get_value('default.headers', ?DEFAULT_HEADERS),
@@ -156,8 +156,6 @@ default_output({split, {{ratio, Fraction}, Data}}, Header) ->
     default_output_measures(io_lib:format("test set (~.2f%)", [100*(1-Fraction)]), Data, Header);
 default_output({in_sample, Data}, Header) ->
     default_output_measures("in sample", Data, Header).
-
-
 
 default_output_cv([], _, _) -> 
     done;

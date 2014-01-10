@@ -124,7 +124,7 @@ load(File, Core) ->
     {Features, Examples} = load(File, Core, ExConf),
     #rr_exset {
        features = Features,
-       examples = randomize(Examples),
+       examples = Examples,
        exconf = ExConf
       }.
 
