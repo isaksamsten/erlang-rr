@@ -352,6 +352,8 @@ example_sampling(Value, Error, Options) ->
             fun rr_sampling:random/1;
         <<"undersample">> ->
             fun rr_sampling:undersample_replicate/1;
+        <<"oversample">> ->
+            fun rr_sampling:oversample_replicate/1;
         <<"nothing">> ->
             fun (Examples) -> {Examples, []} end;
         Other ->

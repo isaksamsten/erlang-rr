@@ -1,3 +1,6 @@
+#!/bin/python
+
+# for f in */ ; do unzip "$f"$(basename "$f").zip -d tmp; done
 import sys
 attributes = {}
 inputs = []
@@ -37,7 +40,7 @@ with open(sys.argv[1]) as f:
                 continue;
             elif line.startswith("@attribute"):
                 handle_attr(line)
-            elif line.startswith("@inputs"):
+            elif line.startswith("@inputs") or line.startswith("@input"):
                 handle_in(line)
             elif line.startswith("@output") or line.startswith("@outputs"):
                 handle_outputs(line)

@@ -51,8 +51,8 @@ main(Args) ->
     rr_log:info("loading '~s' on ~p core(s)", [Dataset, Cores]),
     LoadingTime = now(),
     Csv = csv:binary_reader(Dataset),
-    Exset = rr_example:load(Csv, Cores),
-
+    Exset = rr_example:load(Csv, 1),
+    
     rr_log:debug("loading took ~p second(s)", [rr:seconds(LoadingTime)]),
     ExperimentTime = now(),
     {Res, _Model} = Evaluator(Exset, Classifier),

@@ -1,5 +1,5 @@
-,class
-,Class
+numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,class
+A1,A2,A3,A4,A5,A6,A7,A8,A9,Class
 49,0,79,0,46,-5,30,32,2,negative
 41,1,86,3,42,6,45,45,0,negative
 50,-4,83,0,50,0,33,34,2,negative

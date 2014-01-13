@@ -95,6 +95,9 @@ main(Args) ->
     ok = initialize(Props),
     case rr_module:find(Args) of
         {Method, MethodArgs} ->
+            Seed = rr_config:get_value('random.seed', {100,100,100}),
+            io:format("~p ~n", [Seed]),
+            random:seed(Seed),
             case execute(Method, MethodArgs) of
                 ok ->
                     halt(0);
