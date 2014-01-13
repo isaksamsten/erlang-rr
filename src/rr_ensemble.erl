@@ -203,7 +203,7 @@ spawn_base_classifiers(Sets, Cores, Features, Examples, ExConf, Conf) ->
     Coordinator = spawn_link(fun() -> build_coordinator(Self, Sets, Cores, Conf) end),
     
     lists:foreach(
-      fun(Core) ->
+      fun(_Core) ->
               %% Seed = {round(random:uniform() * 1000), round(random:uniform() * 1000), round(random:uniform() * 1000)},
               %% rr_log:info("core ~p has seed ~p", [Core, Seed]),
               spawn_link(
@@ -292,6 +292,8 @@ build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Conf) when Sets < C
 build_coordinator(Parent, Coordinator, Counter, Sets, Cores, Conf) ->
     receive 
         {build, Coordinator, Pid} ->
+            <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
+            random:seed({A, B, C}),
             Seed = {round(random:uniform() * 1000), round(random:uniform() * 1000), round(random:uniform() * 1000)},
             Pid ! {build, Counter, Seed},
             build_coordinator(Parent, Coordinator, Counter + 1, Sets, Cores, Conf)
@@ -308,9 +310,6 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
     receive
         {build, Id, Seed} ->
             case Seed of
-                undefined ->
-                    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-                    random:seed({A, B, C});
                 {A, B, C} ->
                     random:seed({A, B, C})
             end,
