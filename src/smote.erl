@@ -3,30 +3,38 @@
 -compile(export_all).
 -include("rr.hrl").
 
-fit(ExSet, Smote, K) ->
-    #rr_exset {
-       features = Features,
-       examples = Examples,
-       exconf = ExConf
-      } = ExSet,
+%% @doc  
+fit(Features, Examples, ExConf, Smote, K) ->
     MaxId = rr_example:count(Examples),
     NN = knn:fit(Features, Examples, ExConf, 4),
     {_, MaxCount, _} = rr_util:max(fun ({_, M, _}) -> M end, Examples),
-    #rr_example{examples = ExDb} = ExConf,
-    smote(Features, Examples, ExDb, NN, K, Smote, MaxId, MaxCount).
+    io:format("~p ~n", [MaxCount]),
+    {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, MaxCount),
+    {ExIds, {MaxId+1, MaxId+NoSmoteEx}}.
+
+%% @doc
+unfit(ExConf, {Start, End}) ->
+    ExDb = ExConf#rr_example.examples,
+    lists:foreach(fun (Id) ->
+                          ets:delete(ExDb, Id)
+                  end, lists:seq(Start, End)).
 
 smote(Features, Examples, ExDb, NN, K, Smote, MaxId, MaxCount) ->
-    smote_for_class(Features, Examples, ExDb, NN, K, Smote, MaxId, MaxCount, []).
+    smote_for_class(Features, Examples, ExDb, NN, K, Smote, MaxId, MaxCount, [], 0).
 
-smote_for_class(_, [], _, _, _, _, _, _, Acc) ->
-    Acc;
+smote_for_class(_, [], _, _, _, _, _, _, Acc, SmoteEx) ->
+    {Acc, SmoteEx};
 smote_for_class(Features, [{Class, NoEx, Ex}|Rest], ExDb, 
-                NN, K, Smote, MaxId, MaxCount, Acc) when NoEx < MaxCount ->
-    SmoteEx = trunc(NoEx * Smote),
-    NewNoEx = NoEx + SmoteEx,
-    NewEx = smote_examples(Features, Ex, ExDb, NN, K, MaxId, []),
-    NewAcc = [{Class, NewNoEx, NewEx}|Acc],
-    smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId + SmoteEx, MaxCount, NewAcc).
+                NN, K, Smote, MaxId, MaxCount, Acc, TotSmoteEx) ->
+    if NoEx < MaxCount ->
+            SmoteEx = trunc(NoEx * Smote),
+            NewNoEx = NoEx + SmoteEx,
+            NewEx = smote_examples(Features, Ex, ExDb, NN, K, MaxId, Ex),
+            NewAcc = [{Class, NewNoEx, NewEx}|Acc],
+            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId + SmoteEx, MaxCount, NewAcc, SmoteEx + TotSmoteEx);
+       true ->
+            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId, MaxCount, [{Class, NoEx, Ex}|Acc], TotSmoteEx)
+    end.
 
 smote_examples(_, [], _ExDb, _NN, _K, _MaxId, Acc) ->
     Acc;
@@ -37,9 +45,9 @@ smote_examples(Features, [Ex|Rest], ExDb, NN, K, MaxId, Acc) ->
     smote_examples(Features, Rest, ExDb, NN, K, NewId, [NewId|Acc]).
 
 insert_smote_example(Features, OldEx, NewId, ExDb, KN) ->
-    N = lists:nth(random:uniform(length(KN)), KN),
-    FeatureVector = format_smote_example(Features, N, OldEx, ExDb, [NewId]),
-    ets:insert(ExDb, FeatureVector).
+    N = rr_util:shuffle(KN),
+    FeatureVector = format_smote_example(Features, OldEx, N, ExDb, [NewId]),
+    ets:insert(ExDb#rr_example.examples, FeatureVector).
 
 format_smote_example([], _, _, _, Acc) ->
     list_to_tuple(lists:reverse(Acc));
@@ -47,7 +55,8 @@ format_smote_example([{Type, Axis}|Rest], OldEx, NEx, ExDb, Acc) ->
     Value = smote_value(Type, Axis, ExDb, OldEx, NEx),
     format_smote_example(Rest, OldEx, NEx, ExDb, [Value|Acc]).
 
-smote_value(numeric, Axis, ExDb, OldEx, NEx) ->
+smote_value(numeric, Axis, ExDb, OldEx, KN) ->
+    NEx = hd(KN),
     case {rr_example:feature(ExDb, OldEx, Axis), rr_example:feature(ExDb, NEx, Axis)} of
         {'?', _} ->
             '?';
@@ -58,9 +67,30 @@ smote_value(numeric, Axis, ExDb, OldEx, NEx) ->
             Gap = random:uniform(),
             OldValue + Gap * Diff
     end;
-smote_value(categoric, Axis, ExDb, OldEx, NEx) ->
-    ok.
+smote_value(categoric, Axis, ExDb, _OldEx, KN) ->
+    majority_value(ExDb, Axis, KN).
 
+majority_value(ExDb, Axis, KN) ->
+    Values = lists:foldl(fun ({ExId, _Dist}, Acc) ->
+                                 dict:update_counter(rr_example:feature(ExDb, ExId, Axis), 1, Acc)
+                         end, dict:new(), KN),
+    element(1, rr_util:max(fun ({_, V}) -> V end, dict:to_list(Values))).
+                         
+    
+test() ->
+    File = csv:binary_reader("data/dermatology.txt"),
+    #rr_exset {
+      features=Features, 
+      examples=Examples, 
+      exconf=Dataset
+     } = Ds = rr_example:load(File, 4),
+    NewExSet = fit(Features, Examples, Dataset, 1, 5),
+    unfit(Dataset, element(2, NewExSet)),
+    Rf = rf:new([]),
+    rf:build(Rf, Ds),
+    io:format("~p~n", [NewExSet]).
+    
+    
 
     
     
