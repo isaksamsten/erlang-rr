@@ -7,7 +7,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--record(kd_node, {left, right, example}).
+-record(kd_node, {left, right, axis, value, example}).
 
 fit(Examples, Features, ExSet) ->
     Dim = list_to_tuple([F || {F, _} <- Features]),
@@ -57,7 +57,6 @@ min_max([ExId|Rest], ExSet, Id, {Min, Max}) ->
 knearest(linear, Features, Examples, Example, ExSet, K) ->
     Flatten = rr_example:flatten(Examples),
     Dim = list_to_tuple([F || {F, _} <- Features]),
-    Flatten = rr_example:flatten(Examples),
     MinMax = min_max(Flatten, ExSet, Dim),
     AllDistances = lists:foldl(fun (ExId, Acc) ->
                                        ExId2 =  rr_example:exid(Example),
@@ -72,68 +71,58 @@ knearest(linear, Features, Examples, Example, ExSet, K) ->
 
 %% @doc Target is an id
 knearest({Dim, KdTree}, Example, ExSet, Ranges, K) ->
-    knearest(Example, KdTree, Dim, K, 0, ExSet, Ranges, 0.0).
+    Heap = priority_queue:new(fun ({_, A}, {_, B}) -> A < B end, K),
+    knearest(Example, KdTree, Dim, K, ExSet, Ranges, 0.0, Heap),
+    priority_queue:to_list(Heap).
 
-knearest(Target, KdTree, Dim, K, Depth, ExSet, Ranges, DistanceToParent) ->
-    #kd_node{left = Left, right = Right, example = ExampleB} = KdTree,
-    DimSize = size(Dim),
-    Axis = Depth rem DimSize,
+knearest(Target, KdTree, Dim, K, ExSet, Ranges, DistanceToParent, Heap) ->
+    #kd_node{left = Left, right = Right, axis = Axis, value = B, example = ExampleB} = KdTree,
     AxisType = element(Axis + 1, Dim),
-    {Nearer, Further} = case less_than(AxisType, rr_example:feature(ExSet, Target, Axis + 1), 
-                                     rr_example:feature(ExSet, ExampleB, Axis + 1)) of
-                            true ->
-                                {Left, Right};
-                            false ->
-                                {Right, Left}
-                        end,
-    if Nearer == leaf -> %% We are at the bottom
-            Distance = distance(Target, ExampleB, Dim, ExSet, Ranges),
-            [{ExampleB, Distance}]; %% return this distance
-       true ->
-            Distance = distance(Target, ExampleB, Dim, ExSet, Ranges),
-            Closest = knearest(Target, Nearer, Dim, K, Depth + 1, ExSet, Ranges, DistanceToParent),
-            NewNearest = insert_distance(ExampleB, Distance, Closest, K), %% at upper level
-            if Further == leaf ->  %% go cannot but up
-                    NewNearest;
+    if (Left == leaf) and (Right == leaf) -> %% we are at a leaf
+            if Target =/= ExampleB ->
+                    Distance = distance(Target, ExampleB, Dim, ExSet, Ranges),
+                    priority_queue:push(Heap, {ExampleB, Distance});
                true ->
-                    A = rr_example:feature(ExSet, Target, Axis + 1),
-                    B = rr_example:feature(ExSet, ExampleB, Axis + 1),
-                    DistanceToSplit = DistanceToParent + sqd_point(AxisType, Axis + 1, A, B, Ranges),
-                    case length(NewNearest) of
-                        Size when Size < K -> % not enought neighbours
-                            NewNearest1 = knearest(Target, Further, Dim, K, Depth + 1, ExSet, Ranges, DistanceToSplit),
-                            merge_distances(NewNearest, NewNearest1, K);
+                    ok
+            end,
+            undefined;
+       true ->
+            A =  rr_example:feature(ExSet, Target, Axis + 1),
+            case less_than(AxisType, A, B) of
+                true ->
+                    knearest(Target, Left, Dim, K, ExSet, Ranges, DistanceToParent, Heap),
+                    case priority_queue:length(Heap) of
+                        Size when Size < K ->
+                            knearest(Target, Right, Dim, K, ExSet, Ranges, DistanceToParent, Heap);
                         _ ->
-                            [Best|_]= NewNearest,
-                            if Best >= DistanceToSplit ->
-                                    NewNearest1 = knearest(Target, Further, Dim, K, Depth + 1, ExSet, 
-                                                           Ranges, DistanceToSplit),
-                                    merge_distances(NewNearest, NewNearest1, K);
-                               true ->
-                                    NewNearest
-                            end                    
+                            {_, Best}  = priority_queue:peek(Heap),
+                            Diff = sqd_point(AxisType, Axis + 1, A, B, Ranges),
+                            if Diff < Best ->
+                                    io:format("here"),
+                                    knearest(Target, Right, Dim, K, ExSet, Ranges, DistanceToParent, Heap);
+                               true -> undefined
+                            end
+                    end;
+                false ->
+                    knearest(Target, Right, Dim, K, ExSet, Ranges, DistanceToParent, Heap),
+                    case priority_queue:length(Heap) of
+                        Size when Size < K ->
+                            knearest(Target, Left, Dim, K, ExSet, Ranges, DistanceToParent, Heap);
+                        _ ->
+                            {_, Best}  = priority_queue:peek(Heap),
+                            Diff = sqd_point(AxisType, Axis + 1, A, B, Ranges),
+                            if Diff =< Best ->
+                                    knearest(Target, Left, Dim, K, ExSet, Ranges, DistanceToParent, Heap);
+                               true -> undefined
+                            end
                     end
             end
     end.
-
-merge_distances(First, Second, K) ->
-    S = lists:keysort(2, lists:ukeysort(1, First ++ Second)),
-    lists:sublist(S, K).
-
 sqd_point(categoric, _Axis, A, B, _) ->
-    math:pow(normalized_diff(categoric, 0, A, B, []), 2);
+    normalized_diff(categoric, 0, A, B, []);
 sqd_point(numeric, Axis, A, B, Ranges) ->
-    math:pow(normalized_diff(numeric, Axis, A, B, Ranges), 2).
+    normalized_diff(numeric, Axis, A, B, Ranges).
 
-%% @doc returns {CurrentBest, ListOfBest}
-insert_distance(ExId, Distance, Rest, K) when length(Rest) < K ->
-    List = [{ExId, Distance}|Rest],
-    lists:keysort(2, List);    
-insert_distance(ExId, Distance, Rest, K) when length(Rest) == K ->
-    [Best|_] = Sorted = lists:keysort(2, [{ExId, Distance}|Rest]),
-    [_Worst|Return] = lists:reverse(Sorted),
-    [Best|lists:reverse(Return)].
-    
 distance(ExampleA, ExampleB, Dim, ExSet, MinMax) ->
     distance(ExampleA, ExampleB, 1, size(Dim), Dim, ExSet, MinMax, 0).
 
@@ -157,6 +146,7 @@ categoric_diff(A, B) when A == B ->
     0;
 categoric_diff(_, _) ->
     1.
+
 numeric_diff('?', '?', _) ->
     1;
 numeric_diff('?', B, {Min, Max}) ->
@@ -167,16 +157,20 @@ numeric_diff(A, B, {Min, Max}) ->
     Width = Max - Min,
     ((A-Min)/Width) - ((B-Min)/Width).
 
-kd_tree([], _ExSet, _Dim, _Depth) ->
-    leaf;
-kd_tree(Examples, ExSet, Dim, Depth) ->
+kd_tree([Id], _ExSet, Dim, Depth) ->
     Axis = Depth rem size(Dim),
-    Sorted = sort_axis(Axis, element(Axis + 1, Dim), ExSet, Examples),
-    {Left, Median, Right} = split_at_median(Sorted, length(Examples) div 2),
+    #kd_node{left = leaf, right = leaf, axis = Axis, example = Id};
+kd_tree(Examples, ExSet, Dim, Depth) ->
+    io:format("~w ~n", [Examples]),
+    Axis = Depth rem size(Dim),
+    AxisType = element(Axis + 1, Dim),
+    Sorted = sort_axis(Axis, AxisType, ExSet, Examples),
+    {Left, Median, Right} = split_at_median(Sorted, ExSet, Axis, AxisType, length(Examples) div 2),
     #kd_node {
        left = kd_tree(Left, ExSet, Dim, Depth + 1),
        right = kd_tree(Right, ExSet, Dim, Depth + 1),
-       example = Median
+       axis = Axis,
+       value = Median
       }.
 
 sort_axis(Axis, Type, ExSet, Examples) ->
@@ -196,31 +190,39 @@ less_than(numeric, A, B) ->
 less_than(categoric, A, B) ->
     A < B.
 
-split_at_median(Examples, Median) ->
-    split_at_median(Examples, 0, Median, []).
+split_at_median([A,B], ExSet, Axis, numeric, _) ->
+    ValueA = rr_example:feature(ExSet, A, Axis + 1),
+    ValueB = rr_example:feature(ExSet, B, Axis + 1),
+    {[A], (ValueA+ValueB)/2, [B]};
+split_at_median(Examples, ExSet, Axis, AxisType, Median) ->
+    split_at_median(Examples, 1, Median, ExSet, Axis, AxisType, []).
 
-split_at_median([Median|Right], Current, Middle, Left) when Current == Middle ->
-    {Left, Median, Right};
-split_at_median([Example|Rest], Current, Middle, Left) ->
-    split_at_median(Rest, Current + 1, Middle, [Example|Left]).
+split_at_median([Median|Right], Current, Middle, ExSet, Axis, _, Left) when Current > Middle ->
+    Value = rr_example:feature(ExSet, Median, Axis + 1),
+    {Left, Value, Right};
+split_at_median([Example|Rest], Current, Middle, ExSet, Axis, At, Left) ->
+    split_at_median(Rest, Current + 1, Middle, ExSet, Axis, At, [Example|Left]).
 
 testknn() ->
     File = csv:binary_reader("../data/iris.txt"),
-   #rr_exset {
-      features=Features, 
-      examples=Examples, 
-      exconf=Dataset
-     } = rr_example:load(File, 4),
+    #rr_exset {
+       features=Features, 
+       examples=Examples, 
+       exconf=Dataset
+      } = rr_example:load(File, 4),
     {Dim, _} = Tree= fit(Examples, Features, Dataset),
+    io:format("~p ~n", [Tree]),
     Flatten = rr_example:flatten(Examples),
     Ranges = min_max(Flatten, Dataset, Dim),
-    Rest = knearest(Tree, 10, Dataset, Ranges, 10),
+    {Time, Rest} = timer:tc(fun () -> knearest(Tree, 10, Dataset, Ranges, 2) end),
+    {Time0, Rest0} = timer:tc(fun () -> knearest(linear, Features, Examples, 10, Dataset, 10) end),
     
-    io:format("~p ~n", [lists:keysort(1, Rest)]).
+    io:format("~p ~p ~n", [Time, lists:keysort(2, Rest)]),
+    io:format("~p ~p ~n", [Time0, lists:keysort(2, Rest0)]).
 
 -ifdef(TEST).
 real_kd_tree_test() ->
-   File = csv:binary_reader("../data/dermatology.txt"),
+   File = csv:binary_reader("../data/iris.txt"),
    #rr_exset {
       features=Features, 
       examples=Examples, 
@@ -230,7 +232,7 @@ real_kd_tree_test() ->
     Flatten = rr_example:flatten(Examples),
     Ranges = min_max(Flatten, Dataset, Dim),
     Closest = knearest(Tree, 10, Dataset, Ranges, 10),
-    ?debugFmt("~p: ~p ~n", [length(Closest), lists:keysort(1, Closest)]).
+    ?debugFmt("~p: ~p ~n", [length(Closest), lists:keysort(2, Closest)]).
 
 min_max_test() ->
     File = csv:binary_reader("../data/iris.txt"),
@@ -245,19 +247,8 @@ min_max_test() ->
     ?debugFmt("~p ~n", [dict:to_list(MinMax)]).
 
 
-%% @todo more test cases
-is_close_test() ->
-    A = insert_distance(1, 0.2, [], 2),
-    ?assertEqual({{1, 0.2}, [{1, 0.2}]}, A),
-    
-    B = insert_distance(2, 0.1, A, 10),
-    ?assertEqual({{2,0.1}, [{1,0.2}, {2, 0.1}]}, B),
-    
-    C = insert_distance(3, 0.01, B, 2),
-    ?assertEqual({{3,0.01}, [{2, 0.1}, {3,0.01}]}, C).
-
 distance_test() ->
-    File = csv:binary_reader("../data/dermatology.txt"),
+    File = csv:binary_reader("../data/iris.txt"),
    #rr_exset {
       features=Features, 
       examples=Examples, 
@@ -278,14 +269,22 @@ kd_tree_test() ->
        examples=Examples, 
        exconf=Dataset
       } = rr_example:load(File, 1),
-    Tree = fit(Examples, Features, Dataset),
+    {Dim, _} = Tree = fit(Examples, Features, Dataset),
+    Flatten = rr_example:flatten(Examples),
+    Ranges = min_max(Flatten, Dataset, Dim),
+    N = knearest(Tree, 1, Dataset, Ranges, 2),
+    ?debugFmt("~p~n", [N]),
+    throw(error),
     ?assertEqual(#kd_node{
+                    axis = 0,
                     left = #kd_node{
-                              left = #kd_node{left=leaf, right=leaf, example=1},
-                              right =#kd_node{left=leaf, right=leaf, example=4},
+                              axis = 1,
+                              left = #kd_node{axis = 0, left=leaf, right=leaf, example=1},
+                              right =#kd_node{axis = 0, left=leaf, right=leaf, example=4},
                               example = 2},
                     right = #kd_node{
-                               left = #kd_node{left = leaf, right = leaf, example = 5},
+                               axis = 1,
+                               left = #kd_node{axis = 0, left = leaf, right = leaf, example = 5},
                                right = leaf,
                                example = 3},
                     example = 6}, element(2, Tree)).

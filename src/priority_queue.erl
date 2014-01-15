@@ -5,6 +5,7 @@
          new/1,
          push/2,
          peek/1,
+         length/1,
          to_list/1
         ]).
 
@@ -13,32 +14,39 @@
 -endif.
 
 new(Comparator, K) ->
-    spawn_link(fun () -> loop(Comparator, K, []) end).
+    spawn_link(fun () -> loop(Comparator, K, 0, []) end).
 
 new(K) ->
     new(fun(A, B) -> A < B end, K).
 
-loop(Comparator, K, List) ->
+loop(Comparator, K, Len, List) ->
     receive 
         {push, Ref, Self, Item} ->
             Self ! {ok, Ref},
-            loop(Comparator, K, push_item(Item, Comparator, K, List));
+            %io:format("pushing:   ~p ~n", [Item]),
+            %io:format("list(old): ~p ~n", [List]),
+            NewList = push_item(Item, Comparator, K, List),
+            %io:format("list(new): ~p ~n", [NewList]),
+            loop(Comparator, K, if Len < K -> Len + 1; true -> Len end,  NewList);
         {peek, Ref, Me} ->
-            io:format("The list: ~p~n,", [List]),
             Me ! {peek, Ref, peek_item(List)},
-            loop(Comparator, K, List);
+            loop(Comparator, K, Len, List);
         {list, Ref, Me} ->
             Me ! {list, Ref, List},
-            loop(Comparator, K, List)
+            loop(Comparator, K, Len, List);
+        {len, Ref, Me} ->
+            Me ! {len, Ref, Len},
+            loop(Comparator, K, Len, List)
+                
     end.
 
 push_item(Item, Comparator, K, List) ->
     push_item(Item, Comparator, K, 1, List, []).
 
 push_item(_, _, K, Current, _, Acc) when Current > K->
-    Acc;
+    lists:reverse(Acc);
 push_item(Item, _, _, _, [], Acc) ->
-    lists:reverse([Item|Acc]);
+    [Item|Acc];
 push_item(Item, Comparator, K, Current, [Head|List], Acc) ->
     case Comparator(Item, Head) of
         true ->
@@ -85,6 +93,15 @@ to_list(This) ->
             List
     end.                      
 
+length(This) ->
+    Ref = monitor(process, This),
+    Self = self(),
+    This ! {len, Ref, Self},
+    receive
+        {len, Ref, List} ->
+            List
+    end.                      
+
 -ifdef(TEST).
 push_test() ->
     Cmp = fun(A, B) -> A < B end,
@@ -101,7 +118,15 @@ test() ->
     push(Queue, 14),
     peek(Queue),
     ?assertEqual(1, peek(Queue)),
-    ?assertEqual([1,3,10,14], to_list(Queue)).
+    ?assertEqual([1,3,10,14], to_list(Queue)),
+    ?assertEqual(4, ?MODULE:length(Queue)).
 
+snd_test() ->
+    List = [{2,0.21145124716553287},{1,0.0}, {10, 0.1}],
+    Queue = new(fun ({_, A}, {_, B}) -> A < B end, 2),
+    lists:foreach(fun (X) ->
+                          push(Queue, X)
+                  end, List),
+    ?debugFmt("~p ~n", [to_list(Queue)]).
 
 -endif.
