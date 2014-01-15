@@ -97,6 +97,7 @@ main(Args) ->
         {Method, MethodArgs} ->
             Seed = rr_config:get_value('random.seed', {100,100,100}),
             random:seed(Seed),
+            io:format("~p ~n", [Method]),
             case execute(Method, MethodArgs) of
                 ok ->
                     halt(0);
@@ -126,8 +127,8 @@ execute(Method, MethodArgs) ->
             {error, bad_arg};
         throw:{unkown_arg_error, Where} ->
             rr:illegal(io_lib:format("unknown error in command '~s'", [Where]));
-        throw:{module_not_found, _MString} ->
-            rr:illegal("could not find the specified module"),
+        throw:{module_not_found, MString} ->
+            rr:illegal(io_lib:format("could not find the specified module ~p ~n", [MString])),
             {error, bad_module}
             %% todo: catch these?
     end.
