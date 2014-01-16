@@ -30,7 +30,7 @@
          {<<"model">>, $m, "model", string,
             "Name of the deployed model to employ."}]).
 
--define(NAME, "employ").
+-define(NAME, "predict").
 
 %% @doc parse the arguments
 parse_args(Args) ->

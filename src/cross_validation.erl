@@ -33,6 +33,8 @@
 -define(CMD_SPEC, 
         [{<<"folds">>, $f, "folds", {integer, 10},
           "Number of cross validation folds"},
+         {<<"processor">>, $p, "processor", {string, "none"},
+          "Select a processor"},
          {<<"progress">>, $p, "progress", {string, "default"},
           "Progress bar when running cross validation"}
         ]).
@@ -42,6 +44,7 @@ help() ->
     rr:show_help(options, ?CMD_SPEC, "cv").
 
 parse_args(Args) ->
+    io:format("~p ~n", [Args]),
     rr:parse(?NAME, Args, ?CMD_SPEC).
 
 args(Args) ->
@@ -50,7 +53,9 @@ args(Args) ->
 args(Args, Error) ->
     Folds = args(<<"folds">>, Args, Error),
     Progress = args(<<"progress">>, Args, Error),
+    Processor = args(<<"processor">>, Args, Error),
     [{folds, Folds},
+     {processor, Processor},
      {progress, Progress}].
 
 args(Key, Args, Error) ->
@@ -60,6 +65,12 @@ args(Key, Args, Error) ->
             Value;
         <<"progress">> ->
             progress(Value, Error);
+        <<"processor">> ->
+            case Value of
+                "none" -> fun default_process/7;
+                Value ->
+                    rr_processor:find(Value)
+            end;                    
         _ ->
             Error("cv", Key) 
     end.
@@ -82,7 +93,7 @@ evaluate(ExSet, Props) ->
                    undefined -> throw({badarg, evaluate});
                    Evaluate0 -> Evaluate0
                end,
-
+    Process = proplists:get_value(processor, Props),
     NoFolds = proplists:get_value(folds, Props, 10),
     Average = proplists:get_value(average, Props, fun average_cross_validation/2),
     Progress = proplists:get_value(progress, Props, fun (_) -> ok end),
@@ -91,16 +102,20 @@ evaluate(ExSet, Props) ->
        examples = Examples,
        exconf = ExConf
       } = ExSet,
+    MaxId = rr_example:count(Examples),
     Total0 = cross_validation(
                fun (Train, Test, Fold) ->
                        Progress(Fold),
-                       Model = Build(Features, Train, ExConf),
-                       Result = Evaluate(Model, Test, ExConf),
+                       {Model, Result} = Process(Features, Train, Test, ExConf, MaxId, Build, Evaluate),
                        {{{fold, Fold}, Result}, Model}
                end, NoFolds, Examples),
     {Total, Models} = lists:unzip(Total0),
     Avg = Average(Total, NoFolds),
     {{cv, NoFolds, Total ++ [Avg]}, Models}.
+
+default_process(Features, Train, Test, ExConf, _, Build, Evaluate) ->
+    Model = Build(Features, Train, ExConf),
+    {Model, Evaluate(Model, Test, ExConf)}.
 
 %% @doc stratified cross validation
 -spec cross_validation(fun((Train::examples(), Test::examples(), Fold::integer()) -> []), integer(), examples()) -> [].

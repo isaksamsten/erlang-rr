@@ -1,17 +1,77 @@
 -module(smote).
 
--compile(export_all).
+-export([
+         new/1,
+         parse_args/1,
+         args/1,
+
+         help/0,
+
+         fit/5,
+         unfit/2
+        ]).
+
 -include("rr.hrl").
+
+-behaviour(rr_module).
+-behaviour(rr_processor).
+
+-define(CMD_SPEC, 
+        [{<<"smote">>, $p, "percent", {integer, 1},
+          "Specifies fraction of SMOTE instances to create"},
+         {<<"knn">>, $k, "knn", {integer, 5},
+          "Specifies the number of nearest neighbors to use"}]).
+
+-define(NAME, "smote").
+
+%% @doc parse the arguments
+parse_args(Args) ->
+    rr:parse(?NAME, Args, ?CMD_SPEC).
+
+args(Args) ->
+    args(Args, fun (Value, Reason) -> throw({bad_arg, ?NAME, Value, Reason}) end).
+
+args(Args, Error) ->
+    Smote = args(<<"smote">>, Args, Error),
+    Knn = args(<<"knn">>, Args, Error),
+    [{smote, Smote},
+     {knn, Knn}].
+
+args(Key, Args, Error) ->
+    Value = proplists:get_value(Key, Args),
+    case Key of
+        <<"smote">> ->
+            Value;
+        <<"knn">> ->
+            Value;
+        _ ->
+            Error(?NAME, Key) 
+    end.
+
+help() ->
+    rr:show_help(options, ?CMD_SPEC, ?NAME).
+
+
+new(Opts) ->
+    P = proplists:get_value(smote, Opts, 1),
+    K = proplists:get_value(knn, Opts, 5),
+    fun (Features, Train, Test, ExConf, MaxId, Build, Evaluate) ->
+            {NewTrain, Free} = fit(Features, Train, ExConf, P, K, MaxId),
+            Model = Build(Features, NewTrain, ExConf),
+            unfit(ExConf, Free),
+            {Model, Evaluate(Model, Test, ExConf)}
+    end.
+
+fit(Features, Examples, ExConf, Smote, K, MaxId) ->
+    NN = knn:fit(Features, Examples, ExConf, 4),
+    {_, MaxCount, _} = rr_util:max(fun ({_, M, _}) -> M end, Examples),
+    {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, MaxCount),
+    {ExIds, {MaxId+1, MaxId+NoSmoteEx}}.
 
 %% @doc  
 fit(Features, Examples, ExConf, Smote, K) ->
     MaxId = rr_example:count(Examples),
-    NN = knn:fit(Features, Examples, ExConf, 4),
-    io:format("knn~n~p~n", [NN]),
-    {_, MaxCount, _} = rr_util:max(fun ({_, M, _}) -> M end, Examples),
-    io:format("~p ~n", [MaxCount]),
-    {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, MaxCount),
-    {ExIds, {MaxId+1, MaxId+NoSmoteEx}}.
+    fit(Features, Examples, ExConf, Smote, K, MaxId).
 
 %% @doc
 unfit(ExConf, {Start, End}) ->

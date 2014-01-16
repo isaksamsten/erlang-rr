@@ -39,6 +39,7 @@
 
          get_classifier/1,
          get_evaluator/1,
+         get_processor/1,
          get_module/1
         ]).
 
@@ -51,6 +52,9 @@ get_classifier(Cstring) ->
 get_evaluator(Estring) ->
     parse_string_args(Estring, 'rr.evaluators').
 
+get_processor(Estring) ->
+    parse_string_args(Estring, 'rr.processors').
+
 %% @doc get evaluator from the available modules
 get_module(MString) ->    
     parse_string_args(MString, 'rr.modules').
@@ -60,10 +64,26 @@ get_module(MString) ->
 parse_string_args(Value) ->
     parse_string_args(Value, 'rr.modules').
 
+tokens (String) -> tokens (String, [], [] ).
+
+tokens ( [], Tokens, Buffer) ->
+    lists:map (fun (Token) -> string:strip (Token, both, $") end, Tokens ++ [Buffer] );
+
+tokens ( [Character | String], Tokens, Buffer) ->
+    case {Character, Buffer} of
+        {$ , [] } -> tokens (String, Tokens, Buffer);
+        {$ , [$" | _] } -> tokens (String, Tokens, Buffer ++ [Character] );
+        {$ , _} -> tokens (String, Tokens ++ [Buffer], [] );
+        {$", [] } -> tokens (String, Tokens, "\"" );
+        {$", [$" | _] } -> tokens (String, Tokens ++ [Buffer ++ "\""], [] );
+        {$", _} -> tokens (String, Tokens ++ [Buffer], "\"");
+        _ -> tokens (String, Tokens, Buffer ++ [Character] )
+    end.
+
 %% @doc get the module and its (parsed) arguments
 -spec parse_string_args(string(), atom()) -> {atom(), [{any(), any()},...]}.
 parse_string_args(Value, Config) ->
-    parse_args((catch string:tokens(string:strip(Value), " ")), Config).
+    parse_args((catch tokens(string:strip(Value))), Config).
 
 %% @doc legacy
 %% @deprecated
@@ -179,13 +199,17 @@ show_help() ->
     write_help_for_modules(3, Longest-2, rr_config:get_value('rr.classifiers')),
 
     io:format(standard_error, "~n  evaluators:~n", []),
-    write_help_for_modules(3, Longest-2, rr_config:get_value('rr.evaluators')).
+    write_help_for_modules(3, Longest-2, rr_config:get_value('rr.evaluators')),
+    
+    io:format(standard_error, "~n  processors:~n", []),
+    write_help_for_modules(3, Longest-2, rr_config:get_value('rr.processors')).
     %halt(0).
 
 all_modules() ->
     rr_config:get_value('rr.modules') ++ 
         rr_config:get_value('rr.classifiers') ++ 
-        rr_config:get_value('rr.evaluators').
+        rr_config:get_value('rr.evaluators') ++
+        rr_config:get_value('rr.processors').
 
 find_longest_module_name(Modules) ->
     Sorted = lists:sort(fun({A,_,_}, {B,_,_}) -> length(A) > length(B) end, Modules),
