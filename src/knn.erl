@@ -63,7 +63,7 @@ n_length_chunks_fast([H|T],[],Pos,Max) ->
 
 fit(Features, Examples, ExSet, Cores) ->
     Flatten = rr_example:flatten(Examples),
-    Parts = n_length_chunks_fast(Flatten, length(Flatten) div Cores),
+    Parts = n_length_chunks_fast(Flatten, round(length(Flatten)/Cores)),
     Ranges = min_max(Features, Flatten, ExSet),
     {linear, Features, Parts, ExSet, Ranges, length(Parts)}.
     

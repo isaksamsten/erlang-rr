@@ -7,6 +7,7 @@
 fit(Features, Examples, ExConf, Smote, K) ->
     MaxId = rr_example:count(Examples),
     NN = knn:fit(Features, Examples, ExConf, 4),
+    io:format("knn~n~p~n", [NN]),
     {_, MaxCount, _} = rr_util:max(fun ({_, M, _}) -> M end, Examples),
     io:format("~p ~n", [MaxCount]),
     {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, MaxCount),
@@ -29,12 +30,29 @@ smote_for_class(Features, [{Class, NoEx, Ex}|Rest], ExDb,
     if NoEx < MaxCount ->
             SmoteEx = trunc(NoEx * Smote),
             NewNoEx = NoEx + SmoteEx,
-            NewEx = smote_examples(Features, Ex, ExDb, NN, K, MaxId, Ex),
+            PrEx = if NewNoEx < NoEx -> %% Smote < 1
+                           rr_util:shuffle(Ex);
+                      SmoteEx > NoEx -> %% Smote > 1
+                           duplicate_examples(Ex, SmoteEx-1);
+                      true -> %% Smote == 1
+                           Ex
+                   end,                           
+            NewEx = smote_examples(Features, PrEx, ExDb, NN, K, MaxId, Ex),
             NewAcc = [{Class, NewNoEx, NewEx}|Acc],
             smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId + SmoteEx, MaxCount, NewAcc, SmoteEx + TotSmoteEx);
        true ->
             smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId, MaxCount, [{Class, NoEx, Ex}|Acc], TotSmoteEx)
     end.
+
+duplicate_examples(Ex, NoEx) ->
+    duplicate_examples(Ex, Ex, NoEx, Ex).
+
+duplicate_examples(_, _, 0, Acc) ->
+    Acc;
+duplicate_examples([], ExF, NoEx, Acc) ->
+    duplicate_examples(ExF, ExF, NoEx, Acc);
+duplicate_examples([H|Rest], ExF, NoEx, Acc) ->
+    duplicate_examples(Rest, ExF, NoEx - 1, [H|Acc]).
 
 smote_examples(_, [], _ExDb, _NN, _K, _MaxId, Acc) ->
     Acc;
@@ -78,21 +96,26 @@ majority_value(ExDb, Axis, KN) ->
                          
     
 test() ->
-    File = csv:binary_reader("data/dermatology.txt"),
+    File = csv:binary_reader("data/test-kd.txt"),
     #rr_exset {
       features=Features, 
       examples=Examples, 
       exconf=Dataset
      } = Ds = rr_example:load(File, 4),
-    NewExSet = fit(Features, Examples, Dataset, 1, 5),
-    unfit(Dataset, element(2, NewExSet)),
+    NewExSet = fit(Features, Examples, Dataset, 2, 2), %% extend Dataset wiht SMOTE examples @todo fix bug
+    io:format("smoted ~n"),
+    print_examples(element(1, NewExSet), Dataset),
+    unfit(Dataset, element(2, NewExSet)), %% remove the smoted examples
+    io:format("original~n"),
+    print_examples(Examples, Dataset),
     Rf = rf:new([]),
     rf:build(Rf, Ds),
     io:format("~p~n", [NewExSet]).
-    
-    
 
-    
-    
-
-    
+print_examples([], _) ->
+    ok;
+print_examples([{_, _, Ex}|Rest], ExSet) ->
+    lists:foreach(fun (ExId) ->
+                          io:format("~w ~n", [rr_example:vector(ExSet, ExId)])
+                  end, Ex),
+    print_examples(Rest, ExSet).
