@@ -117,7 +117,6 @@ main(Args) ->
         {Method, MethodArgs} ->
             Seed = rr_config:get_value('random.seed', {100,100,100}),
             random:seed(Seed),
-            io:format("~p ~n", [Method]),
             case execute(Method, MethodArgs) of
                 ok ->
                     halt(0);

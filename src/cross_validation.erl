@@ -44,7 +44,6 @@ help() ->
     rr:show_help(options, ?CMD_SPEC, "cv").
 
 parse_args(Args) ->
-    io:format("~p ~n", [Args]),
     rr:parse(?NAME, Args, ?CMD_SPEC).
 
 args(Args) ->

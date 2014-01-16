@@ -7,6 +7,8 @@
 
          help/0,
 
+         test/0,
+
          fit/5,
          unfit/2
         ]).
@@ -64,8 +66,8 @@ new(Opts) ->
 
 fit(Features, Examples, ExConf, Smote, K, MaxId) ->
     NN = knn:fit(Features, Examples, ExConf, 4),
-    {_, MaxCount, _} = rr_util:max(fun ({_, M, _}) -> M end, Examples),
-    {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, MaxCount),
+    {Class, _, _} = rr_util:min(fun ({_, M, _}) -> M end, Examples),
+    {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, Class),
     {ExIds, {MaxId+1, MaxId+NoSmoteEx}}.
 
 %% @doc  
@@ -80,14 +82,14 @@ unfit(ExConf, {Start, End}) ->
                           ets:delete(ExDb, Id)
                   end, lists:seq(Start, End)).
 
-smote(Features, Examples, ExDb, NN, K, Smote, MaxId, MaxCount) ->
-    smote_for_class(Features, Examples, ExDb, NN, K, Smote, MaxId, MaxCount, [], 0).
+smote(Features, Examples, ExDb, NN, K, Smote, MaxId, SkipClass) ->
+    smote_for_class(Features, Examples, ExDb, NN, K, Smote, MaxId, SkipClass, [], 0).
 
 smote_for_class(_, [], _, _, _, _, _, _, Acc, SmoteEx) ->
     {Acc, SmoteEx};
 smote_for_class(Features, [{Class, NoEx, Ex}|Rest], ExDb, 
-                NN, K, Smote, MaxId, MaxCount, Acc, TotSmoteEx) ->
-    if NoEx < MaxCount ->
+                NN, K, Smote, MaxId, SkipClass, Acc, TotSmoteEx) ->
+    if Class == SkipClass ->
             SmoteEx = trunc(NoEx * Smote),
             NewNoEx = NoEx + SmoteEx,
             PrEx = if NewNoEx < NoEx -> %% Smote < 1
@@ -99,9 +101,9 @@ smote_for_class(Features, [{Class, NoEx, Ex}|Rest], ExDb,
                    end,                           
             NewEx = smote_examples(Features, PrEx, ExDb, NN, K, MaxId, Ex),
             NewAcc = [{Class, NewNoEx, NewEx}|Acc],
-            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId + SmoteEx, MaxCount, NewAcc, SmoteEx + TotSmoteEx);
+            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId + SmoteEx, SkipClass, NewAcc, SmoteEx + TotSmoteEx);
        true ->
-            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId, MaxCount, [{Class, NoEx, Ex}|Acc], TotSmoteEx)
+            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId, SkipClass, [{Class, NoEx, Ex}|Acc], TotSmoteEx)
     end.
 
 duplicate_examples(Ex, NoEx) ->
