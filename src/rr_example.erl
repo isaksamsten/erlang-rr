@@ -236,7 +236,7 @@ example_value_handler(ExTable, Dict) ->
 clean_float([$.|_] = N) -> [$0|N];
 clean_float(Ow) -> 
     case lists:reverse(Ow) of
-        [$.|_] -> [Ow|$0];
+        [$.|_] -> Ow ++ [$0];
         _ -> Ow
     end.
 
