@@ -42,6 +42,7 @@ help() ->
     rr:show_help(options, ?CMD_SPEC, "experiment").
 
 parse_args(Args) ->
+    io:format("~p ~n", [Args]),
     rr:parse(?NAME, Args, ?CMD_SPEC).
 
 args(Args, Error) ->
@@ -53,7 +54,7 @@ args(Args, Error) ->
      {evaluator, Evaluation},
      {classifier, Classifier}].
 
-args(Arg, Args, Error) ->
+args(Arg, Args, _Error) ->
     Value = proplists:get_value(Arg, Args),
     case Arg of
         <<"evaluator">> ->

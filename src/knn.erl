@@ -133,7 +133,11 @@ numeric_diff(A, '?', {Min, Max}) ->
     (A - Min)/(Max-Min);
 numeric_diff(A, B, {Min, Max}) ->
     Width = Max - Min,
-    ((A-Min)/Width) - ((B-Min)/Width).
+    if Width =< 0 ->
+            0.0;
+       true ->
+            ((A-Min)/Width) - ((B-Min)/Width)
+    end.
 
 test() ->
     File = csv:binary_reader("../data/yeast.txt"),
