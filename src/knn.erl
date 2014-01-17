@@ -2,6 +2,7 @@
 
 -export([
          fit/4,
+         unfit/1,
          knearest/3,
          spawn_pknearest/7,
          pknearest/3,
@@ -12,7 +13,8 @@
 
 min_max(Features, Examples, ExSet) ->
     Table = ets:new(min_max, [public, {read_concurrency, true}]),
-    min_max(Features, Examples, ExSet, Table).
+    min_max(Features, Examples, ExSet, Table),
+    Table.
 
 min_max([], _, _, Acc) ->
     Acc;
@@ -66,6 +68,9 @@ fit(Features, Examples, ExSet, Cores) ->
     Parts = n_length_chunks_fast(Flatten, round(length(Flatten)/Cores)),
     Ranges = min_max(Features, Flatten, ExSet),
     {linear, Features, Parts, ExSet, Ranges, length(Parts)}.
+
+unfit({linear, _, _, _, Ranges, _}) ->
+    ets:delete(Ranges).
     
 knearest({linear, Features, Flatten, ExSet, Ranges}, Example, K) ->
     AllDistances = lists:foldl(fun (ExId, Acc) ->

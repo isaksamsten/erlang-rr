@@ -68,6 +68,7 @@ fit(Features, Examples, ExConf, Smote, K, MaxId) ->
     NN = knn:fit(Features, Examples, ExConf, erlang:system_info(schedulers)),
     {Class, _, _} = rr_util:min(fun ({_, M, _}) -> M end, Examples),
     {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, Class),
+    knn:unfit(NN),
     {ExIds, {MaxId+1, MaxId+NoSmoteEx}}.
 
 %% @doc  
