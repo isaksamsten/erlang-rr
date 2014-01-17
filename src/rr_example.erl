@@ -233,14 +233,19 @@ example_value_handler(ExTable, Dict) ->
             Parent ! {value_handler_stop, Parent}
     end.
 
-%% @doc determine if a string is a number or missing (?)
+clean_float([$.|_] = N) -> [$0|N];
+clean_float(Ow) -> 
+    case lists:reverse(Ow) of
+        [$.|_] -> [Ow|$0];
+        _ -> Ow
+    end.
+
 format_number("?") ->
     '?';
 format_number(N) when is_number(N) ->
     {true, N};
-format_number([$.|_] = N) ->
-    format_number([$0|N]);
-format_number(L0) ->
+format_number(L1) ->
+    L0 = clean_float(L1),
     L = if is_binary(L0) -> binary_to_list(L0); true -> L0 end,
     Float = (catch erlang:list_to_float(L)),
     case is_number(Float) of
