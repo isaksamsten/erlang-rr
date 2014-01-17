@@ -12,7 +12,7 @@
         ]).
 
 behaviour_info(callbacks) ->
-    [{evaluate, 2}].
+    [{new, 1}].
 
 %% @doc find a processor given a string
 find(EString) ->

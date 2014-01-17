@@ -15,7 +15,7 @@
 
 -include("rr.hrl").
 
--behaviour(rr_module).
+%-behaviour(rr_module).
 -behaviour(rr_processor).
 
 -define(CMD_SPEC, 
@@ -65,7 +65,7 @@ new(Opts) ->
     end.
 
 fit(Features, Examples, ExConf, Smote, K, MaxId) ->
-    NN = knn:fit(Features, Examples, ExConf, 4),
+    NN = knn:fit(Features, Examples, ExConf, erlang:system_info(schedulers)),
     {Class, _, _} = rr_util:min(fun ({_, M, _}) -> M end, Examples),
     {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, Class),
     {ExIds, {MaxId+1, MaxId+NoSmoteEx}}.
