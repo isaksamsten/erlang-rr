@@ -105,8 +105,9 @@ evaluate(ExSet, Props) ->
     Total0 = cross_validation(
                fun (Train, Test, Fold) ->
                        Progress(Fold),
+                       Now = erlang:now(),
                        {Model, Result} = Process(Features, Train, Test, ExConf, MaxId, Build, Evaluate),
-                       {{{fold, Fold}, Result}, Model}
+                       {{{fold, Fold}, [{time, rr:seconds(Now)}|Result]}, Model}
                end, NoFolds, Examples),
     {Total, Models} = lists:unzip(Total0),
     Avg = Average(Total, NoFolds),
@@ -186,7 +187,7 @@ merge_folds(Folds, Test) ->
 average_cross_validation(Result, Folds) ->
     average_cross_validation(Result, Folds, [accuracy, roc, prc, strength, correlation, c_s2, precision, recall, f_measure, avg_roc,
                                              margin_variance, oob_base_accuracy, base_accuracy, brier, variance, mse, 
-                                             no_rules, variable_importance]).
+                                             no_rules, variable_importance, time]).
 
 %% @doc average the cross-validation (for the results specified in Inputs)
 average_cross_validation(Result, Folds, Inputs) ->

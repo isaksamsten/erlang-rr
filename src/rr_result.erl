@@ -37,7 +37,8 @@
                               {"no-rules", no_rules},
                               {"brier", brier},
                               {"variance", variance},
-                              {"mse", mse}
+                              {"mse", mse},
+                              {"time", time}
                              ]).
 
 
@@ -63,6 +64,7 @@
                           {"mse", mse},
                           sep,
                           {"no-rules", no_rules},
+                          {"time", time},
                           {"variable-importance", variable_importance}
                          ]).
 
