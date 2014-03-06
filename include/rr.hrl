@@ -49,7 +49,8 @@
           examples :: number(),
           features :: number(),
           predictions :: number(),
-          values :: number()
+          values :: number(),
+          max_id :: number()
          }).
 
 -record(rr_exset, {

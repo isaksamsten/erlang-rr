@@ -125,7 +125,7 @@ load(File, Core) ->
     #rr_exset {
        features = Features,
        examples = Examples,
-       exconf = ExConf
+       exconf = ExConf#rr_example{max_id = count(Examples)}
       }.
 
 %% @doc load a dataset from file using Core cores to Dataset 

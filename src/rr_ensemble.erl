@@ -313,7 +313,6 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
                 {A, B, C} ->
                     random:seed({A, B, C})
             end,
-            
             {Bag, OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
             {Model, TreeVariableImportance, ImportanceSum, NoRules} = Base:generate_model(Features, Bag, ExConf, BaseConf),
             %io:format("~p ~n", [OutBag]),halt(),
