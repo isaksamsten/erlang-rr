@@ -119,7 +119,7 @@ new(Props) ->
     Progress = proplists:get_value(progress, Props, fun (_, _) -> ok end),
     Loader = proplists:get_value(loader, Props, 
                                  fun (File) ->
-                                         rr_example:load(csv:binary_reader(File), 1)
+                                         rr_example:load(csv:binary_reader(File), Cores)
                                  end),
     #experiment {
        evaluate = Evaluate,
