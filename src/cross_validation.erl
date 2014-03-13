@@ -92,7 +92,7 @@ evaluate(ExSet, Props) ->
                    undefined -> throw({badarg, evaluate});
                    Evaluate0 -> Evaluate0
                end,
-    Process = proplists:get_value(processor, Props),
+    Process = proplists:get_value(processor, Props, fun default_process/7),
     NoFolds = proplists:get_value(folds, Props, 10),
     Average = proplists:get_value(average, Props, fun average_cross_validation/2),
     Progress = proplists:get_value(progress, Props, fun (_) -> ok end),

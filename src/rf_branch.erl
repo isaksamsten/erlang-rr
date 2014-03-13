@@ -7,42 +7,42 @@
 -module(rf_branch).
 
 -export([
-	 
-	 %% standard approaches
-	 random/0,
-	 all/0,
-	 subset/0,
-	 random_subset/2,
+         
+         %% standard approaches
+         random/0,
+         all/0,
+         subset/0,
+         random_subset/2,
 
-	 %% multi-feature approaches
-	 correlation/0,
-	 random_correlation/1,
-	 rule/2,
-	 random_rule/3,
-	 choose_rule/2,
+         %% multi-feature approaches
+         correlation/0,
+         random_correlation/1,
+         rule/2,
+         random_rule/3,
+         choose_rule/2,
 
-	 %% example sampling approaches
-	 sample_examples/3,
+         %% example sampling approaches
+         sample_examples/3,
 
-	 %% increased strength approaches
-%	 depth_rule/2,
+         %% increased strength approaches
+%        depth_rule/2,
 
-	 %% resampling approahces
-	 weka/0,
-	 resample/2,
-	 hell/0,
+         %% resampling approahces
+         weka/0,
+         resample/2,
+         hell/0,
 
-	 %% significance approaches
-	 random_chisquare/1,
-	 randomly_resquare/2,
-	 chisquare/1,
-	 chisquare_decrease/2,
+         %% significance approaches
+         random_chisquare/1,
+         randomly_resquare/2,
+         chisquare/1,
+         chisquare_decrease/2,
 
-	 %% util
-	 unpack/1,
-	 redo/2,
-	 random/3	 
-	]).
+         %% util
+         unpack/1,
+         redo/2,
+         random/3        
+        ]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -96,7 +96,7 @@ correlation(Features, Examples, Total, ExConf, Conf) ->
 
     Combination = [{combined, A, B} || A <- FeaturesA, B <- FeaturesB, A =/= B],
     rr_example:best_split(ExConf, Combination, Examples, Total, 
-			  Score, Split, Distribute, Missing).
+                          Score, Split, Distribute, Missing).
 
 %% @doc tandomly pick either a subset brancher or a correlation brancher
 -spec random_correlation(float()) -> branch_fun().
@@ -117,7 +117,7 @@ random (Features, Examples, Total, ExConf, Conf) ->
     NoFeatures = length(Features),
     Feature = [lists:nth(random:uniform(NoFeatures), Features)],
     rr_example:best_split(ExConf, Feature, Examples, Total, 
-			  Score, Split, Distribute, Missing).    
+                          Score, Split, Distribute, Missing).    
 
 %% @doc evaluate all features to find the best split point
 -spec all(features(), examples(), integer(), #rr_example{}, #rf_tree{}) -> branch().
@@ -129,21 +129,21 @@ all (Features, Examples, Total, ExConf, Conf) ->
        missing_values = Missing
       } = Conf,
     rr_example:best_split(ExConf, Features, Examples, Total, 
-			  Score, Split, Distribute, Missing).
+                          Score, Split, Distribute, Missing).
 
 %% @doc generate a rule at each branch
 -spec rule(integer(), score_fun()) -> branch_fun().
 rule(NoRules, RuleScore) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    NewConf = Conf#rf_tree {
-			split = fun rf_tree:deterministic_split/5
-		       },
-	    #rf_tree{
-	       no_features = NoFeatures
-	      } = Conf,
-	    FeatureCount = length(Features),
-	    rf_rule:best(Features, Examples, Total, ExConf, NewConf, 
-			 NoFeatures(FeatureCount), NoRules(FeatureCount), RuleScore)
+            NewConf = Conf#rf_tree {
+                        split = fun rf_tree:deterministic_split/5
+                       },
+            #rf_tree{
+               no_features = NoFeatures
+              } = Conf,
+            FeatureCount = length(Features),
+            rf_rule:best(Features, Examples, Total, ExConf, NewConf, 
+                         NoFeatures(FeatureCount), NoRules(FeatureCount), RuleScore)
     end.
 
 %% @doc randomly pick a subset-brancher or a rule-bracher at each node
@@ -164,9 +164,9 @@ sig([#rr_candidate{split = As}=A, #rr_candidate{split=Bs} = B], Examples, Total)
     Achi = rr_estimator:chisquare(As, Examples, Total),
     Bchi = rr_estimator:chisquare(Bs, Examples, Total),
     if Achi > Bchi ->
-	    A;
+            A;
        true -> 
-	    B
+            B
     end.
 
 %% @doc sample a set of examples of Size, if we can 
@@ -178,71 +178,71 @@ sample_examples(NoFeatures, Size, Sigma) ->
 
 sample_examples(_NoFeatures, Size) when Size >= 1.0 ->
     fun (_, _, _, _) ->
-	    {Size, {invalid_subset, []}}
+            {Size, {invalid_subset, []}}
     end;
 sample_examples(NoFeatures, Size) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    #rf_tree{
-	       score = Score, 
-	       split = Split, 
-	       distribute = Distribute, 
-	       missing_values = Missing
-	      } = Conf,
-	    FeatureSubset = rr_example:random_features(Features, NoFeatures),
-	    Subset = sample_sane_examples(Examples, Size, Size, Total),
-	    #rr_candidate{feature=F} = 
-		rr_example:best_split(ExConf, FeatureSubset, Subset, 
-				      rr_example:count(Subset), Score, Split, Distribute, Missing),
-	    ExSplit = rr_example:split_feature_value(ExConf, F, Examples, Distribute, Missing),
-	    Best = #rr_candidate{feature = F,
-				 split = ExSplit,
-				 score = Score(ExSplit, rr_example:count(Examples))},
-	    {Size, {Best, []}}
+            #rf_tree{
+               score = Score, 
+               split = Split, 
+               distribute = Distribute, 
+               missing_values = Missing
+              } = Conf,
+            FeatureSubset = rr_example:random_features(Features, NoFeatures),
+            Subset = sample_sane_examples(Examples, Size, Size, Total),
+            #rr_candidate{feature=F} = 
+                rr_example:best_split(ExConf, FeatureSubset, Subset, 
+                                      rr_example:count(Subset), Score, Split, Distribute, Missing),
+            ExSplit = rr_example:split_feature_value(ExConf, F, Examples, Distribute, Missing),
+            Best = #rr_candidate{feature = F,
+                                 split = ExSplit,
+                                 score = Score(ExSplit, rr_example:count(Examples))},
+            {Size, {Best, []}}
     end.
 
 sample_sane_examples(Examples, Size, _,  _) when Size >= 1 ->
     Examples;
 sample_sane_examples(Examples, Size, Step, Total) ->
     if Total * Size < 2 ->
-	    Examples;
+            Examples;
        true ->
-	    case rr_example:subset(Examples, Size) of
-		Subset when length(Subset) > 1 -> Subset;
-		_ ->
-		    sample_sane_examples(Examples, Size+Step, Step, Total)
-	    end
+            case rr_example:subset(Examples, Size) of
+                Subset when length(Subset) > 1 -> Subset;
+                _ ->
+                    sample_sane_examples(Examples, Size+Step, Step, Total)
+            end
     end.
 
 sample_examples_significance(NoFeatures, Size, Sigma) ->
     fun (#rr_candidate{split=Split}, NewSize, Examples, Total) ->
-	    S = rr_estimator:chisquare(Split, Examples, Total),
-	    if S < Sigma ->
-		    Inc = NewSize + Size,
-		    {true, sample_examples(NoFeatures, Inc), sample_examples_significance(NoFeatures, Inc, Sigma)};
-	       true ->
-		    false
-	    end;
-	(invalid_subset, _, _, _) ->
-	    no_information
+            S = rr_estimator:chisquare(Split, Examples, Total),
+            if S < Sigma ->
+                    Inc = NewSize + Size,
+                    {true, sample_examples(NoFeatures, Inc), sample_examples_significance(NoFeatures, Inc, Sigma)};
+               true ->
+                    false
+            end;
+        (invalid_subset, _, _, _) ->
+            no_information
     end.
 
 %% @doc subset with a slight variance in number of sampled features
 random_subset(NoFeatures, Variance) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    random_subset(Features, Examples, Total, ExConf, Conf, NoFeatures, Variance)
+            random_subset(Features, Examples, Total, ExConf, Conf, NoFeatures, Variance)
     end.
 
 random_subset(Features, Examples, Total, ExConf, Conf, NoFeatures, Variance) ->
     #rf_tree{score = Score, split = Split, distribute = Distribute, missing_values = Missing} = Conf,
     Random0 = random:uniform(),
     Random1 = random:uniform(),
-	
+        
     NewVariance = Random0 * Variance * if Random1 > 0.5 -> 1; true -> 1 end,
     NewNoFeatures = case round(NoFeatures + NewVariance) of
-			X when X > length(Features) -> length(Features);
-			X when X < 1 -> 1;
-			X -> X
-		    end,
+                        X when X > length(Features) -> length(Features);
+                        X when X < 1 -> 1;
+                        X -> X
+                    end,
     NewFeatures = rr_example:random_features(Features, NewNoFeatures),
     rr_example:best_split(ExConf, NewFeatures, Examples, Total, Score, Split, Distribute, Missing).
     
@@ -257,18 +257,18 @@ chisquare_decrease(Rate, Sigma) ->
     
 chisquare_decrease_resample(_Sample, Rate, Sigma) ->
     fun (#rr_candidate{split=Split}, NoFeatures, Examples, Total) ->
-	    Significance = rr_estimator:chisquare(Split, Examples, Total),
-	    if Significance < Sigma ->
-		    NewNoFeatures = if NoFeatures > 1 ->
-					    fun (_) -> round(NoFeatures * Rate) end; 
-				       true -> 
-					    fun (_) -> 1 end
-				    end,
-		    NewSample = redo_curry(NewNoFeatures, subset()),
-		    {true, NewSample, chisquare_decrease_resample(NewSample, Rate, Sigma)};
-	       true ->
-		    false
-	    end
+            Significance = rr_estimator:chisquare(Split, Examples, Total),
+            if Significance < Sigma ->
+                    NewNoFeatures = if NoFeatures > 1 ->
+                                            fun (_) -> round(NoFeatures * Rate) end; 
+                                       true -> 
+                                            fun (_) -> 1 end
+                                    end,
+                    NewSample = redo_curry(NewNoFeatures, subset()),
+                    {true, NewSample, chisquare_decrease_resample(NewSample, Rate, Sigma)};
+               true ->
+                    false
+            end
     end.
 
 %% @doc randomly select either chisquare or subset
@@ -282,15 +282,15 @@ chisquare(Sigma) ->
     Sample = redo_curry(subset()),
     Resample = chisquare_resample(Sigma),
     redo(Sample, Resample).
-		
+                
 chisquare_resample(Sigma) ->
     fun (#rr_candidate{split=Split}, _, Examples, Total) ->
-	    Significance = rr_estimator:chisquare(Split, Examples, Total),
-	    if Significance < Sigma ->
-		    {true, redo_curry(subset()), chisquare_resample(Sigma)};
-	       true ->
-		    false
-	    end
+            Significance = rr_estimator:chisquare(Split, Examples, Total),
+            if Significance < Sigma ->
+                    {true, redo_curry(subset()), chisquare_resample(Sigma)};
+               true ->
+                    false
+            end
     end.
 
 %% @doc rame as chisquare-resample, however the resampling are done randomly
@@ -301,13 +301,13 @@ randomly_resquare(Factor, Sigma) ->
 
 randomly_resquare_redo(Factor, Sigma) ->
     fun (#rr_candidate{split=Split}, _, Examples, Total) ->
-	    Significance = rr_estimator:chisquare(Split, Examples, Total),
-	    Random = random:uniform(),
-	    if Significance < Sigma, Random < Factor ->
-		    {true, redo_curry(subset()), randomly_resquare_redo(Factor, Sigma)};
-	       true ->
-		    false
-	    end
+            Significance = rr_estimator:chisquare(Split, Examples, Total),
+            Random = random:uniform(),
+            if Significance < Sigma, Random < Factor ->
+                    {true, redo_curry(subset()), randomly_resquare_redo(Factor, Sigma)};
+               true ->
+                    false
+            end
     end.
 
 %% @doc resample n features m times if gain delta
@@ -320,12 +320,12 @@ simple_resample(_, 0, _) ->
     fun (_, _, _, _) -> false end;
 simple_resample(Sample, NoResamples, Delta) ->
     fun (#rr_candidate{score = {Score, _, _}}, _, Examples, Total) ->
-	    Gain = (Total * rr_estimator:entropy(Examples)) - Score,
-	    if Gain =< Delta ->
-		    {true, Sample, simple_resample(Sample, NoResamples - 1, Delta)};
-	       true ->
-		    false
-	    end
+            Gain = (Total * rr_estimator:entropy(Examples)) - Score,
+            if Gain =< Delta ->
+                    {true, Sample, simple_resample(Sample, NoResamples - 1, Delta)};
+               true ->
+                    false
+            end
     end.
 
 hell() ->
@@ -335,30 +335,62 @@ hell() ->
 
 hell_resample() ->
     fun(#rr_candidate{score = {Score, _, _}}, _, _, _) ->
-	    if Score >= 1.0 ->
-		    NewSample = redo_curry(fun(_) -> 1 end, subset()),
-		    {true, NewSample, hell_resample()};
-	       true ->
-		    false
-	    end
+            if Score >= 1.0 ->
+                    NewSample = redo_curry(fun(_) -> 1 end, subset()),
+                    {true, NewSample, hell_resample()};
+               true ->
+                    false
+            end
     end.
-						    
+                                                    
 
 %% @doc resample 1 feature if no informative features is found
-weka() ->
-    Sample = redo_curry(subset()),
-    Resample = weka_resample(),
-    redo(Sample, Resample).
+%weka() ->
+%    Sample = redo_curry(subset()),
+%    Resample = weka_resample(0),
+%    redo(Sample, Resample).
 
-weka_resample() ->
+weka() ->
+    fun (Features, Examples, Total, ExConf, Conf) ->
+            #rr_candidate{score = {Score, _, _}} = Candidate =
+                unpack(subset(Features, Examples, Total, ExConf, Conf)),
+            Estimated = Total * rr_estimator:entropy(Examples),
+            if Estimated - Score =< 0.0 ->
+                    NewFeatures = rr_util:shuffle(Features),
+                    next_informative(NewFeatures, Examples, Total, ExConf, Conf, Estimated, 1);
+               true ->
+                    Candidate
+            end
+    end.
+
+next_informative([], _, _, _, _, _,_) ->
+    no_information;
+next_informative([Feature|Rest], Examples, Total, ExConf, Conf, Est, N) ->
+    #rf_tree {
+       score = ScoreFun, 
+       split = Split, 
+       distribute = Distribute, 
+       missing_values = Missing,
+       no_features = NoFeatures
+      } = Conf,
+    Best = rr_example:best_split(ExConf, [Feature], Examples, Total, ScoreFun, Split, Distribute, Missing),
+    #rr_candidate{score={Score, _, _}} = Best,        
+    if Est - Score =< 0.0 ->
+            next_informative(Rest, Examples, Total, ExConf, Conf, Est, N+1);
+       true ->
+            Best
+    end.
+
+
+weka_resample(N) ->
     fun (#rr_candidate{score = {Score, _, _}}, _, Examples, Total) ->
-	    Gain = (Total * rr_estimator:entropy(Examples)) - Score,
-	    if Gain =< 0.0 ->
-		    NewSample = redo_curry(fun (_) -> 1 end, subset()),
-		    {true, NewSample, weka_resample()};
-	       true ->
-		    false
-	    end
+            Gain = (Total * rr_estimator:entropy(Examples)) - Score,
+            if Gain =< 0.0 ->
+                    NewSample = redo_curry(fun (_) -> 1 end, subset()),
+                    {true, NewSample, weka_resample(N+1)};
+               true ->
+                    false
+            end
     end.
 
 %% @doc
@@ -370,8 +402,8 @@ weka_resample() ->
 %% @end
 redo(Do, Redo) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    redo(Features, Examples, Total, ExConf, Conf, 
-		 length(Features), #rr_candidate{score = {inf}}, Do, Redo)
+            redo(Features, Examples, Total, ExConf, Conf, 
+                 length(Features), #rr_candidate{score = {inf}}, Do, Redo)
     end.
 
 redo(_, _, _, _, _, 0, _, _, _) ->
@@ -380,29 +412,29 @@ redo(Features, Examples, Total, ExConf, Conf, TotalNoFeatures, _Prev, Do, Redo) 
     {F, {Best, NewFeatures}} = Do(Features, Examples, Total, ExConf, Conf),
     NoFeatures = F(TotalNoFeatures),
     case Redo(Best, NoFeatures, Examples, Total) of
-	{true, NewDo, NewRedo} ->
-	    redo(ordsets:subtract(Features, ordsets:from_list(NewFeatures)),
-		 Examples, Total, ExConf, Conf, 
-		 if is_integer(NoFeatures) ->
-			 TotalNoFeatures - NoFeatures;
-		    true ->
-			 TotalNoFeatures
-		 end, Best, NewDo, NewRedo); 
-	false ->
-	    {Best, NewFeatures};
-	no_information ->
-	    no_information
+        {true, NewDo, NewRedo} ->
+            redo(ordsets:subtract(Features, ordsets:from_list(NewFeatures)),
+                 Examples, Total, ExConf, Conf, 
+                 if is_integer(NoFeatures) ->
+                         TotalNoFeatures - NoFeatures;
+                    true ->
+                         TotalNoFeatures
+                 end, Best, NewDo, NewRedo); 
+        false ->
+            {Best, NewFeatures};
+        no_information ->
+            no_information
     end.
 
 %% @doc call either One or Two randomly according to T
 random(One, Two, T) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    R = random:uniform(),
-	    if R =< T ->
-		    One(Features, Examples, Total, ExConf, Conf);
-	       true ->
-		    Two(Features, Examples, Total, ExConf, Conf)
-	    end
+            R = random:uniform(),
+            if R =< T ->
+                    One(Features, Examples, Total, ExConf, Conf);
+               true ->
+                    Two(Features, Examples, Total, ExConf, Conf)
+            end
     end.
 
 %% @doc apply n Feature selection algorithms and use Choose to pick one
@@ -415,21 +447,21 @@ n([Fun|Rest], Features, Examples, Total, ExConf, Conf, Choose, Acc) ->
 %% @doc apply Funs then Choose one
 n(Funs, Choose) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    n(Funs, Features, Examples, Total, ExConf,Conf, Choose, [])
+            n(Funs, Features, Examples, Total, ExConf,Conf, Choose, [])
     end.
 
     
 %% @doc wrap sample-fun Fun to return the number of sampled features
 redo_curry(NoFeatures, Fun) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    {NoFeatures, Fun(Features, Examples, Total, 
-			     ExConf, Conf#rf_tree{no_features=NoFeatures})}
+            {NoFeatures, Fun(Features, Examples, Total, 
+                             ExConf, Conf#rf_tree{no_features=NoFeatures})}
     end.
 
 redo_curry(Fun) ->
     fun (Features, Examples, Total, ExConf, Conf) ->
-	    {Conf#rf_tree.no_features, Fun(Features, Examples, Total,
-					   ExConf, Conf)}
+            {Conf#rf_tree.no_features, Fun(Features, Examples, Total,
+                                           ExConf, Conf)}
     end.
 
 %% @doc unpack a candidate

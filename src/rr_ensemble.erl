@@ -313,7 +313,6 @@ base_build_process(Coordinator, Features, Examples, ExConf, Conf, VariableImport
                 {A, B, C} ->
                     random:seed({A, B, C})
             end,
-            
             {Bag, OutBag} = Bagger(Examples), %% NOTE: Use outbag for distributing missing values?
             {Model, TreeVariableImportance, ImportanceSum, NoRules} = Base:generate_model(Features, Bag, ExConf, BaseConf),
             %io:format("~p ~n", [OutBag]),halt(),
@@ -369,7 +368,11 @@ update_variable_importance([{Feature, Importance}|Rest], Acc, Total) ->
     update_variable_importance(Rest, dict:update_counter(Feature, Importance/Total, Acc), Total);
 update_variable_importance(TreeVariables, VariableImportance, Total) ->
     dict:fold(fun (Feature, Importance, Acc) ->
-                      dict:update_counter(Feature, Importance/Total, Acc)
+                      if Total > 0 ->
+                              dict:update_counter(Feature, Importance/Total, Acc);
+                         true ->
+                              Acc
+                      end
               end, VariableImportance, TreeVariables).
 
 

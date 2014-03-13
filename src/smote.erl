@@ -65,11 +65,13 @@ new(Opts) ->
     end.
 
 fit(Features, Examples, ExConf, Smote, K, MaxId) ->
-    NN = knn:fit(Features, Examples, ExConf, erlang:system_info(schedulers)),
-    {Class, _, _} = rr_util:min(fun ({_, M, _}) -> M end, Examples),
-    {ExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, Class),
+    {Class, NoEx, ExIds} = rr_util:min(fun ({_, M, _}) -> M end, Examples),
+    NN = knn:fit(Features, [{Class, NoEx, ExIds}], ExConf, erlang:system_info(schedulers)),
+    {NewExIds, NoSmoteEx} = smote(Features, Examples, ExConf, NN, K, Smote, MaxId, Class),
+
+    io:format("~p: ~p ~n", [Class, rr_example:count(NewExIds)]),
     knn:unfit(NN),
-    {ExIds, {MaxId+1, MaxId+NoSmoteEx}}.
+    {NewExIds, {MaxId+1, MaxId+NoSmoteEx}}.
 
 %% @doc  
 fit(Features, Examples, ExConf, Smote, K) ->
@@ -83,14 +85,14 @@ unfit(ExConf, {Start, End}) ->
                           ets:delete(ExDb, Id)
                   end, lists:seq(Start, End)).
 
-smote(Features, Examples, ExDb, NN, K, Smote, MaxId, SkipClass) ->
-    smote_for_class(Features, Examples, ExDb, NN, K, Smote, MaxId, SkipClass, [], 0).
+smote(Features, Examples, ExDb, NN, K, Smote, MaxId, SomteClass) ->
+    smote_for_class(Features, Examples, ExDb, NN, K, Smote, MaxId, SomteClass, [], 0).
 
 smote_for_class(_, [], _, _, _, _, _, _, Acc, SmoteEx) ->
     {Acc, SmoteEx};
 smote_for_class(Features, [{Class, NoEx, Ex}|Rest], ExDb, 
-                NN, K, Smote, MaxId, SkipClass, Acc, TotSmoteEx) ->
-    if Class == SkipClass ->
+                NN, K, Smote, MaxId, SomteClass, Acc, TotSmoteEx) ->
+    if Class == SomteClass ->
             SmoteEx = trunc(NoEx * Smote),
             NewNoEx = NoEx + SmoteEx,
             PrEx = if NewNoEx < NoEx -> %% Smote < 1
@@ -102,9 +104,9 @@ smote_for_class(Features, [{Class, NoEx, Ex}|Rest], ExDb,
                    end,                           
             NewEx = smote_examples(Features, PrEx, ExDb, NN, K, MaxId, Ex),
             NewAcc = [{Class, NewNoEx, NewEx}|Acc],
-            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId + SmoteEx, SkipClass, NewAcc, SmoteEx + TotSmoteEx);
+            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId + SmoteEx, SomteClass, NewAcc, SmoteEx + TotSmoteEx);
        true ->
-            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId, SkipClass, [{Class, NoEx, Ex}|Acc], TotSmoteEx)
+            smote_for_class(Features, Rest, ExDb, NN, K, Smote, MaxId, SomteClass, [{Class, NoEx, Ex}|Acc], TotSmoteEx)
     end.
 
 duplicate_examples(Ex, NoEx) ->
@@ -136,6 +138,13 @@ format_smote_example([{Type, Axis}|Rest], OldEx, NEx, ExDb, Acc) ->
     Value = smote_value(Type, Axis, ExDb, OldEx, NEx),
     format_smote_example(Rest, OldEx, NEx, ExDb, [Value|Acc]).
 
+smote_value(_, Axis, ExDb, OldEx, []) ->
+    case rr_example:feature(ExDb, OldEx, Axis) of
+        '?' ->
+            '?';
+        Value ->
+            Value + random:uniform()
+    end;
 smote_value(numeric, Axis, ExDb, OldEx, KN) ->
     NEx = hd(KN),
     case {rr_example:feature(ExDb, OldEx, Axis), rr_example:feature(ExDb, NEx, Axis)} of
@@ -159,7 +168,7 @@ majority_value(ExDb, Axis, KN) ->
                          
     
 test() ->
-    File = csv:binary_reader("data/test-kd.txt"),
+    File = csv:binary_reader("data/iris.txt"),
     #rr_exset {
       features=Features, 
       examples=Examples, 

@@ -14,7 +14,10 @@
          uniform_variance_sample/3,
          oversample_replicate/1,
          undersample_replicate/1,
-         bootstrap_replicate/1
+         bootstrap_replicate/1,
+
+         generate_bootstrap/1,
+         select_bootstrap_examples/2
         ]).
 
 random(Examples) ->
@@ -36,7 +39,7 @@ triangle_variance_sample(Threshold, A, B, C) ->
     end.
 
 triangle_variance_sample(Examples, Threshold, A, B, C) ->
-    select_bootstrap_examples(Examples, fun (_, _) ->
+    select_bootstrap_examples(Examples, fun (_, _, _) ->
                                                 Include = rr_random:uniform(),
                                                 if Include =< Threshold ->
                                                         error;
@@ -51,7 +54,7 @@ uniform_variance_sample(Threshold, Min, Max) ->
     end.
 
 uniform_variance_sample(Examples, Threshold, Min, Max) ->
-    select_bootstrap_examples(Examples, fun (_, _) ->
+    select_bootstrap_examples(Examples, fun (_, _, _) ->
                                                 Include = rr_random:uniform(),
                                                 if Include =< Threshold ->
                                                         error;
@@ -97,7 +100,7 @@ undersample_bootstrap_for_class(N, [ExId|Rest], Acc) ->
 bootstrap_replicate(Examples) ->
     Count = rr_example:count(Examples),
     Bootstrap = generate_bootstrap(Count),
-    select_bootstrap_examples(Examples, fun (N, _) ->
+    select_bootstrap_examples(Examples, fun (_, N, _) ->
                                                 dict:find(N, Bootstrap)
                                         end).
 
@@ -133,7 +136,7 @@ select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, _N, _Total
     {{Class, InBagCount, InBag}, 
      {Class, OutBagCount, OutBag}};
 select_bootstrap_examples_for_class(Class, {InBagCount, OutBagCount}, N, Total, [ExId|Rest], Include, {InBag, OutBag}) ->
-    case Include(N, Total) of
+    case Include(Class, N, Total) of
         {ok, Times} ->
             NewInBag = duplicate_example(ExId, Times, InBag),
             select_bootstrap_examples_for_class(Class, {InBagCount + Times,  OutBagCount}, N+1, Total,

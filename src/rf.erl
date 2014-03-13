@@ -430,7 +430,7 @@ feature_sampling(Value, Error, Options) ->
             rf_branch:hell();
         <<"resample">> ->
             NoResamples = proplists:get_value(<<"no_resamples">>, Options, 6),
-            MinGain = proplists:get_value(<<"min_gain">>, Options),
+            MinGain = proplists:get_value(<<"min_gain">>, Options, 0.0),
             rf_branch:resample(NoResamples, MinGain);
         <<"combination">> ->
             Factor = proplists:get_value(<<"weight_factor">>, Options),
