@@ -1,5 +1,6 @@
 function test3(X, Xval, y, yval, ...
-              si = 0.99, ub = 0, nl=0, opts = "-n 100 --progress none", ttl = 'Random Forest, E_{in}=%g, E_{out}=%g, F1_{out}=%g')
+              si = 0.99, ub = 0, nl=0, opts = "-n 100 --progress none", ...
+               ttl = 'Random Forest, E_{in}=%g, E_{out}=%g, F1_{out}=%g')
   model = rflearn(X, y, opts);
   p = rfpredict(X, model);
   Ein = 1-mean(double(y == p));

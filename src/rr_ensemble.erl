@@ -368,7 +368,11 @@ update_variable_importance([{Feature, Importance}|Rest], Acc, Total) ->
     update_variable_importance(Rest, dict:update_counter(Feature, Importance/Total, Acc), Total);
 update_variable_importance(TreeVariables, VariableImportance, Total) ->
     dict:fold(fun (Feature, Importance, Acc) ->
-                      dict:update_counter(Feature, Importance/Total, Acc)
+                      if Total > 0 ->
+                              dict:update_counter(Feature, Importance/Total, Acc);
+                         true ->
+                              Acc
+                      end
               end, VariableImportance, TreeVariables).
 
 
